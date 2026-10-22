@@ -4,16 +4,25 @@ import {
     Plus,
     Search,
     Upload,
-    Download,
     Phone,
     Mail,
     CheckCircle2,
     XCircle,
     ArrowLeft,
+    Check,
+    FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { useState } from 'react';
 
 type Contact = {
@@ -67,6 +76,69 @@ export default function ContactsList() {
     ]);
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+    // Add Form State
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [email, setEmail] = useState('');
+    const [city, setCity] = useState('');
+    const [stage, setStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
+    const [optIn, setOptIn] = useState(true);
+
+    const showToast = (msg: string) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(null), 3000);
+    };
+
+    const handleAddContact = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name.trim() || !phone.trim()) return;
+
+        // Normalize phone number to E.164 (+91)
+        let cleaned = phone.replace(/[^\d+]/g, '');
+        if (!cleaned.startsWith('+')) {
+            if (cleaned.length === 10) {
+                cleaned = '+91' + cleaned;
+            } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+                cleaned = '+' + cleaned;
+            } else {
+                cleaned = '+91' + cleaned;
+            }
+        }
+
+        const newContact: Contact = {
+            id: Date.now().toString(),
+            name: name.trim(),
+            phone: cleaned,
+            email: email.trim() || '—',
+            city: city.trim() || 'Gujarat',
+            stage,
+            consent: optIn ? 'opted_in' : 'opted_out',
+        };
+
+        setContacts([newContact, ...contacts]);
+        setIsAddOpen(false);
+        setName('');
+        setPhone('');
+        setEmail('');
+        setCity('');
+        setStage('New');
+        setOptIn(true);
+        showToast(`Contact "${newContact.name}" added successfully!`);
+    };
+
+    const handleImportSample = () => {
+        const sampleContacts: Contact[] = [
+            { id: Date.now().toString() + '1', name: 'Kavita Mehta', phone: '+919879112233', email: 'kavita@mehta.in', city: 'Bhavnagar', stage: 'New', consent: 'opted_in' },
+            { id: Date.now().toString() + '2', name: 'Jignesh Vora', phone: '+919909223344', email: 'jignesh@vora.in', city: 'Gandhinagar', stage: 'Interested', consent: 'opted_in' },
+        ];
+        setContacts([...sampleContacts, ...contacts]);
+        setIsImportOpen(false);
+        showToast('Successfully imported 2 sample contacts from CSV!');
+    };
 
     const filtered = contacts.filter(
         (c) =>
@@ -101,11 +173,25 @@ export default function ContactsList() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="gap-1.5 h-9 text-xs">
+                        {toastMessage && (
+                            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-in fade-in mr-2">
+                                <Check className="size-4" /> {toastMessage}
+                            </span>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 h-9 text-xs"
+                            onClick={() => setIsImportOpen(true)}
+                        >
                             <Upload className="size-3.5" />
                             Import CSV
                         </Button>
-                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-9 text-xs">
+                        <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 h-9 text-xs"
+                            onClick={() => setIsAddOpen(true)}
+                        >
                             <Plus className="size-3.5" />
                             Add Contact
                         </Button>
@@ -181,6 +267,163 @@ export default function ContactsList() {
                     </div>
                 </Card>
             </div>
+
+            {/* Modal 1: Add Contact Dialog */}
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <Plus className="size-4 text-emerald-600" />
+                            Add New WhatsApp Contact
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Add a customer number. Numbers will be normalized to standard E.164 (+91).
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleAddContact} className="space-y-3.5 py-2">
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">Full Name *</label>
+                            <input
+                                type="text"
+                                required
+                                placeholder="e.g. Rahul Patel"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">WhatsApp Number *</label>
+                            <input
+                                type="text"
+                                required
+                                placeholder="e.g. 9825012345 or +919825012345"
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">City (optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Ahmedabad"
+                                    value={city}
+                                    onChange={(e) => setCity(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Lead Stage</label>
+                                <select
+                                    value={stage}
+                                    onChange={(e) => setStage(e.target.value as any)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                >
+                                    <option value="New">New</option>
+                                    <option value="Contacted">Contacted</option>
+                                    <option value="Interested">Interested</option>
+                                    <option value="Won">Won</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">Email (optional)</label>
+                            <input
+                                type="email"
+                                placeholder="e.g. rahul@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                            />
+                        </div>
+
+                        <div className="flex items-start gap-2 pt-1">
+                            <input
+                                type="checkbox"
+                                id="optin"
+                                checked={optIn}
+                                onChange={(e) => setOptIn(e.target.checked)}
+                                className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
+                            />
+                            <label htmlFor="optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
+                                <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
+                            </label>
+                        </div>
+
+                        <DialogFooter className="pt-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsAddOpen(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                Save Contact
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 2: Import CSV Dialog */}
+            <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <FileSpreadsheet className="size-4 text-emerald-600" />
+                            Import Contacts from CSV
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Upload a spreadsheet or CSV file with names, WhatsApp numbers, and city.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div className="rounded-lg border-2 border-dashed border-sidebar-border p-6 text-center hover:bg-muted/20 transition-colors cursor-pointer">
+                            <Upload className="mx-auto size-8 text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">Click to upload CSV or drag and drop</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Columns: Name, Phone, Email, City (Max 5,000 rows)</p>
+                        </div>
+
+                        <div className="rounded-md bg-muted/40 p-3 text-[11px] text-muted-foreground space-y-1">
+                            <p className="font-semibold text-foreground">CSV Format Example:</p>
+                            <p className="font-mono text-[10px]">Name,Phone,Email,City<br/>Rahul Patel,9825012345,rahul@mail.com,Ahmedabad</p>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsImportOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            onClick={handleImportSample}
+                        >
+                            Simulate Import
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
