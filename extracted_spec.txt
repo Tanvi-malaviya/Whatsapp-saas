@@ -1,0 +1,1845 @@
+Sathwara WhatsApp SaaS — Module-wise Development Specification
+Oct 12, 2026 · @Bhavesh Sathwara
+How to use this document
+Build 15 modules in 6 phases; only Modules 0–4, 12 (Super Admin) and 13 (managed setup) are needed for the first paid launch of Bot Starter. Each module lists what to build, the data it owns, the APIs and background jobs it needs, and a line-by-line Take care checklist. Tick a checklist line only when it is implemented and tested.
+Scope source: Sathwara InfoTech WhatsApp SaaS Business & Implementation Plan v1.0 (12 Oct 2026), updated with Meta changes current as of this date.
+Platform scope (this release): web app only — a responsive web application for desktop, tablet and mobile browsers. No native mobile app is built now.
+Facts that shape the whole build
+Meta path: Sathwara joins as a Meta Tech Provider. Customers onboard through Embedded Signup v4 and pay Meta directly for messages. Embedded Signup v2 is deprecated on 15 Oct 2026; build only on v4 and ignore older code samples.
+Meta pricing (India, from 1 Oct 2026): service replies get 1,000 free per number per month, then are charged; utility templates are charged even inside the 24-hour window; marketing is about 7–8× utility. The product must show customers an estimated Meta cost.
+AI policy: from 15 Jan 2026 Meta bans general-purpose AI assistants on the Business API. Our AI must answer only from each customer's own business knowledge and escalate everything else.
+Legal entity: Sathwara InfoTech is a sole proprietorship (Udyam registered). Business name must match exactly across Meta, Razorpay, invoices and the website.
+Privacy law: IT Act SPDI Rules 2011 apply now; DPDP Act operational duties apply from mid-May 2027. Build to DPDP from day one. CERT-In: report incidents within 6 hours; keep logs 180 days in India.
+Recommended tech stack
+Layer
+Choice
+Why
+Backend
+Laravel 12 (PHP 8.3) modular monolith
+Team already ships Laravel; fastest safe delivery
+Database
+PostgreSQL 16 (installed on the VPS)
+JSONB for flows, row-level security option
+Queue / workers
+Redis + Laravel Horizon
+Webhooks, sends, campaigns, retries
+Realtime
+Laravel Reverb (WebSockets)
+Live Team Inbox
+Web frontend
+Inertia + Vue 3 (or React), TypeScript, Tailwind CSS
+Single repo, server-side auth, responsive UI
+Storage
+Hostinger VPS disk (private folder, served by signed URLs)
+Media, exports
+Hosting
+Hostinger VPS, India data centre (KVM 2 production, KVM 1 staging)
+CERT-In log location, latency, low monthly cost
+Payments
+Razorpay Subscriptions + Orders
+INR, e-mandate, GST invoices
+Email
+Hostinger Mail over SMTP (noreply@ on the business domain)
+Verification, invoices, alerts
+Monitoring
+Sentry + uptime checks + log retention 180 days
+Incidents and audits
+The original plan proposed Next.js + NestJS. Either works; the rules in this document apply to both. Open question: confirm the stack before Sprint 1.
+Hosting on Hostinger (server, storage, email)
+Everything runs on Hostinger: one VPS for the app and database, its NVMe disk for files, and Hostinger Mail for system emails. This keeps pilot costs low; the rules below keep it safe and make a later move (to object storage or a bigger server) a configuration change, not a rewrite.
+Item
+Choice
+Notes
+Production server
+Hostinger VPS KVM 2 (2 vCPU, 8 GB RAM, 100 GB NVMe)
+Pick India as the location at purchase; upgrade to KVM 4 in place when CPU or RAM stays above 70%
+Staging server
+Hostinger VPS KVM 1 (1 vCPU, 4 GB RAM, 50 GB NVMe)
+Separate from production; Meta test number and Razorpay test keys only
+Server software
+Ubuntu 24.04 LTS, Nginx, PHP 8.3-FPM, PostgreSQL 16, Redis, Supervisor, Certbot
+Supervisor runs Horizon and Reverb
+File storage
+VPS disk via Laravel private disk (storage/app/private)
+Media, exports, invoice PDFs; never in the public web folder
+Backups
+Hostinger weekly backups (daily if enabled) + snapshot before each release + own nightly pg_dump and files archive
+Keep the nightly archive outside the production VPS (e.g. on the staging VPS)
+System email
+Hostinger Mail SMTP, noreply@ mailbox
+Per-mailbox cap: 1,000/day (Business Starter) or 3,000/day (Business Standard/Premium); 100 recipients per message
+Support and billing mail
+support@ and billing@ mailboxes
+Separate mailboxes, each with its own daily cap
+Hostinger India VPS prices seen in Oct 2026: KVM 1 ₹599/month intro (₹999 renewal), KVM 2 ₹799/month intro (₹1,199 renewal) on 24-month terms. Budget on the renewal price.
+Take care
+☐ Choose India as the VPS location when buying; Hostinger lists India among its VPS locations. Note it in the sub-processor list.
+☐ Use Laravel's Storage facade for every file (never raw paths), so moving media to S3-compatible object storage later is only a config change.
+☐ Serve files only through a controller with permission checks and temporary signed URLs.
+☐ Media fills the disk first: apply the message retention setting (Module 3), compress images, alert at 80% disk used, and plan a move to object storage when the disk passes 70%.
+☐ Bind PostgreSQL and Redis to localhost only; no database or Redis port open to the internet.
+☐ Firewall (UFW) open only on 22, 80 and 443; SSH keys only, root password login off; fail2ban on SSH and Nginx.
+☐ Automatic security updates (unattended-upgrades) with a planned monthly reboot window.
+☐ Sync the server clock with NTP; CERT-In expects synchronised clocks on logs.
+☐ Keep logs 180 days with logrotate; compress old logs and include them in backups.
+☐ Hostinger backups stay with the same provider: also keep your own encrypted nightly copy outside the production VPS, and test a full restore before launch and every quarter.
+☐ Take a manual Hostinger snapshot before every production deploy, so a bad release rolls back in minutes.
+☐ Supervisor restarts Horizon queues and Reverb automatically after a crash or reboot.
+☐ Run Reverb WebSockets behind Nginx on wss:// using the same SSL certificate.
+☐ Set SPF, DKIM and DMARC for the domain in Hostinger DNS before sending any email; check with a mail-tester.
+☐ Send every email through a queued Mailable with a rate limiter that stays under the mailbox's daily cap; log each send and bounce.
+☐ Use Hostinger Mail only for system emails (verification, invites, invoices, alerts, digests); never for customer marketing or bulk mail.
+☐ Keep the mail settings in .env; if volume nears the cap, add mailboxes or switch to a transactional email service without code changes.
+☐ One VPS is a single point of failure: do not promise an uptime SLA, and keep the restore runbook ready.
+Hosting test cases
+ID
+Condition
+Expected result
+Level
+TC-H-01
+Disk usage crosses 80%
+Alert to Bhavesh within 5 minutes
+Monitoring
+TC-H-02
+More emails queued than the daily cap
+Extra emails wait and send after the window; none lost; alert sent
+Feature
+TC-H-03
+Media link opened after expiry or by another workspace
+Denied
+Feature
+TC-H-04
+Restore nightly database and files archive to a fresh VPS
+App runs; record and file counts match
+Recovery
+TC-H-05
+Port scan of the production VPS
+Only 22, 80 and 443 open
+Security
+TC-H-06
+Verification email to Gmail and Outlook
+Arrives in inbox; SPF, DKIM and DMARC pass
+Manual
+TC-H-07
+VPS reboot
+Nginx, PHP, PostgreSQL, Redis, Horizon and Reverb all start on their own
+Manual
+Conventions used in every module
+Every table has organization_id (except global tables) and every query is scoped by it.
+Every money amount is stored in paise as an integer, with a currency column.
+Every timestamp is stored in UTC; displayed in the workspace's timezone (default Asia/Kolkata).
+Every external call (Meta, Razorpay, AI) goes through one service class with retries, timeouts and logging.
+Every user-visible action that changes data writes an audit_logs row.
+Feature access is checked on the server through Entitlements::can($org, 'feature.key'), never only by hiding UI.
+Module architecture (web app)
+The web app is one Laravel modular monolith: 15 modules in one codebase and one database (the diagram shows the 14 built first; the agency portal comes later), with hard boundaries enforced by tests. Product modules never call Meta or Razorpay directly; they go through four core modules, so every rule about windows, consent, entitlements and billing lives in one place.
+web app architecture · modules, workers, data, external services
+Meta and Razorpay send webhooks to the entry points; all outgoing calls leave from the core modules only. Everything except the external services runs on one Hostinger VPS in India.
+Dependency rules
+Core modules (Foundation, Billing, Meta connection, Messaging engine) never depend on product modules.
+Product modules depend only on core modules and on the CRM contact service.
+Only Meta connection and Messaging engine call the Meta Graph API; only Billing calls Razorpay; only AI Assistant calls the AI provider. Enforced by Pest arch() tests.
+Every send — bot, agent, campaign, workflow, booking, AI — goes through Messaging\SendMessage, which runs the pre-send checks.
+A module owns its tables. Other modules read them through the owner's service class, never by querying another module's models.
+Side effects between modules use events (table below), not direct calls, so a failing listener cannot break the sender.
+Every controller, job and listener reads the organization from TenantContext; jobs carry organization_id and restore it before running.
+Every product route group has entitlement middleware, e.g. ->middleware('entitled:inbox').
+UI pages only use components from resources/js/Components/ui (the design system).
+Folder structure
+app/  Modules/    Foundation/        # auth, organizations, roles, audit    Billing/           # plans, entitlements, Razorpay, invoices, ledger    MetaConnection/    # Embedded Signup, tokens, webhooks inbox, health    Messaging/         # conversations, messages, SendMessage engine, media    Bot/    Inbox/    Crm/               # contacts, consent, suppression, pipeline    Campaigns/         # templates + campaigns    Automation/        # workflows, public API, outgoing webhooks    Booking/    Ai/    Reports/    Admin/             # Super Admin    Setup/             # managed setup orders, support tickets      (each module: Models/ Http/ Policies/ Actions/ Events/ Listeners/ Jobs/ routes.php)  Shared/              # TenantContext, Money, PhoneNumber, HttpClient, Errors, Notificationsresources/js/  Components/ui/       # design system: Button, Input, Table, StatusPill, WhatsAppPreview...  Components/<Module>/  Layouts/AppShell.vue  Pages/<Module>/  lang/en.json         # all UI stringsdatabase/migrations/   # file names prefixed by module, e.g. 2026_10_20_bot_create_bot_rulestests/  Unit/<Module>/  Feature/<Module>/  Arch/  E2E/                 # Playwright  fixtures/webhooks/meta/  fixtures/webhooks/razorpay/
+Events between modules
+Event
+Raised by
+Listened to by
+InboundMessageReceived
+Messaging
+Bot, Inbox, Automation, AI, Reports
+MessageStatusUpdated
+Messaging
+Inbox, Campaigns, Reports
+ConversationHandedOff
+Bot
+Inbox (notify agents)
+ContactOptedOut
+Bot, CRM
+CRM (suppression), Campaigns
+TemplateStatusChanged
+Meta connection
+Campaigns
+ConnectionStatusChanged
+Meta connection
+Bot, Campaigns, Admin alerts
+SubscriptionStatusChanged
+Billing
+Entitlement cache, Messaging (suspend sends)
+PaymentCaptured
+Billing
+Setup (start order)
+BookingChanged
+Booking
+Automation, Reports
+Life of an inbound message
+Meta posts to /webhooks/meta; signature verified; raw payload saved to webhook_inbox; 200 returned.
+ProcessMetaWebhook job (queue webhooks) finds the organization by phone number ID and dedupes by wamid.
+Messaging stores the contact, conversation and message, updates the 24-hour window, and raises InboundMessageReceived.
+Inbox pushes the message to agents through Reverb.
+Bot (queue bot) decides the reply and calls SendMessage with key = inbound wamid.
+SendMessage runs the pre-send checks, calls Meta, stores the wamid of the reply.
+Status webhooks later update the reply to delivered / read and feed the Meta cost estimate.
+Web app design rules
+One design system for every screen, so a shop owner on a phone browser and an agent on a laptop both understand the app without training. Build these as shared components first; module screens only assemble them.
+Principles
+Plain language first. Business owners, not developers, use this app. “Connect your WhatsApp number”, not “Provision WABA”.
+Show the state of WhatsApp at all times. Connection status and Meta cost estimate are always one click away.
+Safe by default. Anything that sends to many people or costs money asks for confirmation and shows the impact first.
+Every screen has a next step. Empty, error, locked and limit states always tell the user what to do.
+Same thing, same look. One button style, one status colour per meaning, one way to confirm.
+App shell and navigation
+Left sidebar (desktop): Dashboard, Inbox, Contacts, Bot, Campaigns, Automation, Bookings, AI Assistant, Reports, Settings. Modules not in the plan show a lock icon and open an upgrade page, never a broken screen.
+Top bar: workspace switcher, WhatsApp connection status pill, notifications bell, help, user menu.
+Settings sections: Workspace, Team & roles, WhatsApp connection, Billing & plan, Integrations & API, Privacy & data, Audit log.
+Content area: max width 1280 px for forms and lists; Inbox and Kanban use full width.
+Breadcrumbs on pages deeper than two levels; page title + one primary action at the top right.
+Setup checklist on the Dashboard until onboarding is done: verify email → connect WhatsApp → set up bot → send test → go live.
+Design tokens
+Token
+Value / rule
+Spacing
+4 px grid; common steps 4, 8, 12, 16, 24, 32, 48
+Corner radius
+8 px for cards, inputs, buttons; 999 px for pills
+Font
+Inter (or system UI), with Noto Sans Gujarati and Noto Sans Devanagari as fallbacks
+Type scale
+12 caption · 14 body · 16 body-large · 20 section · 24 page title · 30 dashboard numbers
+Line height
+1.5 for body text, 1.25 for headings
+Primary colour
+Sathwara brand colour; used only for primary actions and links
+Neutrals
+9-step grey scale for text, borders, backgrounds
+Semantic colours
+Success green, Warning amber, Danger red, Info blue — each with a light background shade
+Elevation
+Border first; shadow only for menus, modals and toasts
+Dark mode
+Not in v1; keep all colours as CSS variables so it can be added
+Status colours (use everywhere, never mix)
+Meaning
+Colour
+Examples
+Working / done
+Success green
+Connected, Delivered, Read, Approved, Paid, Active
+In progress
+Info blue
+Sending, Pending review, Scheduled, Testing
+Needs attention
+Warning amber
+Action required, Quality medium, Grace period, Limit 80% used
+Failed / blocked
+Danger red
+Failed, Rejected, Restricted, Suspended, Payment failed
+Off / inactive
+Grey
+Draft, Paused, Disconnected, Cancelled, Resolved
+Every status pill shows text as well as colour, so colour-blind users and printouts still make sense.
+Components to build once
+Buttons (primary, secondary, ghost, danger; with loading state) · text input, textarea with character counter, select, multi-select, date / time picker, phone input with +91 default, toggle, checkbox, radio · modal, side drawer, confirmation dialog, toast · data table, Kanban board, tabs, stepper wizard · status pill, badge, avatar, tooltip · empty state, skeleton loader, error panel, upgrade (locked) panel, limit banner · WhatsApp message preview (chat bubble with header, body, footer, buttons) · file uploader with progress · cost-estimate box.
+Forms
+Labels above fields; never placeholder-only labels.
+Mark optional fields as “(optional)” instead of starring required ones.
+Validate on blur and on submit; show the error under the field in plain words and keep what the user typed.
+Server errors map back to the right field; a general error shows at the top of the form.
+Disable the submit button while saving and show a spinner; prevent double submit.
+Warn before leaving a page with unsaved changes.
+Phone numbers accept spaces and dashes, then normalise to +91XXXXXXXXXX.
+Long forms (bot builder, campaign wizard) autosave drafts.
+Tables and lists
+Server-side pagination (25 / 50 / 100 rows), sorting, search and filters; filters kept in the URL so links can be shared.
+Sticky header; first column is the item name and links to its detail page.
+Row actions in a “…” menu; bulk actions appear when rows are selected.
+Dates shown as 12 Oct 2026, 6:18 pm in the workspace timezone; relative time (“5 min ago”) only in the inbox list with full time on hover.
+Money in ₹ with Indian grouping (₹1,00,000) and “incl. GST” / “+ GST” stated.
+On phones, tables turn into stacked cards showing the 3–4 most important fields.
+States every screen must design
+State
+What the user sees
+Loading
+Skeleton of the layout, not a blank page or a full-page spinner
+Empty
+Short explanation + primary action (“No contacts yet — Import CSV”)
+Error
+Plain message, what happened, retry button, support link
+No permission
+“Ask your workspace admin for access” with the admin's name
+Module not in plan
+Lock icon, what the module does, price, Upgrade button
+Limit reached
+Banner with usage (e.g. 3 / 3 agents) and Upgrade button; existing data stays usable
+WhatsApp not connected
+Banner with “Connect WhatsApp” on every sending screen
+Number restricted / subscription suspended
+Red banner at the top of every page with the reason and next step
+Realtime connection lost
+Small banner “Reconnecting…”; missed messages load after reconnecting
+Confirmations and destructive actions
+Delete, disconnect, cancel subscription, and send campaign always open a confirmation dialog stating the effect.
+Large or costly actions (campaign above 1,000 recipients, bulk delete) require typing a word such as the campaign name.
+Prefer undo (toast with Undo for 10 seconds) for small, reversible actions such as archiving.
+Show the cost estimate inside the campaign confirmation, not on a separate page.
+Responsive breakpoints
+Width
+Layout
+Below 640 px (phone)
+Sidebar becomes a slide-out menu; Inbox shows list → thread → contact as separate screens with a back button
+640–1023 px (tablet)
+Collapsible icon sidebar; Inbox shows list + thread, contact panel as a drawer
+1024–1439 px (laptop)
+Full sidebar; Inbox three panes
+1440 px and above
+Same as laptop with wider content; no text lines longer than about 80 characters
+Accessibility (WCAG 2.1 AA)
+Text contrast at least 4.5:1 (3:1 for large text and icons).
+Everything works by keyboard; visible focus ring; logical tab order; Esc closes dialogs.
+Touch targets at least 44 × 44 px on phones.
+Icon-only buttons have accessible names; form errors are announced to screen readers.
+Never use colour alone to show meaning.
+Respect the user's reduced-motion setting.
+Language and copy
+UI language English in v1; all strings in translation files so Gujarati and Hindi can be added without code changes.
+Customer content (bot replies, templates, FAQs) fully supports Gujarati, Hindi and emoji (UTF-8 everywhere, correct font fallbacks).
+Tone: friendly, short, specific. Buttons say what they do (“Send test message”, not “Submit”).
+Error messages say what happened and what to do next; never show raw Meta or Razorpay error codes alone.
+Always say “Meta charges” for WhatsApp message fees and “Sathwara plan” for subscription fees.
+WhatsApp-specific UI rules
+Every editor that writes a WhatsApp message shows a live WhatsApp-style preview next to it.
+Character counters enforce Meta's current limits (for example reply-button titles 20 characters, template body 1,024 characters); check Meta docs for each component.
+Template variables appear as chips ({{1}} Name) with sample values in the preview.
+The 24-hour window is shown as a countdown in the inbox; when closed, the reply box switches to “Send a template”.
+Follow Meta / WhatsApp brand guidelines: use the WhatsApp name descriptively and do not use the WhatsApp logo in a way that suggests Meta endorses Sathwara.
+Performance
+First meaningful screen in under 2.5 seconds on a mid-range phone on 4G.
+Code-split each module's pages; lazy-load the bot builder, charts and editors.
+Inbox list virtualised for long lists; message history loaded page by page.
+Images compressed and lazy-loaded; media previews use thumbnails.
+Design checklist per screen
+☐ Uses only shared components and tokens.
+☐ Loading, empty, error, no-permission, locked and limit states designed.
+☐ Works at 360 px, 768 px and 1280 px widths.
+☐ Keyboard and screen-reader check passed.
+☐ Copy reviewed for plain language; no raw error codes.
+☐ Dates, times and ₹ amounts in the agreed formats.
+☐ Destructive or costly actions confirmed.
+Module 0 — Platform foundation (tenancy, auth, roles, audit)
+Every other module depends on this one; a mistake here leaks one customer's chats to another. Build it first, test it hardest.
+What to build
+Sign up with email + password, email verification, login, logout, forgot/reset password.
+Optional login with Google; optional two-factor authentication (TOTP) — mandatory for Owner and Super Admin.
+Organization (workspace) creation after signup: business name, industry, timezone, country, GSTIN (optional), billing address.
+One user can belong to many organizations; an organization switcher in the header.
+Invitations by email with role, expiry (7 days), resend and revoke.
+Roles: Owner, Admin, Agent, Viewer, Billing. Custom roles later.
+Permission matrix per module (e.g. inbox.reply, campaign.send, billing.manage).
+Audit log viewer for Owner/Admin.
+Session list with “log out other devices”.
+Account and workspace deletion requests (soft delete + 30-day purge).
+Data
+users, organizations, organization_members (user_id, organization_id, role_id, status), roles, permissions, role_permissions, invitations, sessions, audit_logs (actor, organization, action, target_type, target_id, ip, user_agent, before/after JSON, created_at), login_attempts.
+Take care
+☐ Add a global query scope so every tenant model is filtered by organization_id automatically.
+☐ Resolve the current organization from the session on the server, never from a request parameter the browser can change.
+☐ Use UUIDs or ULIDs for public IDs so records cannot be guessed by incrementing numbers.
+☐ Write an automated test: user of Org A requests every Org B route and gets 404, never data.
+☐ Consider PostgreSQL row-level security as a second safety net for the most sensitive tables (messages, contacts).
+☐ Hash passwords with bcrypt/argon2; never log passwords or tokens.
+☐ Rate-limit login, signup, password reset and OTP (e.g. 5 attempts per 15 minutes per IP + email).
+☐ Lock out or add CAPTCHA after repeated failed logins.
+☐ Make email verification required before connecting WhatsApp or paying.
+☐ Invitations: single-use token, expire after 7 days, bind to the invited email address.
+☐ Prevent removing or downgrading the last Owner of an organization.
+☐ Check permissions in controllers/policies, not only in menus.
+☐ Write audit logs for: role changes, invites, WhatsApp connect/disconnect, billing changes, exports, deletions, API key creation.
+☐ Make audit logs append-only (no update/delete from the app).
+☐ Store all timestamps in UTC; convert for display only.
+☐ Regenerate the session ID on login; set cookies Secure, HttpOnly, SameSite=Lax.
+☐ Enable CSRF protection on all forms; set security headers (HSTS, CSP, X-Frame-Options).
+☐ Keep a deleted_at soft delete for organizations, then purge personal data after the retention period.
+☐ Record consent to Terms of Service and Privacy Policy with version and timestamp at signup.
+☐ Add a basic Super Admin “impersonate” feature only with audit logging and a visible banner (see Module 12).
+Module 1 — Products, plans, entitlements and billing
+Sathwara bills only for software and setup; Meta bills the customer for messages. This module turns a payment into feature access, and must never grant access on a browser redirect alone.
+What to build
+Product catalogue managed by Super Admin: products (modules), plans, prices, billing interval (monthly / yearly), GST rate.
+Plan limits as data, not code: agents, contacts, workflows, active templates, campaigns per month, AI answers per month, phone numbers.
+Entitlement engine: can() for features, remaining() for limits, consume() for usage.
+Public pricing page fed from the same catalogue.
+Checkout: Razorpay Subscriptions for recurring plans; Razorpay Orders for one-time setup fees.
+Billing page: current plan, add-ons, next renewal date, payment method, invoices, usage vs limits.
+Upgrade / downgrade / add module / cancel at period end / reactivate.
+Proration rules for upgrades (charge difference immediately) and downgrades (apply at next renewal).
+Failed payment flow: reminders on day 0, 3, 7; grace period 7 days; then suspend sending; data kept.
+GST tax invoices (PDF + email), credit notes for refunds, invoice numbering per financial year.
+Coupons / pilot discounts with expiry.
+Internal financial ledger.
+Data
+products, plans, plan_prices, plan_limits, subscriptions, subscription_items, entitlements, usage_records, setup_orders, invoices, invoice_lines, payments, refunds, credit_notes, ledger_entries, coupons, payment_webhook_events.
+Razorpay webhooks to handle
+subscription.activated, subscription.charged, subscription.pending, subscription.halted, subscription.cancelled, subscription.completed, payment.captured, payment.failed, order.paid, refund.processed.
+Take care
+☐ Activate a plan only after a verified webhook or a server-side API fetch confirms payment; never on the success redirect.
+☐ Verify every Razorpay webhook signature with the webhook secret before reading it.
+☐ Store every webhook event in payment_webhook_events with its event ID; ignore duplicates (idempotent).
+☐ Handle events arriving out of order (e.g. charged before activated) by reading current state from Razorpay.
+☐ Keep amounts as integers in paise; never use floats for money.
+☐ Make the ledger append-only: refunds and corrections are new reversing rows, never edits or deletes.
+☐ Show prices inclusive or exclusive of GST consistently, and say which on every screen.
+☐ Put Sathwara's legal name, address, GSTIN (once registered), the SAC code your CA confirms for SaaS on every invoice.
+☐ Capture the customer's GSTIN and state to decide CGST+SGST (Gujarat) vs IGST (other states); confirm with the CA.
+☐ Use one continuous invoice number series per financial year (e.g. SIT/2026-27/0001); never reuse numbers.
+☐ Check entitlements on the server in every protected API and job, including background workers.
+☐ Check limits at the moment of use (e.g. adding the 4th agent on a 3-agent plan returns a clear upgrade message).
+☐ On downgrade, never delete over-limit data; make extra items read-only until the customer chooses.
+☐ On suspension, stop outgoing sends and automations but keep receiving and storing incoming messages.
+☐ Follow RBI recurring-payment rules: show mandate details, send pre-debit notification (Razorpay does this; verify it is enabled).
+☐ Show the effective date and amount before any upgrade, downgrade or cancellation is confirmed.
+☐ Keep Meta message charges completely separate; never show them as Sathwara charges.
+☐ Show a disclaimer on pricing: “WhatsApp messaging fees are billed by Meta directly.”
+☐ Write a daily reconciliation job comparing Razorpay payments with local records; alert on mismatch.
+☐ Keep Razorpay keys in environment secrets; never in the frontend or repository.
+☐ Test with Razorpay test mode: success, failure, retry, refund, cancellation, halted mandate.
+Module 2 — Meta / WhatsApp connection
+This module connects a customer's WhatsApp Business Account (WABA) to our app through Embedded Signup v4 and keeps it healthy. It is also what Meta reviews before granting Advanced Access, so build a thin working version early.
+Meta setup (one-time, Sathwara side)
+Meta Business portfolio for Sathwara InfoTech, business verification complete.
+Meta app with the WhatsApp use case; Tech Provider onboarding complete.
+Facebook Login for Business configuration with the WhatsApp Embedded Signup variation (v4).
+Permissions requested for App Review: whatsapp_business_management, whatsapp_business_messaging (and business_management only if truly needed).
+App-level webhook URL + verify token; subscribe to messages, message_template_status_update, account_update, phone_number_quality_update, account_review_update, business_capability_update, template_category_update.
+Sathwara's own test WABA and phone number for demos and App Review.
+What to build (customer side)
+“Connect WhatsApp” wizard with clear pre-checks: Facebook account, business details, a phone number not already on WhatsApp (or a WhatsApp Business App number for coexistence).
+Launch Embedded Signup v4 with session logging; capture WABA ID, phone number ID and the token code.
+Server-side: exchange the code for a business integration system user token; store encrypted.
+Server-side onboarding steps: subscribe our app to the customer's WABA webhooks, register the phone number (PIN), verify Meta-side billing is set up by the customer.
+Connection status machine: not_connected → initiated → authorization_pending → verification_pending → setup_pending → webhook_pending → testing → connected, plus action_required, restricted, disconnected.
+Test step: send a message to the owner's own phone and confirm the delivery webhook arrives.
+Connection health page: display name status, quality rating, messaging limit tier, account review status, last webhook received.
+Business profile editor: about, description, address, email, website, profile photo.
+Coexistence option (customers who keep using the WhatsApp Business App) — phase 2 of this module.
+Disconnect flow with confirmation and token deletion.
+Webhook receiver (shared by all modules)
+One public endpoint POST /webhooks/meta that verifies the X-Hub-Signature-256 header with the app secret.
+Write the raw payload to webhook_inbox and return 200 within a few hundred milliseconds.
+A queued job parses each entry and routes it: messages → Module 3, template updates → Module 7, account updates → this module.
+Data
+meta_businesses, whatsapp_accounts (waba_id, organization_id, status, currency, timezone), phone_numbers (phone_number_id, display_phone, display_name, name_status, quality_rating, messaging_limit, coexistence flag), integration_credentials (encrypted token, scopes, expires_at), connection_events, webhook_inbox (id, signature_valid, payload JSON, received_at, processed_at, attempts, error).
+Take care
+☐ Use Embedded Signup v4 only; check Meta's changelog before every release.
+☐ Never treat a closed popup or a JavaScript FINISH event as success; confirm WABA, phone number and webhook subscription by server-side Graph API calls.
+☐ Exchange the token code only on the server; the app secret never reaches the browser.
+☐ Encrypt tokens at rest (Laravel encrypted casts; keep APP_KEY out of backups); never log them, never return them in API responses.
+☐ Pin and record the Graph API version in config; upgrade deliberately, not by accident.
+☐ Verify the webhook signature on the raw request body before JSON parsing; reject invalid signatures with 401 and log them.
+☐ Answer the webhook GET verification challenge with the verify token.
+☐ Return 200 fast; do all processing in queues, or Meta will retry and eventually disable the webhook. Purge processed raw payloads from webhook_inbox after 30 days, because they contain personal data.
+☐ Map each incoming phone_number_id to exactly one organization; drop and alert on unknown IDs.
+☐ Handle a phone number already registered elsewhere, an expired authorization, missing permissions, and billing not set up — each with its own clear message and retry button.
+☐ Show the customer that they must add a payment method in Meta for message charges (Tech Provider model).
+☐ Handle account_update events for bans, restrictions and policy violations: move status to restricted, stop sends, notify the Owner.
+☐ Track quality rating and messaging limit; warn before campaigns would exceed the limit.
+☐ Store the 6-digit two-step verification PIN only if necessary, encrypted; let the customer set it.
+☐ Do not promise every existing WhatsApp number is eligible; show eligibility and coexistence limits before purchase.
+☐ Keep a per-organization log of every connection step (connection_events) for support.
+☐ Super Admin can see connection health for all customers without seeing message content.
+☐ Record a screen video of the complete flow for App Review: signup → connect → send → receive → template management.
+Module 3 — Messaging core (conversations, sending engine, media)
+One sending engine is used by the bot, inbox, campaigns, automations and AI. Nothing else may call Meta's send API directly. This is where duplicate sends, lost messages and surprise Meta bills are prevented.
+What to build
+Contact lookup/creation by WhatsApp ID (wa_id) on every inbound message.
+Conversation threads per contact per phone number, with status (open, pending, resolved) and the 24-hour customer service window end time.
+Inbound message types: text, image, video, audio, document, sticker, location, contacts, interactive replies (button, list), reactions, order, unsupported.
+Outbound message types: text, media, interactive buttons, interactive lists, CTA URL, template, reaction, mark-as-read, typing indicator.
+Status tracking per outbound message: queued → sending → sent → delivered → read, or failed with Meta error code.
+Sending engine: queue job → checks → Meta API → store wamid → update status from webhooks.
+Media pipeline: download inbound media by media ID to our storage; upload outbound media to Meta.
+Meta cost estimator: count billable messages per category per month and show an estimate to the customer.
+Message search within a conversation and across the workspace (by contact, text, date).
+Data retention setting per organization (e.g. keep messages 12 months).
+Pre-send checks (in this order, every message)
+Organization subscription active and entitlement allows the sender module.
+Phone number status is connected and not restricted.
+Contact not on the suppression list (for marketing) and not blocked.
+Inside the 24-hour window → free-form allowed; outside → only an approved template.
+Per-number and per-organization rate limits.
+Idempotency key not already used.
+Data
+contacts (shared with CRM), conversations (organization_id, phone_number_id, contact_id, status, assigned_to, window_expires_at, last_message_at), messages (direction, type, body JSON, wamid, status, error_code, pricing_category, billable, idempotency_key, sent_by user/bot/campaign/workflow), message_events (raw status webhooks), media_assets, send_attempts, idempotency_keys, meta_usage_estimates.
+Take care
+☐ Generate an idempotency key for every send (e.g. campaign:123:contact:456 or a UUID for manual replies); refuse a second send with the same key.
+☐ Store the wamid returned by Meta and match all status webhooks by it.
+☐ Ignore duplicate webhooks (same wamid + same status) and never move a status backwards (read must not become delivered).
+☐ Deduplicate inbound messages by wamid; Meta can deliver the same message twice.
+☐ Compute the 24-hour window from the customer's last inbound message timestamp, not ours.
+☐ Block free-form messages outside the window in the UI and in the engine.
+☐ Retry only transient errors (timeouts, 5xx, rate limit 130429/131056) with exponential backoff; give up after a fixed number of tries.
+☐ Never retry permanent errors (invalid number, user opted out of marketing, template paused); mark failed and show the reason in plain language.
+☐ Keep a lookup table of Meta error codes → friendly messages + suggested action.
+☐ Respect Meta throughput limits per phone number; use a per-number queue so one busy customer does not slow others.
+☐ Download inbound media promptly; Meta media URLs expire.
+☐ Scan uploaded files for type and size (follow Meta's current limits, e.g. images 5 MB, video 16 MB, documents 100 MB — re-check the Cloud API media docs); reject executables.
+☐ Serve media through signed, expiring URLs; never public folder links.
+☐ Record pricing.category and billable from status webhooks to build the Meta cost estimate.
+☐ Label the estimate clearly as “estimated; Meta's invoice is final.”
+☐ Show the free service-message allowance (1,000 per number per month in India from 1 Oct 2026) and usage against it; re-verify the number on Meta's pricing page before launch.
+☐ Store message text as received; escape it when rendering to prevent XSS.
+☐ Index messages by (organization_id, conversation_id, created_at); plan table partitioning by month once volume grows.
+☐ Apply the organization's retention setting with a nightly purge job; log what was purged.
+☐ Track who sent each outbound message (agent, bot, campaign, workflow, AI) for audit and reports.
+Module 4 — Bot & Auto Reply (first paid product)
+Bot Starter is the launch product: a rule-based bot that answers common questions instantly and hands over to a human when it cannot. Keep it predictable; no AI in v1.
+What to build
+Welcome message for a contact's first-ever message, with optional buttons (e.g. “Courses”, “Fees”, “Talk to us”).
+Keyword rules: exact, contains, starts-with; multiple keywords per rule; priority order.
+FAQ list: question + variations + answer (text, media, buttons).
+Button / list menus with up to 3 reply buttons or a list of up to 10 rows, linking to answers or sub-menus.
+Business hours per day of week + holidays; separate out-of-hours reply.
+Default (fallback) reply when nothing matches, with “Talk to a person” option.
+Human handoff: keyword (e.g. “agent”), button, or after N fallbacks; pause the bot for that conversation for X hours; notify staff by email / WhatsApp / inbox.
+Simple lead capture: ask name, requirement, city; save to the contact.
+Opt-out handling: “STOP” and “unsubscribe” mark the contact as opted out of marketing and send a confirmation.
+Test console: simulate a customer message and see which rule would fire, without sending.
+Bot logs: for each inbound message, which rule matched and what was sent.
+Templates gallery: ready-made bot setups for institutes, retail, clinics, real estate (used by managed setup).
+Publish / draft versions: edit a draft, then publish; roll back to the previous version.
+Matching order (document and test exactly this)
+Bot paused for this conversation (human handoff active) → do nothing.
+Opt-out / opt-in keywords.
+Interactive reply (button or list ID) → its linked answer.
+Out of business hours → out-of-hours reply (once per X hours per contact).
+First-ever message → welcome.
+Keyword rules by priority.
+FAQ match.
+Fallback reply; after 2 fallbacks offer handoff.
+Data
+bots (organization_id, phone_number_id, status, published_version_id), bot_versions (JSON definition, published_at, published_by), bot_rules, bot_faqs, bot_menus, business_hours, holidays, bot_sessions (conversation_id, current_menu, paused_until, fallback_count), bot_logs.
+Take care
+☐ Run the bot in a queued job triggered by the inbound message, never inside the webhook request.
+☐ Make the bot reply only once per inbound message (idempotency key = inbound wamid).
+☐ Never reply to our own outbound messages, status updates, reactions or system messages.
+☐ Prevent loops: no auto-reply if the same contact got more than N bot replies in M minutes.
+☐ Bot replies are free-form messages inside the 24-hour window; they never need templates.
+☐ Normalise text before matching: lowercase, trim, remove extra spaces and punctuation; support Gujarati/Hindi text as-is (UTF-8).
+☐ Respect Meta limits: max 3 reply buttons, button title 20 characters, list up to 10 rows; validate in the editor.
+☐ Use the organization's timezone for business hours.
+☐ When handoff starts, stop the bot for that conversation until an agent resolves it or the pause expires.
+☐ Notify staff on handoff; if no agent replies within X minutes, send the customer a “we'll get back to you” message.
+☐ Save opt-outs to the suppression list immediately (Module 6) and confirm to the customer.
+☐ Validate the bot definition before publish: no empty answers, no broken menu links, no orphan buttons.
+☐ Keep every published version; allow one-click rollback.
+☐ Show the customer that bot replies count toward Meta service-message charges after the free allowance.
+☐ Log rule match decisions so support can answer “why did the bot say that?”
+☐ Enforce plan limits: number of rules, FAQs, menus.
+☐ Write automated tests for every step of the matching order.
+☐ Disable the bot automatically if the phone number is restricted or the subscription is suspended.
+Module 5 — Shared Team Inbox
+The inbox lets several staff answer one WhatsApp number without stepping on each other. It is the natural upgrade after Bot Starter because every handoff lands here.
+What to build
+Three-pane layout: conversation list, chat thread, contact side panel.
+Filters: Unassigned, Mine, All, Bot-handled, Waiting on customer, Resolved; search by name, number, text.
+Live updates through WebSockets: new messages, status ticks, assignment changes, typing indicator of other agents.
+Assign / reassign to an agent or a team; auto-assignment (round robin, least busy) as an option.
+Conversation status: open, pending, resolved, snoozed until a time.
+Reply box: text, emoji, attachments, quick replies (saved replies with /shortcut), template picker when the window is closed.
+Internal notes visible only to staff, with @mentions that notify colleagues.
+Window indicator: time left in the 24-hour window; when closed, only templates are offered.
+Contact panel: name, number, tags, lead stage, custom fields, past conversations (link to CRM).
+Agent collision warning: “Ravi is also viewing / typing”.
+Bot control per conversation: pause bot, resume bot, hand back to bot.
+Notifications: browser push, sound, email digest of unassigned chats.
+Teams (e.g. Admissions, Accounts) and agent availability (online / away).
+Basic SLA timers: first-response time and resolution time per conversation.
+Mobile access through the responsive web app and browser push notifications; no native app in this release.
+Data
+teams, team_members, conversation_assignments (history), internal_notes, mentions, saved_replies, agent_status, conversation_tags, sla_events.
+Take care
+☐ Authorise every WebSocket channel per organization and per user role; a user must never subscribe to another organization's channel.
+☐ Agents with “assigned only” permission see only their own conversations, in the list, in search and in the API.
+☐ Internal notes are never sent to WhatsApp; mark them visually different and store them in a separate table.
+☐ Lock a conversation when one agent starts replying, or at least warn about another agent typing, to avoid double replies.
+☐ When the 24-hour window is closed, disable free text and show the template picker; enforce the same rule in the engine.
+☐ Show the delivery status ticks from webhooks and show failures in red with the reason and a retry button.
+☐ Keep assignment history so managers can see who handled what.
+☐ Enforce the plan's agent seat limit when inviting or activating agents.
+☐ Paginate message history (load older on scroll) so long chats stay fast.
+☐ Escape all message content and file names when rendering.
+☐ Show media through signed URLs; preview images, play audio, download documents.
+☐ Reconnect WebSockets automatically and fetch missed messages after reconnecting.
+☐ Snoozed conversations reopen automatically at the snooze time or when the customer writes again.
+☐ Resolving a conversation ends the bot pause according to the bot settings.
+☐ Log message sends by agent for reports and disputes.
+☐ Test with 2–3 agents at once on the same number before release.
+Module 6 — CRM, leads, consent and suppression
+The contact database is shared by every module. Consent and suppression live here, so marketing can never reach someone who said no — this is both a Meta policy rule and a DPDP duty.
+What to build
+Contacts list with search, filters, bulk actions; contact profile page with timeline (messages, notes, stage changes, campaigns received).
+Fields: name, WhatsApp number (E.164), email, city, source, owner, created date; custom fields (text, number, date, dropdown, checkbox).
+Tags (many per contact) and segments (saved filters).
+Lead pipeline: configurable stages (New → Contacted → Interested → Won / Lost), Kanban board and list view.
+Follow-up tasks and reminders with due date and owner; notification when due.
+CSV / Excel import with column mapping, preview, duplicate handling and an error report; export to CSV.
+Merge duplicate contacts.
+Consent records: marketing opt-in with source (form, WhatsApp keyword, offline, import), date, proof text; opt-out with date and channel.
+Suppression list per organization (opt-outs, blocked numbers, invalid numbers).
+Data subject requests: export one contact's data, delete one contact's data.
+Lead capture from bot answers and from a website click-to-WhatsApp widget.
+Data
+contacts (organization_id, wa_id, phone_e164, name, email, owner_id, stage_id, source, deleted_at), custom_field_definitions, custom_field_values, tags, contact_tags, segments, pipelines, stages, stage_history, tasks, consent_records, suppressions, imports, import_rows, exports.
+Take care
+☐ Normalise every number to E.164 (+91XXXXXXXXXX) on import and entry; reject invalid numbers with a reason.
+☐ Unique constraint on (organization_id, phone_e164) so a contact exists once per workspace.
+☐ Never share contacts between organizations, even when the same person contacts two businesses.
+☐ Import requires the customer to tick a declaration that they have consent for the imported contacts; store who ticked it and when.
+☐ Imported contacts are not opted in for marketing unless the file has a consent column and the customer confirms it.
+☐ Consent records are append-only: a new row for every opt-in or opt-out, never an edit.
+☐ Opt-out wins over opt-in when the opt-out is newer.
+☐ Check the suppression list at send time (in the sending engine), not only when building a campaign.
+☐ Run large imports and exports as background jobs; email the user when finished.
+☐ Exports are permission-controlled, audit-logged, and downloadable through expiring links only.
+☐ Limit custom fields and contacts according to the plan.
+☐ Contact deletion removes personal data from contacts, messages and media, keeping only anonymised counts for reports.
+☐ Show the contact's consent status clearly before any marketing send in the inbox.
+☐ Enforce field types and lengths on the server; sanitise HTML in notes and fields.
+☐ Keep a stage-change history for pipeline reports.
+☐ Reminders use the organization's timezone and do not fire for deleted contacts.
+☐ Do not store sensitive data (health, Aadhaar, card numbers) in custom fields without a specific legal review; warn clinic customers in the UI.
+Module 7 — Templates & Campaign Manager
+Campaigns are the riskiest module: they spend the customer's Meta money fastest and can get a number restricted. Build it only after consent, suppression and the sending engine are proven.
+Templates — what to build
+Template list synced from Meta: name, language, category (marketing / utility / authentication), status (approved, pending, rejected, paused, disabled), quality.
+Template builder: header (text / image / video / document), body with variables {{1}}, footer, buttons (quick reply, URL, phone, copy code), live WhatsApp-style preview.
+Sample values for each variable (Meta requires them for review).
+Submit to Meta, then track status changes from webhooks.
+Show rejection reasons and category changes Meta makes.
+Language variants of the same template (English, Gujarati, Hindi).
+Campaigns — what to build
+Campaign wizard: choose template → choose audience (segment, tags, CSV) → map variables to contact fields → schedule or send now → review cost estimate → confirm.
+Audience preview: total contacts, excluded (no consent, suppressed, invalid, duplicates) with reasons.
+Estimated Meta cost before sending (count × category rate for India), labelled as an estimate.
+Scheduled sending in the organization's timezone; quiet hours (e.g. no marketing 9 pm – 9 am).
+Throttled delivery through the sending engine; pause, resume, cancel.
+Live progress: queued, sent, delivered, read, failed, replied.
+Auto-pause rules: failure rate above X%, number quality drops, account restricted, template paused.
+Campaign report with export; replies land in the Team Inbox.
+Test send to the owner's own number before the real send.
+Data
+templates (organization_id, waba_id, meta_template_id, name, language, category, status, components JSON, quality), template_events, campaigns (status, template_id, audience definition, scheduled_at, throttle, created_by), campaign_recipients (contact_id, variables JSON, status, wamid, error), campaign_events.
+Take care
+☐ Send only approved templates; re-check status right before each batch, since Meta can pause a template mid-campaign.
+☐ Pick the template category honestly; Meta re-categorises misused utility templates as marketing and they cost more.
+☐ Exclude contacts without marketing consent for marketing templates; record why each was excluded.
+☐ Check the suppression list again at send time for every recipient.
+☐ Remove duplicate numbers inside one campaign.
+☐ Fill every variable; skip a recipient whose required variable is empty instead of sending a broken message.
+☐ Freeze the audience list when the campaign starts, so later changes don't alter who was targeted (except new opt-outs, which are still respected).
+☐ Create campaign_recipients rows first, then send each through the engine with key campaign:{id}:contact:{id}, so a crash never sends twice.
+☐ Throttle to stay within the phone number's messaging limit tier and throughput; never exceed the daily limit.
+☐ Show the cost estimate and require explicit confirmation for large sends (e.g. above 1,000 recipients).
+☐ Stop a campaign automatically if the failure rate crosses the threshold; notify the Owner.
+☐ Apply quiet hours for marketing; utility and authentication messages may be exempt.
+☐ Include an opt-out option (quick-reply “Stop” button or footer text) in every marketing template.
+☐ Respect plan limits: campaigns per month, recipients per campaign.
+☐ Approval step: only roles with campaign.send permission can launch.
+☐ Keep all campaign records for reporting even if the template is later deleted.
+☐ Run sends in a dedicated queue so campaigns never delay bot replies or inbox messages.
+Module 8 — Automation, integrations and public API
+Automation connects WhatsApp to the customer's other systems (fee software, website forms, ERP). Start with a small trigger → condition → action engine plus webhooks and an API; add named connectors only when a paying customer needs one.
+What to build
+Workflow builder: one trigger, optional conditions (AND / OR), one or more actions, optional delays.
+Triggers: message received, keyword, new contact, tag added, stage changed, form submitted, incoming webhook, schedule (daily / weekly / date field such as fee due date), conversation resolved.
+Conditions: contact field, tag, stage, time of day, consent status, window open.
+Actions: send template, send message (only when window open), add / remove tag, change stage, assign agent, create task, call outgoing webhook, wait X minutes / hours / days.
+Run history per workflow: each run, each step, result, error.
+Public REST API with API keys: contacts (create, update, find), send template message, list conversations, message status.
+Outgoing webhooks to the customer's URL: message received, message status, contact created, stage changed.
+Incoming webhook URLs per workflow (e.g. website form posts a lead → send welcome template).
+First named connectors (only on demand): Google Sheets, Razorpay payment links, Tuoora / Fee Easy (fee reminders), Zoho CRM.
+API documentation page and Postman collection.
+Data
+workflows (definition JSON, version, status), workflow_versions, workflow_runs, workflow_run_steps, scheduled_jobs, api_keys (hashed key, prefix, scopes, last_used_at), outgoing_webhooks (url, secret, events), webhook_deliveries (attempts, response code), incoming_webhook_endpoints, integration_credentials.
+Take care
+☐ Every workflow action that sends a message goes through the sending engine (window, template, consent, suppression, idempotency checks).
+☐ Use idempotency key workflow:{run_id}:step:{n} so a retried run never sends twice.
+☐ Detect and block loops (workflow A triggers B triggers A); cap runs per contact per hour.
+☐ Store delays as scheduled jobs in the database, not only in Redis memory, so restarts don't lose them.
+☐ Version workflows; running instances finish on the version they started with.
+☐ Show the customer a clear run log with the reason for every failure.
+☐ Store API keys hashed (show the full key once at creation); allow revoke and rotate; record last used.
+☐ Scope API keys (read-only, send, contacts) and tie each to one organization.
+☐ Rate-limit the public API per key (e.g. 60 requests per minute) and return standard 429 errors.
+☐ Sign outgoing webhooks with an HMAC secret and a timestamp; document how customers verify them.
+☐ Retry failed outgoing webhooks with backoff for up to 24 hours, then disable the endpoint and notify the Owner.
+☐ Block outgoing webhook URLs pointing to private IPs or localhost (SSRF protection).
+☐ Validate and size-limit incoming webhook payloads; protect each incoming URL with a secret token.
+☐ Encrypt third-party integration credentials; refresh OAuth tokens before expiry.
+☐ Keep custom integration work for one client in its own adapter class, so it does not leak into the core product.
+☐ Version the public API (/api/v1) and never break it without notice.
+☐ Enforce plan limits on workflows, runs per month and API calls.
+Module 9 — Booking & Appointment bot
+A guided bot flow that lets customers request or book a slot, then sends reminders. Start with “request + staff confirms”; add instant booking with calendar sync later.
+What to build
+Services list: name, duration, price (optional), staff who can provide it, location.
+Availability: working hours per staff, breaks, holidays, buffer between slots, maximum bookings per slot.
+Bot flow: choose service → choose date (list of next 7 days) → choose time slot → confirm name → booking created.
+Two modes: Request (staff approves in dashboard) and Instant (auto-confirmed).
+Booking dashboard: calendar view and list; confirm, reschedule, cancel, mark no-show.
+Utility template messages: booking confirmation, reminder (e.g. 24 h and 2 h before), reschedule, cancellation.
+Customer self-service in WhatsApp: “Reschedule” and “Cancel” buttons on reminders.
+Optional Google Calendar two-way sync per staff member.
+Data
+services, staff_profiles, availability_rules, availability_exceptions, bookings (contact_id, service_id, staff_id, starts_at, ends_at, status, source), booking_events, calendar_connections.
+Take care
+☐ Prevent double booking with a database constraint or row lock on (staff_id, starts_at), not only a UI check.
+☐ Hold a slot for a few minutes while the customer confirms; release it if they abandon.
+☐ Use the organization's timezone everywhere; show the timezone in confirmations.
+☐ Reminders sent outside the 24-hour window must be approved utility templates; budget their Meta cost.
+☐ Cancel scheduled reminders when a booking is cancelled or rescheduled.
+☐ Keep the bot flow resumable if the customer stops halfway and comes back.
+☐ For clinics: collect only name and time in WhatsApp; never ask for symptoms or medical details in the bot without a legal review.
+☐ Sync with Google Calendar through a queue; handle token expiry and conflicts (calendar event deleted).
+☐ Log every status change of a booking for disputes.
+Module 10 — AI Business Assistant (policy-scoped)
+The AI answers customer questions only from that business's own approved knowledge, and hands over to a human for everything else. Meta has banned general-purpose AI assistants on the Business API since 15 Jan 2026, so scope is a compliance requirement, not just a quality choice.
+What to build
+Knowledge base per organization: FAQs, uploaded PDFs / DOCX, website pages, price lists, policies.
+Ingestion pipeline: extract text → split into chunks → embeddings → vector store (pgvector in PostgreSQL).
+Answering: retrieve the best chunks → prompt the model with strict rules → answer in the customer's language (English, Gujarati, Hindi).
+Confidence check: if no good source is found, do not guess; offer handoff.
+Allowed-topics setting: the business lists what the AI may talk about (courses, fees, timings, location, admissions).
+Agent assist in the inbox: suggested reply, summary of the conversation, translate.
+AI usage meter: answers used vs plan allowance; hard cap.
+Review screen: AI answers with their sources, thumbs up / down, “add to FAQ”.
+Kill switch per organization and per conversation.
+Data
+kb_sources (type, file, url, status), kb_chunks (text, embedding vector, source_id), ai_settings (allowed topics, tone, languages, handoff rules), ai_responses (question, answer, sources used, confidence, tokens, cost, feedback), ai_usage.
+Take care
+☐ Restrict answers to the business's own knowledge and allowed topics; refuse off-topic requests (homework, general chat, coding) with a polite redirect.
+☐ Never market or describe the product as a general AI chatbot on WhatsApp.
+☐ Put the system prompt rules on the server; customers cannot remove the scope rules.
+☐ Escalate to a human on low confidence, complaints, payments, refunds, medical or legal questions.
+☐ Show the sources behind every answer to staff for checking.
+☐ Choose an AI provider whose terms allow no training on customer data and minimal retention; list it as a sub-processor in the DPA.
+☐ Remove phone numbers and other personal identifiers from prompts where not needed.
+☐ Protect against prompt injection inside uploaded documents and customer messages (“ignore your rules…”).
+☐ Hard-cap AI usage per plan; stop AI (fall back to bot) when the cap is reached; never bill silently.
+☐ Track token cost per organization to check margins.
+☐ Re-index the knowledge base when a source changes; delete chunks when a source is deleted.
+☐ Label AI messages internally so reports show what the AI said versus humans.
+☐ Keep AI off for clinics until a privacy review is done.
+Module 11 — Analytics & reports
+Customers renew when they can see results; Sathwara needs the same numbers to price correctly. Build a simple dashboard per module first, from pre-computed daily summaries.
+What to build
+Overview dashboard: conversations, new contacts, messages in / out, bot-resolved vs handed-off, average first response time.
+Bot report: top keywords and FAQs, fallback rate, handoff rate.
+Inbox report: per agent — conversations handled, first response time, resolution time.
+CRM report: leads by source, stage funnel, won / lost, overdue follow-ups.
+Campaign report: sent, delivered, read, replied, failed, opt-outs, estimated Meta cost.
+Meta usage estimate: billable messages by category per month vs free allowance.
+Date range filters, compare to previous period, CSV export.
+Scheduled email report (weekly summary to the Owner).
+Data
+daily_org_stats, daily_agent_stats, daily_bot_stats, daily_campaign_stats, report_exports.
+Take care
+☐ Compute reports from nightly (and hourly for today) summary tables, not live queries on the messages table.
+☐ Bucket days by the organization's timezone, not UTC.
+☐ Make the summary jobs re-runnable for any date without double counting.
+☐ Label all Meta cost numbers as estimates.
+☐ Respect permissions: agents see only their own stats unless allowed.
+☐ Show “no data yet” states clearly instead of zeros that look like failures.
+☐ Exports follow the same audit and expiring-link rules as CRM exports.
+Module 12 — Super Admin (Sathwara internal operations)
+The console Sathwara staff use to run the business: customers, billing, health, support. It is needed from launch day, because managed setup and pilot support depend on it.
+What to build
+Organizations list: plan, status, MRR, WhatsApp connection status, created date, last activity.
+Organization detail: members, subscription, invoices, usage vs limits, connection health, recent errors.
+Product catalogue editor (plans, prices, limits) — feeds Module 1.
+Manual actions: extend trial, apply coupon, grant a temporary entitlement, suspend / unsuspend, issue refund (through Razorpay).
+Support access (“impersonate”) with customer permission, time limit and audit.
+System health: queue sizes and delays, webhook failure rate, send error rate, Meta API errors, Razorpay webhook failures.
+Global announcements banner (maintenance, Meta changes).
+Feature flags per organization for gradual rollout.
+Abuse handling: flag spammy organizations, block sending, record reasons.
+Financial summary: MRR, new / churned subscriptions, setup revenue, failed payments.
+Take care
+☐ Super Admin accounts use a separate role, mandatory two-factor authentication and, ideally, an IP allow-list.
+☐ Staff see message content only through audited support access, never in default views.
+☐ Every Super Admin action is audit-logged with reason text.
+☐ Impersonation shows a visible banner to staff and is logged in the customer's own audit log.
+☐ Manual entitlements have an expiry date and a reason.
+☐ Refunds go through Razorpay and the ledger; never edit payment rows by hand.
+☐ Keep Super Admin routes on a separate path or subdomain with stricter rate limits.
+☐ Alerts (email / WhatsApp to Bhavesh) for: webhook failures, queue backlog, payment webhook failures, error spikes.
+Module 13 — Managed setup orders & support
+Managed setup is where early revenue comes from (₹2,999 basic, ₹7,500–15,000+ advanced). This module turns an enquiry into a scoped, paid, tracked job with a signed-off handover.
+What to build
+Public “Get setup assistance” form: business type, current WhatsApp setup, number of agents, desired automation, integrations, monthly message volume, contact details.
+Lead pipeline for enquiries inside Super Admin: New → Qualified → Proposal sent → Accepted → In progress → Awaiting customer → Delivered → Closed.
+Proposal generator: package, included items (number of FAQs, menus, templates, workflows), exclusions, customer responsibilities, price, GST, timeline estimate; PDF + accept online.
+Payment link for the setup fee (Razorpay Order) or milestone payments for advanced setup.
+Setup checklist per order: Meta verification done by customer, number ready, bot configured, templates submitted, tests passed, training done, handover notes sent.
+Customer sign-off (acceptance) recorded in the app.
+Post-launch support period tracking (e.g. 14 days included).
+Support tickets: in-app help form, ticket list, status, replies by email; later a Sathwara WhatsApp support number running on our own platform.
+Help centre: setup guides, Meta connection guide, FAQs, video walkthroughs.
+Data
+setup_enquiries, setup_orders (package, scope JSON, price, status, assigned_to), setup_proposals, setup_checklist_items, setup_acceptances, support_tickets, ticket_messages, help_articles.
+Take care
+☐ Every proposal lists limits (e.g. up to 20 FAQs, 3 menus, 5 templates) and exclusions; extra work is a change request with a price.
+☐ State customer responsibilities in writing: Meta business verification, phone number, content accuracy, consent for contacts, Meta payment method.
+☐ Do not start work before payment (or deposit) is confirmed by webhook.
+☐ Customer authorises Meta access themselves through Embedded Signup; Sathwara never asks for Facebook passwords.
+☐ Record acceptance with name, date and IP; start the support period from that date.
+☐ Use the bot templates gallery (Module 4) so setups are repeatable and fast.
+☐ Track time spent per setup order to check whether setup pricing is profitable.
+☐ Publish support hours honestly; do not promise 24/7 or guaranteed response times yet.
+Module 14 — Agency / reseller portal (Phase 6, later)
+Lets agencies manage several client workspaces and optionally rebrand the platform. Build only when real demand, margins and support capacity justify it.
+What to build
+Agency account that owns or manages many client organizations.
+Switch between client workspaces without separate logins.
+Wholesale pricing and agency billing (agency pays Sathwara; agency bills its clients).
+Optional white-label: custom domain, logo, colours, email sender name.
+Agency-level reports across clients.
+Take care
+☐ Agency staff access to a client workspace is granted by the client and can be revoked by the client.
+☐ Each client remains a separate tenant with its own WhatsApp connection, contacts and Meta billing.
+☐ Check Meta's partner terms on whether an agency can onboard clients under Sathwara's Tech Provider app.
+☐ Custom domains need automated TLS certificates and verified DNS ownership.
+☐ White-label must not hide who processes the data; keep Sathwara named in the DPA.
+Cross-cutting: security, privacy, reliability, infrastructure and testing
+These rules apply to every module and are release gates: a module is not done until its lines here pass.
+Security
+☐ All secrets (Meta app secret, Razorpay keys, AI keys, DB passwords) in environment variables or a secrets manager; never in Git; add a secret scanner to CI.
+☐ TLS everywhere; HSTS on; no plain HTTP endpoints.
+☐ Encrypt tokens and integration credentials at the field level; encrypt backup archives before they leave the server.
+☐ Run dependency vulnerability checks (Composer / npm audit) in CI weekly.
+☐ Protect against OWASP Top 10: SQL injection (ORM / bindings), XSS (escape output, CSP), CSRF, SSRF (webhook URLs), insecure file upload.
+☐ Least-privilege database users: the app user cannot drop tables.
+☐ Server hardening: SSH keys only, no root login, firewall open only on 80/443, automatic security updates.
+☐ Rotate secrets on staff change and at least yearly; document how.
+☐ External security review / penetration test before scaling beyond pilots (Phase 5–6).
+Privacy (IT Act SPDI Rules now, DPDP Act from May 2027)
+☐ Publish Privacy Policy, Terms of Service, Acceptable Use Policy, Refund & Cancellation Policy, and a Data Processing Agreement before the first pilot.
+☐ Sathwara is a Data Fiduciary for its own customers' account data and a Data Processor for their contacts and chats; the DPA says so.
+☐ Keep a list of sub-processors (Hostinger for server, storage and email; Razorpay; AI provider) and share it with customers.
+☐ Collect only the data each feature needs; no Aadhaar, card numbers or health details in free fields.
+☐ Provide per-organization data export and full deletion on cancellation (after a stated retention period, e.g. 30 days).
+☐ Provide per-contact export and deletion to support data principal requests.
+☐ Name a grievance contact (Bhavesh initially) on the website with an email address; respond within the legal timeline.
+☐ Breach plan: detect, contain, inform affected customers, report to CERT-In within 6 hours of noticing a reportable incident, and later to the Data Protection Board when DPDP duties start.
+☐ Keep application and security logs for 180 days on India-region infrastructure (CERT-In direction).
+☐ Keep the database, files and backups on Hostinger servers located in India.
+Reliability
+☐ Every Meta and Razorpay webhook: verify signature → store raw → return 200 → process in queue → dedupe by event ID.
+☐ Separate queues by priority: webhooks > bot > inbox > workflows > campaigns > reports.
+☐ Failed jobs go to a failed-jobs table with alerting; no silent drops.
+☐ Hostinger VPS backups plus your own nightly encrypted pg_dump and files archive stored off the production VPS; keep 30 days.
+☐ Test a full restore to a separate server at least once before launch and then quarterly.
+☐ Health checks and uptime monitoring on the app, webhook endpoint, queues and database.
+☐ Alerts for: webhook 5xx, queue delay above 1 minute for bot queue, send error rate spike, payment webhook failures, disk above 80%.
+☐ Write a one-page incident runbook: who is contacted, how customers are informed, how to roll back.
+☐ Zero-downtime deploys on the VPS (release folders with a symlink switch, e.g. Deployer or Laravel Envoy; take a Hostinger snapshot first); run migrations safely.
+☐ Keep staging and production separate, with separate Meta apps or test numbers and Razorpay test keys.
+Testing
+☐ Unit tests for entitlement checks, window rules, bot matching order, consent and suppression logic.
+☐ Feature tests for tenant isolation on every route group.
+☐ Replay tests: feed recorded Meta webhook payloads (duplicates, out-of-order) and check final state.
+☐ Razorpay test-mode tests for every billing scenario.
+☐ Load test the webhook endpoint and sending engine (e.g. 50 messages per second) before campaigns launch.
+☐ End-to-end test on a real test number before each release: connect, receive, bot reply, handoff, agent reply, template send.
+☐ Manual QA checklist on mobile browsers, since many Indian SMB owners use phones.
+The full condition-by-condition test catalogue is in the Testing section below.
+Notifications (shared service)
+Many modules say “notify the Owner” or “notify the agent”; one shared service does all of it, so users control it in one place.
+☐ Channels: in-app bell (realtime), email, browser push. WhatsApp alerts to staff only after the staff member opts in.
+☐ Notification types with a default channel each: handoff, mention, assignment, payment failed, connection restricted, campaign paused, import finished, export ready, reminder due.
+☐ Per-user preferences page: turn each type on or off per channel; critical ones (payment failed, number restricted) cannot be turned off for Owners.
+☐ Group bursts (e.g. 20 handoffs in 5 minutes → one email digest) to avoid spamming.
+☐ Every email has an unsubscribe-from-this-type link and the workspace name in the subject.
+☐ Notifications are tenant-scoped and permission-checked: an agent never gets alerts about conversations they cannot see.
+ID
+Condition
+Expected result
+Level
+TC-N-01
+Handoff happens while agent has the app open
+In-app bell + sound within 2 seconds
+E2E
+TC-N-02
+User turned off email for mentions
+No email; in-app still shown
+Feature
+TC-N-03
+Owner tries to turn off payment-failed alerts
+Not allowed
+Feature
+TC-N-04
+20 handoffs in 5 minutes
+One digest email, not 20
+Feature
+TC-N-05
+Agent with “assigned only” access
+No alerts for other agents' conversations
+Feature
+Testing — every condition, module by module
+A module ships only when every test case below for it passes on staging with a real WhatsApp test number. Each row is one condition and its exact expected result; automate it at the level shown, so the same test runs on every deploy.
+Test levels and tools
+Level
+What it proves
+Tool
+Unit
+Single rules: window, matching order, entitlements, consent, pricing
+Pest / PHPUnit
+Feature (API)
+Routes, permissions, tenant isolation, webhooks, jobs
+Pest feature tests with database
+Architecture
+Module boundaries are not crossed
+Pest arch() tests
+Webhook replay
+Duplicate, out-of-order and malformed Meta / Razorpay events
+Recorded JSON fixtures replayed in tests
+End-to-end (browser)
+Real user journeys in the web app
+Playwright (or Laravel Dusk)
+Accessibility
+WCAG 2.1 AA basics
+axe-core in Playwright + manual keyboard run
+Performance / load
+Webhook and sending throughput
+k6; Lighthouse CI for pages
+Security
+Common web vulnerabilities, leaked secrets, vulnerable packages
+OWASP ZAP baseline, secret scanner, composer audit / npm audit
+Manual QA
+Look and feel on real devices
+Checklist below, before each release
+Rules: every bug found gets a test that reproduces it before the fix · CI blocks merge if any Unit, Feature or Architecture test fails · E2E suite runs nightly on staging and before every production deploy · test data never uses real customer numbers.
+Module 0 — Foundation
+ID
+Condition
+Expected result
+Level
+TC-0-01
+Sign up with valid details
+Account created, verification email sent; WhatsApp connect and payment blocked until verified
+Feature
+TC-0-02
+Sign up with an email already registered
+Error “Email already registered”; no second account
+Feature
+TC-0-03
+Wrong password 5 times in 15 minutes
+6th attempt blocked with wait time shown
+Feature
+TC-0-04
+Correct login
+New session ID; audit log row written
+Feature
+TC-0-05
+Password reset link used twice or after expiry
+Rejected with “Request a new link”
+Feature
+TC-0-06
+Org A user opens an Org B record URL
+404, no data shown, attempt logged
+Feature
+TC-0-07
+Org A user sends Org B's ID in an API request body
+Ignored; data stays scoped to the session's organization
+Feature
+TC-0-08
+Agent opens Billing page
+“Ask your workspace admin” page (403)
+Feature
+TC-0-09
+Owner tries to remove or demote the last Owner
+Blocked with explanation
+Feature
+TC-0-10
+Invitation accepted by a different email
+Rejected
+Feature
+TC-0-11
+Invitation opened after 7 days
+Shows expired; admin can resend
+Feature
+TC-0-12
+Admin changes a member's role
+New permissions apply on next request; audit log row
+Feature
+TC-0-13
+Owner with 2FA logs in without the code
+Login not completed
+Feature
+TC-0-14
+User in two organizations switches workspace
+Only the selected org's data and realtime channels are visible
+E2E
+TC-0-15
+Workspace deletion requested
+Access ends now; personal data purged by job after 30 days
+Feature
+TC-0-16
+Any attempt to edit or delete an audit log row
+Not possible through the app or the app's DB user
+Feature
+TC-0-17
+Form submitted without CSRF token
+Rejected (419)
+Feature
+Module 1 — Plans, entitlements, billing
+ID
+Condition
+Expected result
+Level
+TC-1-01
+Browser reaches success page but no webhook yet
+Plan stays “Pending payment”; activates only after verified webhook or API check
+Feature
+TC-1-02
+Razorpay webhook with invalid signature
+Rejected, not processed, logged
+Feature
+TC-1-03
+Same webhook event received twice
+Processed once
+Webhook replay
+TC-1-04
+subscription.charged arrives before subscription.activated
+Final state Active; exactly one invoice
+Webhook replay
+TC-1-05
+Renewal payment fails
+Status Past due; reminder sent; features stay on during 7-day grace
+Feature
+TC-1-06
+Grace period ends unpaid
+Outgoing sends and automations stop; incoming messages still stored; red banner
+Feature
+TC-1-07
+Payment made after suspension
+Reactivated immediately; banner removed
+Feature
+TC-1-08
+Upgrade mid-cycle
+Prorated amount shown before confirm; new features on after payment
+E2E
+TC-1-09
+Downgrade to a plan with fewer agents than currently active
+Applies at renewal; extra agents become read-only until Owner chooses; nothing deleted
+Feature
+TC-1-10
+Cancel at period end
+Active until end date, then Cancelled; data kept as per policy
+Feature
+TC-1-11
+Refund issued
+Credit note + reversing ledger entry; original rows unchanged
+Feature
+TC-1-12
+Customer in Gujarat vs another state
+CGST + SGST vs IGST on invoice (as confirmed by CA)
+Unit
+TC-1-13
+First invoice on 1 April
+New financial-year series starts at 0001
+Unit
+TC-1-14
+Add 4th agent on a 3-agent plan
+Blocked with usage and Upgrade button; API returns a clear limit error code
+Feature
+TC-1-15
+Call a module's API not in the plan
+403 even though the menu is hidden
+Feature
+TC-1-16
+Expired or used-up coupon
+Rejected with reason
+Unit
+TC-1-17
+Reconciliation finds a payment not in local records
+Alert to Super Admin
+Feature
+TC-1-18
+Money calculations with odd amounts (e.g. ₹999 + 18% GST)
+Exact paise values, no rounding drift across lines and total
+Unit
+Module 2 — Meta / WhatsApp connection
+ID
+Condition
+Expected result
+Level
+TC-2-01
+Embedded Signup v4 completed
+Server confirms WABA, phone and webhook subscription; status moves to Testing, then Connected after test message
+E2E
+TC-2-02
+Customer closes the popup early
+Status stays Initiated / Authorization pending with a Resume button
+E2E
+TC-2-03
+Token code exchange fails or code expired
+Status Action required with Retry
+Feature
+TC-2-04
+Phone number already registered on another account
+Clear message with options; not marked connected
+Feature
+TC-2-05
+Customer has not added a Meta payment method
+Setup pending with step-by-step instructions
+Feature
+TC-2-06
+Webhook verification GET with right / wrong verify token
+Returns challenge / 403
+Feature
+TC-2-07
+Webhook POST with invalid signature
+401; stored as invalid; not processed
+Feature
+TC-2-08
+Webhook for an unknown phone number ID
+Dropped and alerted
+Webhook replay
+TC-2-09
+Webhook endpoint under load
+Responds 200 in under 500 ms; processing queued
+Load
+TC-2-10
+account_update reports a restriction
+Status Restricted; all sends stop; Owner notified
+Webhook replay
+TC-2-11
+Quality rating drops to Low
+Warning banner; campaign pre-check warns
+Webhook replay
+TC-2-12
+Customer removes our app's access in Meta
+Next API call fails → status Action required / Disconnected; Owner notified
+Feature
+TC-2-13
+Owner disconnects WhatsApp
+Token deleted; bot stopped; status Disconnected; audit log
+Feature
+TC-2-14
+Same WABA connected to a second organization
+Blocked
+Feature
+TC-2-15
+Token value appears in any log or API response
+Never — automated log scan finds none
+Feature
+TC-2-16
+Graph API version
+Every call uses the version from config
+Unit
+Module 3 — Messaging core
+ID
+Condition
+Expected result
+Level
+TC-3-01
+First message from a new number
+Contact and conversation created; window end = message time + 24 h
+Feature
+TC-3-02
+Same inbound webhook delivered twice
+One message stored
+Webhook replay
+TC-3-03
+Status webhooks out of order (read before delivered)
+Final status Read; never moves backwards
+Webhook replay
+TC-3-04
+Free-form reply inside the window
+Sent; status ticks update
+E2E
+TC-3-05
+Free-form reply 24 h + 1 min after last customer message
+Blocked in UI and engine; template offered
+Feature
+TC-3-06
+Two sends with the same idempotency key
+Second ignored
+Unit
+TC-3-07
+Meta returns 5xx or times out
+Retried with backoff up to the limit, then Failed with reason
+Feature
+TC-3-08
+Permanent error (number not on WhatsApp, marketing opt-out)
+Failed at once, no retry, plain-language reason
+Feature
+TC-3-09
+Rate-limit error for one organization
+That org's sends delayed; other orgs unaffected
+Feature
+TC-3-10
+Inbound image / document
+Saved to our storage promptly; preview opens
+Feature
+TC-3-11
+Upload over Meta's size limit or an executable file
+Rejected with message
+Feature
+TC-3-12
+Media URL opened without valid signed token or after expiry
+Denied
+Feature
+TC-3-13
+Message text containing <script>
+Shown as plain text; nothing runs
+E2E
+TC-3-14
+Gujarati, Hindi and emoji messages
+Stored and displayed correctly
+E2E
+TC-3-15
+Subscription suspended
+Outbound blocked; inbound still stored
+Feature
+TC-3-16
+Billable status webhooks received
+Meta cost estimate increases in the right category
+Unit
+TC-3-17
+Retention set to 12 months
+Nightly job deletes older messages and media; logs the count
+Feature
+Module 4 — Bot & Auto Reply
+ID
+Condition
+Expected result
+Level
+TC-4-01
+Contact's first-ever message
+Welcome message with its buttons
+Unit
+TC-4-02
+Later message containing keyword “fees”
+Keyword answer; welcome not repeated
+Unit
+TC-4-03
+“  FEES!! ” (case, spaces, punctuation)
+Matches the “fees” rule
+Unit
+TC-4-04
+Two rules match the same text
+Higher-priority rule wins
+Unit
+TC-4-05
+Button reply whose text differs from the button title
+Answer linked to the button ID
+Unit
+TC-4-06
+Message at 18:05 IST when hours are 09:00–18:00 IST
+Out-of-hours reply
+Unit
+TC-4-07
+Second out-of-hours message within X hours
+No repeated out-of-hours reply
+Unit
+TC-4-08
+Message on a configured holiday
+Out-of-hours reply
+Unit
+TC-4-09
+Nothing matches
+Fallback reply; on 2nd consecutive fallback, handoff offered
+Unit
+TC-4-10
+Customer types “agent” or taps “Talk to us”
+Handoff: bot paused, staff notified, customer told someone will reply
+Feature
+TC-4-11
+Customer writes during handoff pause
+No bot reply; message lands in inbox
+Feature
+TC-4-12
+Pause expires or agent resolves
+Bot resumes per settings
+Feature
+TC-4-13
+No agent replies within X minutes of handoff
+“We'll get back to you” message sent once
+Feature
+TC-4-14
+Customer sends “STOP”
+Marketing opt-out recorded; confirmation sent; added to suppression list
+Feature
+TC-4-15
+Inbound status update, reaction or our own outbound echo
+No bot reply
+Webhook replay
+TC-4-16
+Same inbound message processed twice
+Exactly one bot reply
+Webhook replay
+TC-4-17
+More than N bot replies to one contact in M minutes
+Bot stops for that contact; alert logged
+Unit
+TC-4-18
+Publish with an empty answer or a menu linking to a deleted item
+Publish blocked with a list of errors
+Feature
+TC-4-19
+Roll back to previous version
+Previous answers used from the next message
+Feature
+TC-4-20
+Test console message
+Shows matched rule and reply; nothing sent to WhatsApp
+E2E
+TC-4-21
+Button title of 21 characters
+Editor blocks save with counter in red
+E2E
+TC-4-22
+Number restricted or subscription suspended
+Bot disabled automatically; banner shown
+Feature
+TC-4-23
+Plan limit of FAQs reached
+New FAQ blocked with upgrade message
+Feature
+Module 5 — Shared Team Inbox
+ID
+Condition
+Expected result
+Level
+TC-5-01
+Agent with “assigned only” permission
+Sees only own conversations in list, search and API
+Feature
+TC-5-02
+User tries to subscribe to another org's realtime channel
+Refused
+Feature
+TC-5-03
+Two agents open the same conversation
+Both see “X is viewing / typing”
+E2E
+TC-5-04
+Internal note added
+Visible to staff only; never sent to WhatsApp
+Feature
+TC-5-05
+@mention in a note
+Mentioned user notified
+Feature
+TC-5-06
+24-hour window closed
+Reply box replaced by template picker
+E2E
+TC-5-07
+Outbound message fails
+Red status, reason, Retry button
+E2E
+TC-5-08
+Conversation reassigned
+Assignment history row; new agent notified
+Feature
+TC-5-09
+Snoozed until 5 pm
+Reopens at 5 pm, or earlier if the customer writes
+Feature
+TC-5-10
+Realtime connection drops and returns
+“Reconnecting…” banner; missed messages loaded once, no duplicates
+E2E
+TC-5-11
+Invite agent above seat limit
+Blocked with upgrade message
+Feature
+TC-5-12
+Inbox on a 360 px wide phone
+List → thread → contact screens with back buttons work
+E2E
+TC-5-13
+Conversation with 10,000 messages
+Loads in pages; scrolling stays smooth
+E2E
+TC-5-14
+Agent replies to an opted-out contact
+Allowed for service replies; marketing templates blocked
+Feature
+Module 6 — CRM, consent, suppression
+ID
+Condition
+Expected result
+Level
+TC-6-01
+Number entered as “98765 43210”
+Saved as +919876543210
+Unit
+TC-6-02
+Same number added twice in one org
+Existing contact used or merge offered; no duplicate
+Feature
+TC-6-03
+Same number in two different orgs
+Two separate contacts; no data shared
+Feature
+TC-6-04
+Import CSV with 10,000 rows, 50 invalid
+Background job; 9,950 imported; error file for 50
+Feature
+TC-6-05
+Import without ticking the consent declaration
+Import blocked
+E2E
+TC-6-06
+Import without a consent column
+Contacts not opted in for marketing
+Feature
+TC-6-07
+Opt-in, then later opt-out
+Status Opted out; both records kept
+Unit
+TC-6-08
+Contact opts out after a campaign audience was built
+Skipped at send time
+Feature
+TC-6-09
+Agent without export permission tries export
+403
+Feature
+TC-6-10
+Export link opened after expiry
+Denied; every export is audit-logged
+Feature
+TC-6-11
+Contact deleted
+Personal data removed from contact, messages and media; report counts kept
+Feature
+TC-6-12
+Contact data export requested
+File with all of that contact's data
+Feature
+TC-6-13
+Text typed into a number custom field
+Validation error
+Unit
+TC-6-14
+Follow-up reminder due
+Notification at the right time in workspace timezone; none for deleted contacts
+Feature
+TC-6-15
+Stage changed on Kanban
+Stage history row; board and list both update
+E2E
+Module 7 — Templates & campaigns
+ID
+Condition
+Expected result
+Level
+TC-7-01
+Pick a template that is pending or rejected
+Not selectable
+E2E
+TC-7-02
+Template rejected by Meta
+Status Rejected with Meta's reason shown
+Webhook replay
+TC-7-03
+Template paused by Meta during a campaign
+Campaign auto-pauses; Owner notified
+Webhook replay
+TC-7-04
+Marketing audience includes contacts without consent
+Excluded; reason counts shown in preview
+Feature
+TC-7-05
+Duplicate numbers in audience
+Each number sent once
+Unit
+TC-7-06
+Required variable empty for a recipient
+Recipient skipped and reported; no broken message
+Unit
+TC-7-07
+Worker crashes mid-campaign and restarts
+No recipient receives the message twice
+Feature
+TC-7-08
+Audience larger than the number's messaging limit
+Warning; sends spread within the limit
+Feature
+TC-7-09
+Campaign over 1,000 recipients
+Cost estimate + typed confirmation required
+E2E
+TC-7-10
+Failure rate crosses the threshold
+Campaign auto-pauses; Owner notified
+Feature
+TC-7-11
+Marketing scheduled at 22:00
+Held until quiet hours end
+Unit
+TC-7-12
+User without campaign.send
+Can draft; cannot launch
+Feature
+TC-7-13
+Campaign cancelled
+Unsent recipients never sent
+Feature
+TC-7-14
+Contact opts out after campaign start
+Skipped
+Feature
+TC-7-15
+Campaign running while bot is answering
+Bot replies not delayed (separate queue)
+Load
+TC-7-16
+Monthly campaign limit reached
+New campaign blocked with upgrade message
+Feature
+Module 8 — Automation, integrations, public API
+ID
+Condition
+Expected result
+Level
+TC-8-01
+Trigger fires
+Actions run in order; run log shows each step
+Feature
+TC-8-02
+“Send message” action with window closed
+Step fails with reason (or sends configured template)
+Feature
+TC-8-03
+Workflow run retried after a failure
+No duplicate message
+Feature
+TC-8-04
+Workflow A triggers B which triggers A
+Loop detected and stopped
+Unit
+TC-8-05
+2-day delay step and a server restart in between
+Step still runs on time
+Feature
+TC-8-06
+Workflow edited while runs are active
+Old runs finish on the old version
+Feature
+TC-8-07
+API key used to read another org's contact
+404
+Feature
+TC-8-08
+Revoked API key
+401
+Feature
+TC-8-09
+Read-only key tries to send
+403
+Feature
+TC-8-10
+More than 60 requests per minute
+429 with Retry-After
+Feature
+TC-8-11
+Outgoing webhook URL pointing to 127.0.0.1 or a private IP
+Rejected (SSRF protection)
+Unit
+TC-8-12
+Customer's webhook endpoint down
+Retries with backoff for 24 h; then disabled and Owner notified
+Feature
+TC-8-13
+Customer verifies our webhook signature using the docs
+Signature matches
+Feature
+TC-8-14
+Incoming webhook without its secret token
+401
+Feature
+TC-8-15
+Incoming payload above size limit
+413
+Feature
+Module 9 — Booking
+ID
+Condition
+Expected result
+Level
+TC-9-01
+Two customers choose the last slot at the same moment
+Only one booking; the other is offered the next free slot
+Feature
+TC-9-02
+Customer abandons the flow after choosing a slot
+Slot hold released after X minutes
+Feature
+TC-9-03
+Booking cancelled or rescheduled
+Old reminders cancelled; new ones scheduled
+Feature
+TC-9-04
+Reminder due outside the 24-hour window
+Sent as an approved utility template
+Feature
+TC-9-05
+Staff leave or holiday
+Those slots not offered
+Unit
+TC-9-06
+Customer stops halfway and returns later
+Flow resumes from the last step
+Feature
+TC-9-07
+Google Calendar token expired
+Sync error shown; booking still saved
+Feature
+Module 10 — AI Business Assistant
+ID
+Condition
+Expected result
+Level
+TC-10-01
+Question covered by the knowledge base
+Answer given; sources recorded
+Feature
+TC-10-02
+Off-topic request (“write my essay”)
+Polite refusal; lists what it can help with
+Feature
+TC-10-03
+No good source found
+No guess; handoff offered
+Feature
+TC-10-04
+Customer message says “ignore your rules”
+Rules still applied
+Feature
+TC-10-05
+Uploaded PDF contains hidden instructions
+Instructions ignored
+Feature
+TC-10-06
+Payment, refund, complaint, medical or legal question
+Escalated to a human
+Feature
+TC-10-07
+Gujarati question
+Gujarati answer from the knowledge base
+Feature
+TC-10-08
+Monthly AI cap reached
+AI stops; bot fallback; Owner notified; no extra charge
+Feature
+TC-10-09
+Knowledge source deleted
+Its content no longer used or cited
+Feature
+TC-10-10
+Kill switch on (org or conversation)
+No AI replies
+Feature
+TC-10-11
+Clinic workspace
+AI off until enabled by Super Admin after review
+Feature
+Module 11 — Analytics & reports
+ID
+Condition
+Expected result
+Level
+TC-11-01
+Message at 23:50 IST
+Counted on that IST day, not the next UTC day
+Unit
+TC-11-02
+Daily summary job run twice for the same date
+Same numbers; no double counting
+Feature
+TC-11-03
+Agent opens reports
+Sees only own stats unless permitted
+Feature
+TC-11-04
+Brand-new workspace
+“No data yet” state, not zeros
+E2E
+TC-11-05
+Any Meta cost figure
+Labelled “estimate”
+E2E
+Module 12 — Super Admin
+ID
+Condition
+Expected result
+Level
+TC-12-01
+Super Admin login without 2FA
+Blocked
+Feature
+TC-12-02
+Impersonate a customer
+Banner shown; time-limited; logged in both audit logs
+Feature
+TC-12-03
+Default organization views
+No message content shown
+Feature
+TC-12-04
+Manual entitlement granted
+Expires on its end date automatically
+Feature
+TC-12-05
+Refund from the console
+Done through Razorpay; ledger reversal written
+Feature
+TC-12-06
+Normal customer user opens a Super Admin URL
+404
+Feature
+Module 13 — Managed setup & support
+ID
+Condition
+Expected result
+Level
+TC-13-01
+Setup order moved to In progress before payment confirmed
+Not allowed
+Feature
+TC-13-02
+Customer accepts proposal
+Name, date and IP recorded; support period starts
+Feature
+TC-13-03
+Request beyond proposal scope
+Created as a separate priced change request
+Feature
+TC-13-04
+Support ticket submitted
+Ticket created; confirmation email; visible in Super Admin
+E2E
+Module 14 — Agency portal (later)
+ID
+Condition
+Expected result
+Level
+TC-14-01
+Client revokes agency access
+Agency loses access to that workspace at once
+Feature
+TC-14-02
+Agency user switches between two clients
+Each client's data fully separate
+E2E
+Non-functional tests (release gates)
+ID
+Area
+Condition
+Pass mark
+NF-01
+Security
+OWASP ZAP baseline scan on staging
+No high-risk findings
+NF-02
+Security
+Secret scanner on the repository
+No secrets found
+NF-03
+Security
+composer audit / npm audit
+No critical vulnerabilities
+NF-04
+Architecture
+Pest arch() module-boundary tests
+All pass
+NF-05
+Accessibility
+axe-core on login, dashboard, inbox, bot builder, campaign wizard, billing
+No serious or critical violations
+NF-06
+Accessibility
+Keyboard-only run: sign up → connect WhatsApp → set up bot
+Completed without a mouse
+NF-07
+Performance
+Lighthouse (mobile) on dashboard and inbox
+Performance score 80 or above
+NF-08
+Load
+Webhook endpoint at 50 requests per second for 10 minutes
+95% of responses under 300 ms; no errors
+NF-09
+Load
+Sending engine at 50 messages per second (Meta mock)
+No duplicates, no lost messages
+NF-10
+Recovery
+Restore last night's backup to a separate server
+App starts; record counts match
+NF-11
+Monitoring
+Force a webhook failure and a queue backlog
+Alerts arrive within 5 minutes
+Manual QA before every release
+☐ Browsers: latest Chrome, Edge, Firefox and Safari on desktop; Chrome on Android; Safari on iPhone.
+☐ Widths: 360, 768, 1280 and 1440 px.
+☐ Full journey on a real test number: sign up → pay (test mode) → connect → bot reply → handoff → agent reply → template send.
+☐ Every screen touched in the release checked for loading, empty, error, locked and limit states.
+☐ Gujarati and Hindi content displays correctly in bot editor, preview and inbox.
+☐ Invoices and emails checked for correct name, GSTIN, amounts and dates.
+☐ Release notes written; help articles updated.
+Build order, sprint plan and App Review readiness
+Build in this order and do not start a phase until the gate above it passes; only Phase 2 earns money, so everything before the pilot serves it. Dates are planning targets for a small team and move with Meta approval time.
+build roadmap · 6 phases, 5 gates
+Phases 1 and 2 overlap on purpose: a thin Embedded Signup + webhook + reply flow is needed by week 5 for the App Review video.
+First 12 weeks, two-week sprints
+Sprint 1 (weeks 1–2): repo, CI, buy Hostinger KVM 2 (production) and KVM 1 (staging) in India, harden servers, set up Hostinger Mail with SPF/DKIM/DMARC; Module 0 auth, organizations, roles, invitations, audit log; Meta app created, business verification submitted.
+Sprint 2 (weeks 3–4): Module 1 catalogue, entitlements, Razorpay test-mode subscriptions and setup orders, invoices; webhook receiver + webhook_inbox; Meta test number sending and receiving.
+Sprint 3 (weeks 5–6): Embedded Signup v4 flow + server-side onboarding + connection status machine; sending engine with pre-send checks; record App Review video and submit.
+Sprint 4 (weeks 7–8): Module 4 bot (welcome, keywords, FAQs, menus, hours, fallback, handoff, opt-out, test console, logs); minimal inbox to read and answer handed-off chats; Super Admin basics.
+Sprint 5 (weeks 9–10): Module 13 setup orders and proposals; onboard 2–3 pilot businesses with managed setup; Razorpay live mode.
+Sprint 6 (weeks 11–12): fix pilot issues, help centre, monitoring and alerts, backup restore test, launch Bot Starter self-service when all launch gates pass.
+Meta App Review readiness
+☐ Business verification for Sathwara InfoTech approved; name matches website, invoices and Udyam certificate.
+☐ Privacy Policy and Terms URLs live on sathwara domain and entered in the Meta app settings.
+☐ App icon, app category, contact email on the business domain set.
+☐ Embedded Signup v4 works end to end on the production domain (HTTPS).
+☐ Screen recording shows: login to our app → Embedded Signup → WABA and number connected → sending a message → receiving a reply → creating or listing a template.
+☐ Each requested permission is clearly used on screen, with a one-line written explanation per permission.
+☐ A test login for Meta reviewers is provided, with steps written in English.
+☐ Request only permissions actually used; remove extras before submitting.
+Definition of done (every module)
+☐ All its “Take care” lines implemented and ticked.
+☐ Tenant isolation and permission tests pass.
+☐ Entitlements and plan limits enforced on the server.
+☐ Audit logs written for sensitive actions.
+☐ Errors shown to users in plain language with a next step.
+☐ Help article written.
+☐ Tested on a real WhatsApp test number on staging.
+Open decisions before Sprint 1
+Final stack: Laravel (recommended) or Next.js + NestJS.
+Hostinger plan sizes (KVM 2 production + KVM 1 staging recommended) and Hostinger Mail plan (Business Starter 1,000/day or Standard 3,000/day per mailbox).
+Whether Bot Starter v1 includes the minimal inbox for handoffs or only email notifications.
+Plan limits for Bot Starter (rules, FAQs, agents, contacts).
+Pilot customers: which 2–3 businesses, and in which industries.
+Sources
+Meta: Embedded Signup overview (v2 deprecation)
+Meta: Onboarding customers as a Tech Provider
+Meta: Solution providers overview
+Meta: WhatsApp Business Platform pricing
+AiSensy: Service message pricing update, Oct 2026
+Visito AI: WhatsApp AI assistant policy
+Konfirmity: DPDP Rules timeline
