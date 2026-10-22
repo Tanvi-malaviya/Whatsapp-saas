@@ -1,5 +1,17 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import {
+    LayoutGrid,
+    MessageSquare,
+    Users,
+    Bot,
+    Send,
+    Zap,
+    Calendar,
+    Sparkles,
+    BarChart3,
+    Settings,
+    HelpCircle,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -19,21 +31,61 @@ import type { NavItem } from '@/types';
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
-        href: dashboard(),
+        href: '/dashboard',
         icon: LayoutGrid,
+    },
+    {
+        title: 'Team Inbox',
+        href: '/dashboard#inbox',
+        icon: MessageSquare,
+    },
+    {
+        title: 'Contacts & CRM',
+        href: '/dashboard#contacts',
+        icon: Users,
+    },
+    {
+        title: 'Bot & Auto-Reply',
+        href: '/dashboard#bot',
+        icon: Bot,
+    },
+    {
+        title: 'Campaigns & Templates',
+        href: '/dashboard#campaigns',
+        icon: Send,
+    },
+    {
+        title: 'Automations',
+        href: '/dashboard#automations',
+        icon: Zap,
+    },
+    {
+        title: 'Bookings',
+        href: '/dashboard#bookings',
+        icon: Calendar,
+    },
+    {
+        title: 'AI Assistant',
+        href: '/dashboard#ai',
+        icon: Sparkles,
+    },
+    {
+        title: 'Analytics & Reports',
+        href: '/dashboard#reports',
+        icon: BarChart3,
     },
 ];
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
+        title: 'Settings',
+        href: '/settings/profile',
+        icon: Settings,
     },
     {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
+        title: 'Help & Guides',
+        href: 'https://faq.whatsapp.com/general/business',
+        icon: HelpCircle,
     },
 ];
 
