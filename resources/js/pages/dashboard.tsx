@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     MessageSquare,
     Users,
@@ -72,9 +72,11 @@ export default function Dashboard() {
                         </div>
 
                         <div className="flex shrink-0 items-center gap-3">
-                            <Button className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm gap-2">
-                                <MessageSquare className="size-4" />
-                                Connect WhatsApp
+                            <Button asChild className="bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm gap-2">
+                                <Link href="/whatsapp/connect">
+                                    <MessageSquare className="size-4" />
+                                    Connect WhatsApp
+                                </Link>
                             </Button>
                         </div>
                     </div>
@@ -150,7 +152,7 @@ export default function Dashboard() {
                         Bot Starter Quick Actions
                     </h3>
                     <div className="grid gap-4 md:grid-cols-3">
-                        <div className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all">
+                        <Link href="/bot" className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all block">
                             <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 mb-3">
                                 <Bot className="size-5" />
                             </div>
@@ -161,9 +163,9 @@ export default function Dashboard() {
                             <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                                 Set up an instant auto-reply with buttons (Courses, Fees, Talk to Us) for customers messaging for the first time.
                             </p>
-                        </div>
+                        </Link>
 
-                        <div className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all">
+                        <Link href="/contacts" className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all block">
                             <div className="flex size-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 mb-3">
                                 <Users className="size-5" />
                             </div>
@@ -174,9 +176,9 @@ export default function Dashboard() {
                             <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                                 Import leads from CSV, tag prospects, and ensure DPDP / Meta opt-out compliance before running broadcasts.
                             </p>
-                        </div>
+                        </Link>
 
-                        <div className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all">
+                        <Link href="/campaigns" className="group rounded-xl border border-sidebar-border/70 p-5 bg-card hover:border-emerald-500/40 hover:shadow-xs transition-all block">
                             <div className="flex size-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 mb-3">
                                 <Send className="size-5" />
                             </div>
@@ -187,11 +189,11 @@ export default function Dashboard() {
                             <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                                 Sync your utility & marketing templates approved by Meta to re-open conversations outside the 24h window.
                             </p>
-                        </div>
+                        </Link>
                     </div>
                 </div>
 
-                {/* 5. Recent Conversations Table (Empty State) */}
+                {/* 5. Recent Conversations Table */}
                 <Card className="border-sidebar-border/70">
                     <CardHeader className="flex flex-row items-center justify-between border-b border-sidebar-border/50 pb-4">
                         <div>
@@ -200,8 +202,10 @@ export default function Dashboard() {
                                 Live incoming messages from your WhatsApp Business number.
                             </CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" className="h-8 text-xs">
-                            View Team Inbox
+                        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+                            <Link href="/inbox">
+                                View Team Inbox
+                            </Link>
                         </Button>
                     </CardHeader>
                     <CardContent className="p-8 text-center">

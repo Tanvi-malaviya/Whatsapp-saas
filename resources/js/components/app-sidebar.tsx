@@ -36,42 +36,42 @@ const mainNavItems: NavItem[] = [
     },
     {
         title: 'Team Inbox',
-        href: '/dashboard#inbox',
+        href: '/inbox',
         icon: MessageSquare,
     },
     {
         title: 'Contacts & CRM',
-        href: '/dashboard#contacts',
+        href: '/contacts',
         icon: Users,
     },
     {
         title: 'Bot & Auto-Reply',
-        href: '/dashboard#bot',
+        href: '/bot',
         icon: Bot,
     },
     {
         title: 'Campaigns & Templates',
-        href: '/dashboard#campaigns',
+        href: '/campaigns',
         icon: Send,
     },
     {
         title: 'Automations',
-        href: '/dashboard#automations',
+        href: '/bot',
         icon: Zap,
     },
     {
         title: 'Bookings',
-        href: '/dashboard#bookings',
+        href: '/bot',
         icon: Calendar,
     },
     {
         title: 'AI Assistant',
-        href: '/dashboard#ai',
+        href: '/bot',
         icon: Sparkles,
     },
     {
         title: 'Analytics & Reports',
-        href: '/dashboard#reports',
+        href: '/reports',
         icon: BarChart3,
     },
 ];

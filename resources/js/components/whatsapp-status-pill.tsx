@@ -34,7 +34,7 @@ export function WhatsAppStatusPill({ isConnected = false, phoneNumber }: Props) 
                 className="h-7 text-xs bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-0 shadow-xs"
                 asChild
             >
-                <Link href="/dashboard#connect">
+                <Link href="/whatsapp/connect">
                     Connect Number
                 </Link>
             </Button>
