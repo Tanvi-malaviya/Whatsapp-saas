@@ -27,12 +27,47 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'current_organization_id'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    public function organizations(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(\App\Modules\Foundation\Models\Organization::class, 'organization_user')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function currentOrganization(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Modules\Foundation\Models\Organization::class, 'current_organization_id');
+    }
+
+    public function switchOrganization(\App\Modules\Foundation\Models\Organization $organization): void
+    {
+        $this->update(['current_organization_id' => $organization->id]);
+        $this->unsetRelation('currentOrganization');
+        \App\Shared\TenantContext::set($organization);
+    }
+
+    public function roleIn(\App\Modules\Foundation\Models\Organization $organization): ?string
+    {
+        $membership = $this->organizations()->where('organizations.id', $organization->id)->first();
+        return $membership?->pivot->role;
+    }
+
+    public function isOwnerOf(\App\Modules\Foundation\Models\Organization $organization): bool
+    {
+        return $this->roleIn($organization) === 'Owner';
+    }
+
+    public function isAdminOf(\App\Modules\Foundation\Models\Organization $organization): bool
+    {
+        return in_array($this->roleIn($organization), ['Owner', 'Admin']);
+    }
 
     /**
      * Get the attributes that should be cast.

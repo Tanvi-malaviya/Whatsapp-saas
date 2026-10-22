@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
+            \App\Modules\Foundation\Http\Middleware\EnsureTenantContext::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
     })
