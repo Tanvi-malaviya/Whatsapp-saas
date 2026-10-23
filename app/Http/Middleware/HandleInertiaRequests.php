@@ -41,6 +41,21 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'whatsapp' => function () use ($request) {
+                $orgId = $request->user()?->current_organization_id
+                    ?? \App\Shared\TenantContext::id()
+                    ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+
+                $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
+                    ->where('status', 'connected')
+                    ->first();
+
+                return [
+                    'isConnected' => (bool) $channel,
+                    'phoneNumber' => $channel?->phone_number,
+                    'name' => $channel?->name,
+                ];
+            },
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

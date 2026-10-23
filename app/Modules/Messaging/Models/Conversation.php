@@ -21,6 +21,8 @@ class Conversation extends Model
         'contact_name',
         'channel_phone_number_id',
         'status',
+        'pipeline_stage',
+        'label',
         'window_expires_at',
         'last_message_at',
         'assigned_user_id',

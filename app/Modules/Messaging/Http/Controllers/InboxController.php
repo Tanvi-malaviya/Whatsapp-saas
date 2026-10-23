@@ -51,8 +51,8 @@ class InboxController extends Controller
                 'time' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
                 'unread' => 0,
                 'windowRemaining' => $windowMinutes > 0 ? floor($windowMinutes / 60) . 'h ' . ($windowMinutes % 60) . 'm' : 'Closed',
-                'stage' => 'New',
-                'label' => 'Prospect',
+                'stage' => $c->pipeline_stage ?: 'New',
+                'label' => $c->label ?: 'Prospect',
                 'status' => $c->status,
                 'messages' => $c->messages->map(fn ($m) => [
                     'id' => (string) $m->id,
@@ -170,6 +170,8 @@ class InboxController extends Controller
             'conversation_id' => 'required|string',
             'contact_name' => 'required|string|max:100',
             'status' => 'nullable|string|in:open,resolved,bot_handled',
+            'pipeline_stage' => 'nullable|string|max:50',
+            'label' => 'nullable|string|max:50',
         ]);
 
         $org = $this->resolveOrg($request);
@@ -189,13 +191,23 @@ class InboxController extends Controller
             $updateData['status'] = $validated['status'];
         }
 
+        if (! empty($validated['pipeline_stage'])) {
+            $updateData['pipeline_stage'] = $validated['pipeline_stage'];
+        }
+
+        if (! empty($validated['label'])) {
+            $updateData['label'] = $validated['label'];
+        }
+
         $conversation->update($updateData);
 
         return response()->json([
             'success' => true,
-            'message' => 'Contact details updated successfully',
+            'message' => 'Contact and pipeline details updated successfully',
             'contact_name' => $conversation->contact_name,
             'status' => $conversation->status,
+            'pipeline_stage' => $conversation->pipeline_stage,
+            'label' => $conversation->label,
         ]);
     }
 

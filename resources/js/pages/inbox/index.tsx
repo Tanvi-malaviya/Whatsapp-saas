@@ -27,9 +27,19 @@ import {
     ExternalLink,
     Pencil,
     Copy,
+    Info,
+    Briefcase,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+
+const STAGE_CONFIG: Record<string, { label: string; badge: string; icon: string; desc: string }> = {
+    New: { label: 'New Lead', badge: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30', icon: '🎯', desc: 'Fresh inquiry / new contact' },
+    Qualified: { label: 'Qualified', badge: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30', icon: '⚡', desc: 'High interest, verified requirement' },
+    Proposal: { label: 'Proposal Sent', badge: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30', icon: '📑', desc: 'Pricing or quotation shared' },
+    Won: { label: 'Deal Won', badge: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30', icon: '🏆', desc: 'Payment made / deal closed' },
+    Lost: { label: 'Deal Lost', badge: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30', icon: '❌', desc: 'Dropped or not interested' },
+};
 
 type ChatMessage = {
     id: string;
@@ -164,6 +174,8 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     windowRemaining: remoteThread.windowRemaining,
                                     status: remoteThread.status,
                                     contactName: remoteThread.contactName,
+                                    stage: remoteThread.stage || 'New',
+                                    label: remoteThread.label || 'Prospect',
                                 };
                             } else {
                                 updated.unshift(remoteThread);
@@ -256,12 +268,14 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                         conversation_id: selectedThread.id,
                         contact_name: newName,
                         status: editContactStatus,
+                        pipeline_stage: editContactStage,
+                        label: editContactLabel,
                     }),
                 });
                 const data = await res.json();
                 if (data.success) {
-                    setSaveNotice('Contact updated successfully!');
-                    setTimeout(() => setShowEditContactDialog(false), 600);
+                    setSaveNotice('Contact and pipeline updated successfully!');
+                    setTimeout(() => setShowEditContactDialog(false), 500);
                 } else {
                     setSaveNotice(data.message || 'Could not update contact');
                 }
@@ -638,15 +652,15 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
-                            {/* Thread Header with Contact Options */}
-                            <div className="h-16 border-b border-border/80 px-4 md:px-5 flex items-center justify-between bg-card shrink-0 gap-2">
+                            {/* Thread Header with Contact Options - Responsive, No Cropping */}
+                            <div className="min-h-16 border-b border-border/80 px-4 md:px-5 py-2.5 flex items-center justify-between bg-card shrink-0 gap-3">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            <h3 className="text-sm font-bold text-foreground truncate max-w-[200px] sm:max-w-none">
+                                    <div className="min-w-0 space-y-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm font-bold text-foreground truncate leading-none">
                                                 {selectedThread.contactName}
                                             </h3>
                                             <button
@@ -660,17 +674,23 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             <span className="rounded bg-[#47b672]/15 px-2 py-0.5 text-[10px] font-semibold text-[#28804c] dark:text-[#52c480]">
                                                 {selectedThread.channel}
                                             </span>
-                                            {selectedThread.status === 'resolved' ? (
-                                                <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border/60">
-                                                    Resolved
-                                                </span>
-                                            ) : (
-                                                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                                    Open
+                                            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border inline-flex items-center gap-1 ${
+                                                selectedThread.status === 'resolved'
+                                                    ? 'bg-muted text-muted-foreground border-border/70'
+                                                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
+                                            }`}>
+                                                <span className={`size-1.5 rounded-full ${selectedThread.status === 'resolved' ? 'bg-muted-foreground' : 'bg-emerald-500'}`} />
+                                                {selectedThread.status === 'resolved' ? 'Resolved' : 'Open'}
+                                            </span>
+                                            {selectedThread.stage && (
+                                                <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border ${
+                                                    STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
+                                                }`}>
+                                                    {STAGE_CONFIG[selectedThread.stage]?.icon || '🎯'} {selectedThread.stage}
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono mt-0.5">
+                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
                                             <span>{selectedThread.phone}</span>
                                             <button
                                                 type="button"
@@ -1104,125 +1124,196 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 </div>
             )}
 
-            {/* Edit Contact & Conversation Modal */}
+            {/* Edit Contact & Conversation Modal - Fully Responsive & Explanatory */}
             {showEditContactDialog && selectedThread && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
-                    <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-border pb-3">
-                            <div className="flex items-center gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in-50">
+                    <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between border-b border-border/80 px-5 py-3.5 bg-card shrink-0">
+                            <div className="flex items-center gap-2.5">
                                 <div className="size-8 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
                                     <Pencil className="size-4" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-bold text-foreground">Edit Contact & Conversation</h3>
-                                    <p className="text-[11px] text-muted-foreground">Save customer name and update pipeline status</p>
+                                    <h3 className="text-sm font-bold text-foreground">Edit Contact & Pipeline</h3>
+                                    <p className="text-[11px] text-muted-foreground">Manage customer details, conversation status & sales stage</p>
                                 </div>
                             </div>
                             <button
+                                type="button"
                                 onClick={() => setShowEditContactDialog(false)}
-                                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted text-sm transition-colors"
                             >
                                 ✕
                             </button>
                         </div>
 
-                        {saveNotice && (
-                            <div className={`p-2.5 rounded-lg text-xs ${
-                                saveNotice.includes('successfully') || saveNotice.includes('Updated')
-                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
-                                    : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
-                            }`}>
-                                {saveNotice}
-                            </div>
-                        )}
+                        {/* Modal Scrollable Body */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {saveNotice && (
+                                <div className={`p-2.5 rounded-lg text-xs font-medium ${
+                                    saveNotice.includes('successfully') || saveNotice.includes('Updated')
+                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                                        : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
+                                }`}>
+                                    {saveNotice}
+                                </div>
+                            )}
 
-                        <form onSubmit={handleSaveContact} className="space-y-3.5">
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Contact / Customer Name *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={editContactName}
-                                    onChange={(e) => setEditContactName(e.target.value)}
-                                    placeholder="Enter full name (e.g. Tanvi Malaviya)..."
-                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#47b672]"
-                                />
-                                <span className="text-[10px] text-muted-foreground">This name will be displayed in your shared inbox & contact directory.</span>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">WhatsApp Mobile Number</label>
-                                <div className="flex items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-1.5 text-xs font-mono text-muted-foreground">
-                                    <span>{selectedThread.phone}</span>
-                                    <span className="text-[10px] text-[#28804c] font-sans font-semibold bg-[#47b672]/15 px-2 py-0.5 rounded">
-                                        WhatsApp
-                                    </span>
+                            {/* Informational Guidance Box */}
+                            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs space-y-1.5">
+                                <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300 text-[11px]">
+                                    <Info className="size-3.5" />
+                                    <span>Understanding Status vs Pipeline Stage:</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-muted-foreground leading-relaxed pt-1">
+                                    <div className="bg-card/70 p-2 rounded-lg border border-border/50">
+                                        <strong className="text-foreground block mb-0.5">🟢 Conversation Status (Support)</strong>
+                                        ચેટ ચાલુ છે કે પૂરી થઈ ગઈ? <strong>Open</strong> = એજન્ટે જવાબ આપવાનો બાકી છે. <strong>Resolved</strong> = કસ્ટમરનો પ્રશ્ન સોલ્વ થઈ ગયો અને ચેટ આર્કાઇવ થશે.
+                                    </div>
+                                    <div className="bg-card/70 p-2 rounded-lg border border-border/50">
+                                        <strong className="text-foreground block mb-0.5">🎯 Pipeline Stage (Sales CRM)</strong>
+                                        ગ્રાહક ખરીદીના કયા તબક્કે છે? <strong>New Lead</strong> → <strong>Qualified</strong> → <strong>Proposal</strong> → <strong>Won (ડીલ પાકી)</strong> કે <strong>Lost</strong>.
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">Conversation Status</label>
+                            <form id="edit-contact-form" onSubmit={handleSaveContact} className="space-y-4">
+                                {/* Contact Name */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground">
+                                        Contact / Customer Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={editContactName}
+                                        onChange={(e) => setEditContactName(e.target.value)}
+                                        placeholder="Enter customer name (e.g. Tanvi Malaviya)..."
+                                        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">This name is shown across your shared team inbox and CRM directory.</p>
+                                </div>
+
+                                {/* Phone number (read-only) */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground">WhatsApp Mobile Number</label>
+                                    <div className="flex items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-xs font-mono text-muted-foreground">
+                                        <span className="font-semibold text-foreground">{selectedThread.phone}</span>
+                                        <span className="text-[10px] text-[#28804c] font-sans font-semibold bg-[#47b672]/15 px-2 py-0.5 rounded">
+                                            WhatsApp
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Conversation Status Selector */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground">
+                                        Conversation Status (Inbox Queue)
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditContactStatus('open')}
+                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
+                                                editContactStatus === 'open'
+                                                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/20'
+                                                    : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span className="size-2 rounded-full bg-emerald-500"></span>
+                                                Open (Active)
+                                            </div>
+                                            <span className="text-[10px] opacity-80">Needs agent reply / in-progress</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditContactStatus('resolved')}
+                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
+                                                editContactStatus === 'resolved'
+                                                    ? 'border-muted-foreground bg-muted text-foreground ring-2 ring-muted-foreground/20'
+                                                    : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span className="size-2 rounded-full bg-muted-foreground"></span>
+                                                Resolved (Closed)
+                                            </div>
+                                            <span className="text-[10px] opacity-80">Query answered / archive chat</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Pipeline Stage Selector */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground">
+                                        Pipeline Stage (CRM Deal Funnel)
+                                    </label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {(['New', 'Qualified', 'Proposal', 'Won', 'Lost'] as const).map((stage) => {
+                                            const cfg = STAGE_CONFIG[stage];
+                                            const isSelected = editContactStage === stage;
+                                            return (
+                                                <button
+                                                    key={stage}
+                                                    type="button"
+                                                    onClick={() => setEditContactStage(stage)}
+                                                    className={`p-2 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
+                                                        isSelected
+                                                            ? 'border-[#47b672] bg-[#47b672]/10 text-foreground ring-2 ring-[#47b672]/20 font-bold'
+                                                            : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-1 text-[11px]">
+                                                        <span>{cfg.icon}</span>
+                                                        <span className="truncate">{cfg.label}</span>
+                                                    </span>
+                                                    <span className="text-[9px] text-muted-foreground truncate">{cfg.desc}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Customer Tag / Label */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground">Customer Label / Tag</label>
                                     <select
-                                        value={editContactStatus}
-                                        onChange={(e) => setEditContactStatus(e.target.value as 'open' | 'resolved')}
-                                        className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                        value={editContactLabel}
+                                        onChange={(e) => setEditContactLabel(e.target.value as any)}
+                                        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
                                     >
-                                        <option value="open">🟢 Open (Active)</option>
-                                        <option value="resolved">⚪ Resolved (Closed)</option>
+                                        <option value="Prospect">🏷️ Prospect (Potential Buyer)</option>
+                                        <option value="Applicant">📋 Applicant (Applied for course/service)</option>
+                                        <option value="Enrolled">🎓 Enrolled Customer (Existing paid client)</option>
                                     </select>
                                 </div>
+                            </form>
+                        </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">Pipeline Stage</label>
-                                    <select
-                                        value={editContactStage}
-                                        onChange={(e) => setEditContactStage(e.target.value as any)}
-                                        className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
-                                    >
-                                        <option value="New">New</option>
-                                        <option value="Qualified">Qualified</option>
-                                        <option value="Proposal">Proposal</option>
-                                        <option value="Won">Won</option>
-                                        <option value="Lost">Lost</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Customer Label / Tag</label>
-                                <select
-                                    value={editContactLabel}
-                                    onChange={(e) => setEditContactLabel(e.target.value as any)}
-                                    className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
-                                >
-                                    <option value="Prospect">Prospect</option>
-                                    <option value="Applicant">Applicant</option>
-                                    <option value="Enrolled">Enrolled Customer</option>
-                                </select>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowEditContactDialog(false)}
-                                    className="text-xs"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    disabled={isSavingContact}
-                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
-                                >
-                                    <CheckCircle2 className="size-3.5" />
-                                    {isSavingContact ? 'Saving...' : 'Save Changes'}
-                                </Button>
-                            </div>
-                        </form>
+                        {/* Sticky Modal Action Footer - Always visible on any screen */}
+                        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/80 bg-muted/40 shrink-0">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowEditContactDialog(false)}
+                                className="text-xs h-8 px-4"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                form="edit-contact-form"
+                                size="sm"
+                                disabled={isSavingContact}
+                                className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-5 h-8 shadow-xs"
+                            >
+                                <CheckCircle2 className="size-3.5" />
+                                {isSavingContact ? 'Saving Changes...' : 'Save Changes'}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             )}
