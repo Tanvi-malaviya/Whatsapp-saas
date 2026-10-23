@@ -41,31 +41,13 @@ export function AppSidebar() {
     const isInsideChat = url.startsWith('/inbox') || url.startsWith('/chat');
     const [chatOpen, setChatOpen] = useState<boolean>(true);
 
-    // Precise active link checker
+    // Precise active link checker without collisions
     const isActive = (targetPath: string) => {
-        // Strip origin or trailing slashes for comparison
-        const current = url.replace(/\/$/, '') || '/';
-        const target = targetPath.replace(/\/$/, '') || '/';
+        const current = url.split('?')[0].replace(/\/$/, '') || '/';
+        const target = targetPath.split('?')[0].replace(/\/$/, '') || '/';
 
-        if (target.includes('?')) {
-            return current === target;
-        }
-
-        // Exact match or default fallback for base routes
-        if (target === '/bot') {
-            return current === '/bot' || current === '/bot?tab=flows';
-        }
-        if (target === '/inbox') {
-            return current === '/inbox' && !current.includes('?');
-        }
-        if (target === '/contacts') {
-            return current === '/contacts' && !current.includes('tab=segments');
-        }
-        if (target === '/campaigns') {
-            return current === '/campaigns' && !current.includes('tab=templates');
-        }
         if (target === '/whatsapp/connect') {
-            return (current.startsWith('/whatsapp/connect') || current.startsWith('/channels')) && !current.includes('tab=developers');
+            return current === '/whatsapp/connect' || current === '/channels';
         }
 
         return current === target;
@@ -191,10 +173,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/contacts?tab=segments')}
-                            className={isActive('/contacts?tab=segments') ? activeClass : inactiveClass}
+                            isActive={isActive('/segments')}
+                            className={isActive('/segments') ? activeClass : inactiveClass}
                         >
-                            <Link href="/contacts?tab=segments" prefetch>
+                            <Link href="/segments" prefetch>
                                 <Layers className="size-4" />
                                 <span>Segments</span>
                             </Link>
@@ -205,10 +187,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/campaigns?tab=templates')}
-                            className={isActive('/campaigns?tab=templates') ? activeClass : inactiveClass}
+                            isActive={isActive('/templates')}
+                            className={isActive('/templates') ? activeClass : inactiveClass}
                         >
-                            <Link href="/campaigns?tab=templates" prefetch className="flex items-center justify-between">
+                            <Link href="/templates" prefetch className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <FileText className="size-4" />
                                     <span>Templates</span>
@@ -222,10 +204,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/bot')}
-                            className={isActive('/bot') ? activeClass : inactiveClass}
+                            isActive={isActive('/flows')}
+                            className={isActive('/flows') ? activeClass : inactiveClass}
                         >
-                            <Link href="/bot" prefetch className="flex items-center justify-between">
+                            <Link href="/flows" prefetch className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <GitBranch className="size-4" />
                                     <span>Flows</span>
@@ -239,10 +221,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/bot?tab=auto-responder')}
-                            className={isActive('/bot?tab=auto-responder') ? activeClass : inactiveClass}
+                            isActive={isActive('/auto-responder')}
+                            className={isActive('/auto-responder') ? activeClass : inactiveClass}
                         >
-                            <Link href="/bot?tab=auto-responder" prefetch>
+                            <Link href="/auto-responder" prefetch>
                                 <Zap className="size-4" />
                                 <span>Auto Responder</span>
                             </Link>
@@ -253,10 +235,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/bot?tab=ai-agent')}
-                            className={isActive('/bot?tab=ai-agent') ? activeClass : inactiveClass}
+                            isActive={isActive('/ai-agent')}
+                            className={isActive('/ai-agent') ? activeClass : inactiveClass}
                         >
-                            <Link href="/bot?tab=ai-agent" prefetch>
+                            <Link href="/ai-agent" prefetch>
                                 <Sparkles className="size-4 text-purple-600" />
                                 <span>AI Agent</span>
                             </Link>
@@ -296,10 +278,10 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/whatsapp/connect?tab=developers')}
-                            className={isActive('/whatsapp/connect?tab=developers') ? activeClass : inactiveClass}
+                            isActive={isActive('/developers')}
+                            className={isActive('/developers') ? activeClass : inactiveClass}
                         >
-                            <Link href="/whatsapp/connect?tab=developers" prefetch className="flex items-center justify-between">
+                            <Link href="/developers" prefetch className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Code2 className="size-4" />
                                     <span>Developers</span>
@@ -309,14 +291,14 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Settings */}
+                    {/* Settings (Workspace / Organization) */}
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/settings/profile')}
-                            className={isActive('/settings/profile') ? activeClass : inactiveClass}
+                            isActive={isActive('/settings/organization')}
+                            className={isActive('/settings/organization') ? activeClass : inactiveClass}
                         >
-                            <Link href="/settings/profile" prefetch className="flex items-center justify-between">
+                            <Link href="/settings/organization" prefetch className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <Settings className="size-4" />
                                     <span>Settings</span>
@@ -326,14 +308,14 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Account */}
+                    {/* Account (Personal User Profile & Security) */}
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isActive('/settings/profile?tab=account')}
-                            className={isActive('/settings/profile?tab=account') ? activeClass : inactiveClass}
+                            isActive={isActive('/settings/profile')}
+                            className={isActive('/settings/profile') ? activeClass : inactiveClass}
                         >
-                            <Link href="/settings/profile?tab=account" prefetch className="flex items-center justify-between">
+                            <Link href="/settings/profile" prefetch className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <UserCircle className="size-4" />
                                     <span>Account</span>
