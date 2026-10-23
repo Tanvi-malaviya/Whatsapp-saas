@@ -28,10 +28,8 @@ class InboxController extends Controller
         return Organization::find($orgId) ?? Organization::first();
     }
 
-    public function index(Request $request): Response
+    protected function getRealThreads($org): array
     {
-        $org = $this->resolveOrg($request);
-
         $conversations = Conversation::where('organization_id', $org->id)
             ->with(['messages' => fn ($q) => $q->orderBy('created_at', 'asc')])
             ->orderBy('last_message_at', 'desc')
@@ -39,7 +37,7 @@ class InboxController extends Controller
 
         $channels = WhatsAppChannel::where('organization_id', $org->id)->get();
 
-        $realThreads = $conversations->map(function ($c) use ($channels) {
+        return $conversations->map(function ($c) use ($channels) {
             $lastMsg = $c->messages->last();
             $windowMinutes = $c->window_expires_at ? max(0, (int) now()->diffInMinutes($c->window_expires_at, false)) : 0;
             $channelObj = $channels->firstWhere('phone_number_id', $c->channel_phone_number_id) ?? $channels->first();
@@ -65,10 +63,28 @@ class InboxController extends Controller
                 ])->values()->all(),
             ];
         })->values()->all();
+    }
+
+    public function index(Request $request): Response
+    {
+        $org = $this->resolveOrg($request);
+        $realThreads = $this->getRealThreads($org);
+        $channels = WhatsAppChannel::where('organization_id', $org->id)->get();
 
         return Inertia::render('inbox/index', [
             'initialThreads' => $realThreads,
             'channels' => $channels,
+        ]);
+    }
+
+    public function sync(Request $request): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $realThreads = $this->getRealThreads($org);
+
+        return response()->json([
+            'success' => true,
+            'threads' => $realThreads,
         ]);
     }
 

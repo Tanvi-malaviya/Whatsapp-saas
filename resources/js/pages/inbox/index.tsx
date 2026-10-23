@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
     MessageSquare,
@@ -144,6 +144,60 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+    // Live background polling every 4 seconds to sync incoming WhatsApp messages
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch('/inbox/sync');
+                const data = await res.json();
+                if (data.success && Array.isArray(data.threads)) {
+                    setThreads((prevThreads) => {
+                        const updated = [...prevThreads];
+                        data.threads.forEach((remoteThread: ChatThread) => {
+                            const idx = updated.findIndex((t) => t.id === remoteThread.id);
+                            if (idx >= 0) {
+                                updated[idx] = {
+                                    ...updated[idx],
+                                    lastMessage: remoteThread.lastMessage,
+                                    time: remoteThread.time,
+                                    windowRemaining: remoteThread.windowRemaining,
+                                    status: remoteThread.status,
+                                    contactName: remoteThread.contactName,
+                                };
+                            } else {
+                                updated.unshift(remoteThread);
+                            }
+                        });
+                        return updated;
+                    });
+
+                    // Update message map for threads that changed
+                    data.threads.forEach((remoteThread: any) => {
+                        if (remoteThread.messages) {
+                            setMessages((prevMsgs) => {
+                                const current = prevMsgs[remoteThread.id] || [];
+                                if (
+                                    current.length !== remoteThread.messages.length ||
+                                    JSON.stringify(current) !== JSON.stringify(remoteThread.messages)
+                                ) {
+                                    return {
+                                        ...prevMsgs,
+                                        [remoteThread.id]: remoteThread.messages,
+                                    };
+                                }
+                                return prevMsgs;
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                // Ignore silent sync errors
+            }
+        }, 4000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     const handleOpenEditContact = () => {
         if (!selectedThread) return;
