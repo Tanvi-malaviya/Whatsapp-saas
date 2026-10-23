@@ -56,16 +56,18 @@ export default function WhatsAppConnect({
     const [isTesting, setIsTesting] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
 
-    // Form inputs for connecting ANY WhatsApp number
-    const [form, setForm] = useState({
-        name: 'DukanHisab',
-        phone_number: '+91 79978 81665',
-        phone_number_id: '1431069246745536',
-        waba_id: '799788166562792',
+    const emptyForm = {
+        name: '',
+        phone_number: '',
+        phone_number_id: '',
+        waba_id: '',
         access_token: '',
         app_id: '',
-        app_secret: '02d9ac2a37b98b8b29a189f835c13027',
-    });
+        app_secret: '',
+    };
+
+    // Form inputs for connecting ANY WhatsApp number (blank by default)
+    const [form, setForm] = useState(emptyForm);
 
     const copyToClipboard = (text: string, field: string) => {
         navigator.clipboard.writeText(text);
@@ -132,6 +134,22 @@ export default function WhatsAppConnect({
         });
     };
 
+    const openNewChannelModal = () => {
+        setForm(emptyForm);
+        setConnectMode('manual');
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = () => {
+        prefillUserCredentials();
+        setConnectMode('manual');
+        setIsModalOpen(true);
+    };
+
+    const clearForm = () => {
+        setForm(emptyForm);
+    };
+
     return (
         <>
             <Head title="WhatsApp Channels & Phone Number Management" />
@@ -147,7 +165,7 @@ export default function WhatsAppConnect({
                     </Button>
 
                     <Button
-                        onClick={() => setIsModalOpen(true)}
+                        onClick={openNewChannelModal}
                         className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
                     >
                         <Plus className="size-4" />
@@ -215,7 +233,7 @@ export default function WhatsAppConnect({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setIsModalOpen(true)}
+                                        onClick={openEditModal}
                                         className="h-8 text-xs border-border gap-1"
                                     >
                                         <Sliders className="size-3.5 text-muted-foreground" />
@@ -424,13 +442,22 @@ export default function WhatsAppConnect({
                                     <span className="text-[11px] text-muted-foreground">
                                         Fill your Meta WhatsApp Phone details:
                                     </span>
-                                    <button
-                                        type="button"
-                                        onClick={prefillUserCredentials}
-                                        className="text-[11px] text-[#28804c] dark:text-[#52c480] hover:underline font-semibold"
-                                    >
-                                        Auto-fill DukanHisab details
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={clearForm}
+                                            className="text-[11px] text-red-500 hover:underline font-semibold"
+                                        >
+                                            Clear Form (Blank)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={prefillUserCredentials}
+                                            className="text-[11px] text-[#28804c] dark:text-[#52c480] hover:underline font-semibold"
+                                        >
+                                            Auto-fill DukanHisab
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="grid gap-3 sm:grid-cols-2">
