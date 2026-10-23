@@ -449,65 +449,80 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const parseAttachmentFromMessage = (rawText: string, existingAttachment?: ChatMessage['attachment']) => {
         if (existingAttachment) {
             const ext = existingAttachment.name.split('.').pop()?.toLowerCase() || '';
-            const isImg = existingAttachment.type === 'image' || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+            const isImg = existingAttachment.type === 'image' || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
             return {
                 hasAttachment: true,
                 fileName: existingAttachment.name,
-                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
-                caption: rawText && !rawText.startsWith('📎') && !rawText.startsWith('[') ? rawText : '',
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) ? 'archive' : 'document'),
+                caption: rawText && !rawText.includes(existingAttachment.name) ? rawText : '',
                 url: existingAttachment.url,
-                size: existingAttachment.size || (ext ? `${ext.toUpperCase()} Document` : 'Document'),
+                size: existingAttachment.size || (ext ? `${ext.toUpperCase()} File` : 'File'),
             };
         }
 
-        if (!rawText) return null;
+        if (!rawText || typeof rawText !== 'string') return null;
+        const trimmed = rawText.trim();
 
-        // 1. Starts with paperclip: 📎 filename.ext [- caption]
-        const clipMatch = rawText.match(/^📎\s*([^\s\n-]+\.[a-zA-Z0-9]{2,5})(?:\s*[-:]?\s*(.*))?$/s);
-        if (clipMatch) {
-            const fileName = clipMatch[1].trim();
-            const caption = (clipMatch[2] || '').trim();
+        // 1. Starts with paperclip: 📎 <filename> [- optional caption]
+        if (trimmed.startsWith('📎')) {
+            const afterClip = trimmed.replace(/^📎\s*/, '').trim();
+            // Check if there is an extension
+            const extMatch = afterClip.match(/^([^\s\r\n]+\.[a-zA-Z0-9]{2,5})(?:\s*[-:]?\s*([\s\S]*))?$/);
+            let fileName = '';
+            let caption = '';
+            if (extMatch) {
+                fileName = extMatch[1].trim();
+                caption = (extMatch[2] || '').trim();
+            } else {
+                const parts = afterClip.split(/\s*[-–]\s*/);
+                fileName = parts[0].trim();
+                caption = parts.slice(1).join(' - ').trim();
+            }
+
             const ext = fileName.split('.').pop()?.toLowerCase() || '';
-            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
             return {
                 hasAttachment: true,
                 fileName,
-                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) ? 'archive' : 'document'),
                 caption,
                 url: undefined,
-                size: `${ext.toUpperCase()} Document`,
+                size: ext ? `${ext.toUpperCase()} File` : 'Document',
             };
         }
 
         // 2. Bracket style: [filename.ext] caption
-        const bracketMatch = rawText.match(/^\[([^\s\]]+\.[a-zA-Z0-9]{2,5})\](?:\s*(.*))?$/s);
-        if (bracketMatch) {
-            const fileName = bracketMatch[1].trim();
-            const caption = (bracketMatch[2] || '').trim();
-            const ext = fileName.split('.').pop()?.toLowerCase() || '';
-            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
-            return {
-                hasAttachment: true,
-                fileName,
-                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
-                caption,
-                url: undefined,
-                size: `${ext.toUpperCase()} Document`,
-            };
+        if (trimmed.startsWith('[')) {
+            const bracketMatch = trimmed.match(/^\[([^\s\]]+\.[a-zA-Z0-9]{2,5})\](?:\s*([\s\S]*))?$/);
+            if (bracketMatch) {
+                const fileName = bracketMatch[1].trim();
+                const caption = (bracketMatch[2] || '').trim();
+                const ext = fileName.split('.').pop()?.toLowerCase() || '';
+                const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
+                return {
+                    hasAttachment: true,
+                    fileName,
+                    fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) ? 'archive' : 'document'),
+                    caption,
+                    url: undefined,
+                    size: ext ? `${ext.toUpperCase()} File` : 'Document',
+                };
+            }
         }
 
-        // 3. Standalone filename ending with document extension
-        const standaloneMatch = rawText.trim().match(/^([a-zA-Z0-9_\-\.\(\)\s]+\.(pdf|docx?|xlsx?|csv|zip|rar|pptx?))$/i);
+        // 3. Standalone filename ending with document / media extension
+        const standaloneMatch = trimmed.match(/^([a-zA-Z0-9_\-\.\(\)\s]+\.(pdf|docx?|xlsx?|csv|zip|rar|pptx?|webp|png|jpe?g|svg|txt))$/i);
         if (standaloneMatch) {
             const fileName = standaloneMatch[1].trim();
             const ext = fileName.split('.').pop()?.toLowerCase() || '';
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
             return {
                 hasAttachment: true,
                 fileName,
-                fileType: ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document',
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar', '7z', 'tar', 'gz'].includes(ext) ? 'archive' : 'document'),
                 caption: '',
                 url: undefined,
-                size: `${ext.toUpperCase()} Document`,
+                size: ext ? `${ext.toUpperCase()} File` : 'Document',
             };
         }
 
@@ -531,6 +546,9 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         if (ext === 'pdf') mime = 'application/pdf';
         else if (ext === 'csv') mime = 'text/csv';
         else if (ext === 'txt') mime = 'text/plain';
+        else if (ext === 'webp') mime = 'image/webp';
+        else if (ext === 'png') mime = 'image/png';
+        else if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
 
         const content = `%PDF-1.4\n% Sathwara InfoTech WhatsApp SaaS Document\n% Document Name: ${fileName}\n% Timestamp: ${new Date().toISOString()}\n% Sample / Synced Document downloaded from WhatsApp Inbox.`;
         const blob = new Blob([content], { type: mime });
@@ -1009,10 +1027,16 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                                                     ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                                                                                     : parsedAttachment.fileType === 'archive'
                                                                                     ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                                                                    : parsedAttachment.fileType === 'image'
+                                                                                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30'
                                                                                     : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
                                                                             }`}
                                                                         >
-                                                                            <FileText className="size-4 sm:size-4.5" />
+                                                                            {parsedAttachment.fileType === 'image' ? (
+                                                                                <ImageIcon className="size-4 sm:size-4.5" />
+                                                                            ) : (
+                                                                                <FileText className="size-4 sm:size-4.5" />
+                                                                            )}
                                                                             <span className="text-[9px] uppercase tracking-wider font-extrabold -mt-0.5">
                                                                                 {parsedAttachment.fileName.split('.').pop() || 'DOC'}
                                                                             </span>
