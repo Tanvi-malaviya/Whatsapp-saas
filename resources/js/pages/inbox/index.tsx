@@ -652,15 +652,15 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
-                            {/* Thread Header with Contact Options - Compact, Single-line Badges */}
-                            <div className="h-13 border-b border-border/80 px-3.5 md:px-4 py-1.5 flex items-center justify-between bg-card shrink-0 gap-2">
+                            {/* Thread Header with Contact Options - Clean Compact, No Scrollbars */}
+                            <div className="min-h-13 border-b border-border/80 px-3.5 md:px-4 py-2 flex items-center justify-between bg-card shrink-0 gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0">
                                     <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
                                     <div className="min-w-0 space-y-0.5">
-                                        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
-                                            <h3 className="text-xs sm:text-sm font-bold text-foreground truncate shrink-0 leading-none">
+                                        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                                            <h3 className="text-xs sm:text-sm font-bold text-foreground truncate max-w-[130px] sm:max-w-[200px] leading-tight">
                                                 {selectedThread.contactName}
                                             </h3>
                                             <button
@@ -721,7 +721,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             title="Reopen this resolved conversation"
                                         >
                                             <Archive className="size-3" />
-                                            <span className="hidden sm:inline">Reopen Chat</span>
+                                            <span className="hidden sm:inline">Reopen</span>
                                         </Button>
                                     ) : (
                                         <Button
