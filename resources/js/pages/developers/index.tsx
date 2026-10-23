@@ -12,18 +12,36 @@ import {
     ExternalLink,
     Play,
     RefreshCw,
+    AlertCircle,
+    CheckCircle2,
+    Smartphone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
-export default function Developers() {
+type Channel = {
+    id: string;
+    name: string;
+    phone_number: string;
+    phone_number_id: string;
+    is_default: boolean;
+};
+
+type Props = {
+    channels?: Channel[];
+};
+
+export default function Developers({ channels = [] }: Props) {
     const [copiedField, setCopiedField] = useState<string | null>(null);
-    const [testPhone, setTestPhone] = useState('917997881665');
-    const [testMsg, setTestMsg] = useState('Hello from Sathwara WhatsApp SaaS API!');
+    const [selectedChannelId, setSelectedChannelId] = useState<string>(channels[0]?.id || '');
+    const [testPhone, setTestPhone] = useState('919898096798');
+    const [testMsg, setTestMsg] = useState('Hello! This is a live test message from Sathwara WhatsApp SaaS.');
     const [apiResponse, setApiResponse] = useState<string | null>(null);
-    const [isSimulating, setIsSimulating] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+    const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
 
     const webhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook';
     const verifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b';
@@ -35,25 +53,43 @@ export default function Developers() {
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    const handleSimulateApi = () => {
-        setIsSimulating(true);
-        setTimeout(() => {
-            setIsSimulating(false);
-            setApiResponse(
-                JSON.stringify(
-                    {
-                        messaging_product: 'whatsapp',
-                        contacts: [{ input: testPhone, wa_id: testPhone }],
-                        messages: [{ id: 'wamid.HBgMOTE3OTk3ODgxNjY1FQIAERgSQTcyODMwNTM3OUFDMkE2NDIA' }],
-                        status: 'sent',
-                        charge: 'FREE_SERVICE_CONVERSATION',
-                        timestamp: new Date().toISOString(),
-                    },
-                    null,
-                    2
-                )
-            );
-        }, 600);
+    const handleSendRealMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!testPhone.trim() || !testMsg.trim()) return;
+
+        setIsSending(true);
+        setSendResult(null);
+        setApiResponse(null);
+
+        try {
+            const res = await fetch('/developers/send-test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    phone: testPhone,
+                    message: testMsg,
+                    channel_id: selectedChannelId,
+                }),
+            });
+
+            const data = await res.json();
+            setSendResult({
+                success: data.success,
+                message: data.message || (data.success ? 'Message dispatched!' : 'Sending failed'),
+            });
+            setApiResponse(JSON.stringify(data.meta_response || data, null, 2));
+        } catch (err: any) {
+            setSendResult({
+                success: false,
+                message: err.message || 'Network error reaching server',
+            });
+            setApiResponse(JSON.stringify({ error: err.message }, null, 2));
+        } finally {
+            setIsSending(false);
+        }
     };
 
     const curlSnippet = `curl -X POST "https://dukanhisab.in/api/v1/messages/send" \\
@@ -67,11 +103,11 @@ export default function Developers() {
 
     return (
         <>
-            <Head title="Developers & Webhook API - Sathwara InfoTech" />
+            <Head title="Developer Hub & REST APIs - Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-6xl mx-auto w-full">
                 {/* Header */}
-                <div className="flex flex-col gap-1 border-b border-border/80 pb-5">
+                <div className="flex flex-col gap-1 border-b border-border/70 pb-5">
                     <div className="flex items-center gap-2.5">
                         <div className="flex size-9 items-center justify-center rounded-xl bg-[#47b672] text-white shadow-sm shadow-[#47b672]/30">
                             <Code2 className="size-5" />
@@ -84,14 +120,14 @@ export default function Developers() {
                         </Badge>
                     </div>
                     <p className="text-xs md:text-sm text-muted-foreground mt-1 max-w-3xl">
-                        Integrate Sathwara WhatsApp SaaS with your website, ERP, CRM, or billing software. 
-                        Trigger WhatsApp messages, OTPs, invoices, and receive real-time webhooks.
+                        Integrate Sathwara WhatsApp SaaS with your website, ERP, CRM, or billing software. Trigger WhatsApp messages,
+                        OTPs, invoices, and receive real-time webhooks.
                     </p>
                 </div>
 
-                {/* API Keys & Webhook Config */}
+                {/* API Key & Webhook Overview */}
                 <div className="grid gap-4 md:grid-cols-2">
-                    {/* API Secret Key */}
+                    {/* REST API Key */}
                     <Card className="border-border/80 shadow-xs">
                         <CardHeader className="pb-3 pt-5 px-5">
                             <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -103,20 +139,15 @@ export default function Developers() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3 px-5 pb-5">
-                            <div className="flex gap-2">
-                                <input
-                                    readOnly
-                                    value={apiKey}
-                                    type="password"
-                                    className="w-full rounded-md border border-input bg-muted/50 px-3 py-1.5 text-xs text-foreground font-mono"
-                                />
+                            <div className="flex items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-2 text-xs font-mono">
+                                <span className="text-muted-foreground">sk_live_sat_••••••••••••••••••••</span>
                                 <Button
                                     size="sm"
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() => copyToClipboard(apiKey, 'apiKey')}
-                                    className="h-8 shrink-0 text-xs gap-1"
+                                    className="h-7 text-xs gap-1 text-[#28804c] dark:text-[#52c480]"
                                 >
-                                    {copiedField === 'apiKey' ? <Check className="size-3.5 text-[#47b672]" /> : <Copy className="size-3.5" />}
+                                    {copiedField === 'apiKey' ? <Check className="size-3" /> : <Copy className="size-3" />}
                                     Copy Key
                                 </Button>
                             </div>
@@ -143,6 +174,7 @@ export default function Developers() {
                                 <button
                                     onClick={() => copyToClipboard(webhookUrl, 'wh')}
                                     className="text-muted-foreground hover:text-foreground ml-2"
+                                    title="Copy Webhook URL"
                                 >
                                     {copiedField === 'wh' ? <Check className="size-3 text-[#47b672]" /> : <Copy className="size-3" />}
                                 </button>
@@ -152,6 +184,7 @@ export default function Developers() {
                                 <button
                                     onClick={() => copyToClipboard(verifyToken, 'vt')}
                                     className="text-muted-foreground hover:text-foreground ml-2"
+                                    title="Copy Verify Token"
                                 >
                                     {copiedField === 'vt' ? <Check className="size-3 text-[#47b672]" /> : <Copy className="size-3" />}
                                 </button>
@@ -160,56 +193,154 @@ export default function Developers() {
                     </Card>
                 </div>
 
-                {/* API Sandbox & Code Snippet */}
+                {/* Send Message API Sandbox - Interactive Testing Form */}
                 <Card className="border-border/80 shadow-xs">
                     <CardHeader className="pb-3 pt-5 px-5 border-b border-border/80">
                         <div className="flex items-center justify-between">
                             <div>
                                 <CardTitle className="text-sm font-bold flex items-center gap-2">
                                     <Terminal className="size-4 text-[#47b672]" />
-                                    Send Message API Sandbox
+                                    Send Live WhatsApp Test Message (Sandbox)
                                 </CardTitle>
                                 <CardDescription className="text-xs">
-                                    Test sending an automated WhatsApp message through the REST API.
+                                    Type your personal phone number below to send an actual test WhatsApp message right now.
                                 </CardDescription>
                             </div>
-                            <Button
-                                size="sm"
-                                onClick={handleSimulateApi}
-                                disabled={isSimulating}
-                                className="h-8 text-xs bg-[#47b672] text-white hover:bg-[#349c5e] font-semibold gap-1.5"
-                            >
-                                <Play className="size-3.5" />
-                                {isSimulating ? 'Sending...' : 'Test Send Request'}
-                            </Button>
+                            <Badge variant="outline" className="text-xs text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
+                                Live Meta Cloud API
+                            </Badge>
                         </div>
                     </CardHeader>
-                    <CardContent className="p-5 grid gap-5 lg:grid-cols-2">
-                        {/* cURL Snippet */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                                <span>cURL Request:</span>
-                                <button
-                                    onClick={() => copyToClipboard(curlSnippet, 'curl')}
-                                    className="text-[#28804c] dark:text-[#52c480] text-[11px] hover:underline flex items-center gap-1 font-mono"
-                                >
-                                    {copiedField === 'curl' ? <Check className="size-3" /> : <Copy className="size-3" />}
-                                    Copy cURL
-                                </button>
-                            </div>
-                            <pre className="rounded-lg bg-black text-emerald-400 p-3.5 text-xs font-mono overflow-x-auto leading-relaxed border border-border">
-                                {curlSnippet}
-                            </pre>
-                        </div>
+                    <CardContent className="p-5 space-y-5">
+                        {/* Testing Form */}
+                        <form onSubmit={handleSendRealMessage} className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-2xs">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                {/* Sender Channel */}
+                                <div className="md:col-span-4 space-y-1.5">
+                                    <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                        <Smartphone className="size-3.5 text-[#47b672]" />
+                                        Sending From Channel
+                                    </Label>
+                                    <select
+                                        value={selectedChannelId}
+                                        onChange={(e) => setSelectedChannelId(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        {channels.length === 0 ? (
+                                            <option value="">Default Connected Number</option>
+                                        ) : (
+                                            channels.map((ch) => (
+                                                <option key={ch.id} value={ch.id}>
+                                                    {ch.name} ({ch.phone_number || ch.phone_number_id})
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
+                                </div>
 
-                        {/* Live JSON Response */}
-                        <div className="space-y-2">
-                            <span className="text-xs font-semibold text-foreground block">
-                                API Response (200 OK):
-                            </span>
-                            <pre className="rounded-lg bg-muted/60 text-foreground p-3.5 text-xs font-mono overflow-x-auto leading-relaxed border border-border min-h-[140px]">
-                                {apiResponse || '// Click "Test Send Request" to simulate real-time API response.'}
-                            </pre>
+                                {/* Recipient Phone Number */}
+                                <div className="md:col-span-8 space-y-1.5">
+                                    <Label className="text-xs font-semibold flex items-center justify-between">
+                                        <span>Recipient Mobile Number (with Country Code) *</span>
+                                        <span className="text-[10px] text-muted-foreground font-normal">e.g. 919898096798 for India (+91)</span>
+                                    </Label>
+                                    <Input
+                                        type="text"
+                                        required
+                                        value={testPhone}
+                                        onChange={(e) => setTestPhone(e.target.value)}
+                                        placeholder="e.g. 919898096798"
+                                        className="text-xs font-mono"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Message Body */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Test Message Content *</Label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={testMsg}
+                                    onChange={(e) => setTestMsg(e.target.value)}
+                                    placeholder="Type test message text here..."
+                                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
+
+                            {/* Alert Banner Result */}
+                            {sendResult && (
+                                <div
+                                    className={`flex items-start gap-2 rounded-lg p-3 text-xs ${
+                                        sendResult.success
+                                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                                            : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
+                                    }`}
+                                >
+                                    {sendResult.success ? (
+                                        <CheckCircle2 className="size-4 shrink-0 mt-0.5 text-emerald-600" />
+                                    ) : (
+                                        <AlertCircle className="size-4 shrink-0 mt-0.5 text-red-600" />
+                                    )}
+                                    <div>
+                                        <p className="font-semibold">{sendResult.message}</p>
+                                        {sendResult.success && (
+                                            <p className="text-[11px] mt-0.5 opacity-90">
+                                                Please check your WhatsApp on phone <strong>+{testPhone}</strong>!
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Send Button */}
+                            <div className="flex items-center justify-between pt-1">
+                                <span className="text-[11px] text-muted-foreground">
+                                    Dispatches directly using Meta WhatsApp Cloud API v22.0
+                                </span>
+                                <Button
+                                    type="submit"
+                                    disabled={isSending}
+                                    className="h-9 px-4 text-xs bg-[#47b672] text-white hover:bg-[#349c5e] font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
+                                >
+                                    {isSending ? (
+                                        <RefreshCw className="size-3.5 animate-spin" />
+                                    ) : (
+                                        <Send className="size-3.5" />
+                                    )}
+                                    {isSending ? 'Sending to WhatsApp...' : '🚀 Send Test WhatsApp Message'}
+                                </Button>
+                            </div>
+                        </form>
+
+                        {/* Developer cURL & Live JSON Response */}
+                        <div className="grid gap-5 lg:grid-cols-2 pt-2">
+                            {/* cURL Snippet */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                                    <span>Live cURL Request (Auto-generated):</span>
+                                    <button
+                                        onClick={() => copyToClipboard(curlSnippet, 'curl')}
+                                        className="text-[#28804c] dark:text-[#52c480] text-[11px] hover:underline flex items-center gap-1 font-mono"
+                                    >
+                                        {copiedField === 'curl' ? <Check className="size-3" /> : <Copy className="size-3" />}
+                                        Copy cURL
+                                    </button>
+                                </div>
+                                <pre className="rounded-lg bg-black text-emerald-400 p-3.5 text-xs font-mono overflow-x-auto leading-relaxed border border-border">
+                                    {curlSnippet}
+                                </pre>
+                            </div>
+
+                            {/* Live JSON Response */}
+                            <div className="space-y-2">
+                                <span className="text-xs font-semibold text-foreground block">
+                                    Meta API Response:
+                                </span>
+                                <pre className="rounded-lg bg-muted/60 text-foreground p-3.5 text-xs font-mono overflow-x-auto leading-relaxed border border-border min-h-[140px]">
+                                    {apiResponse || '// Click "Send Test WhatsApp Message" above to see the real-time Meta API JSON response here.'}
+                                </pre>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

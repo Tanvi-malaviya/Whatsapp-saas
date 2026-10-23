@@ -19,7 +19,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('channels/{id}/test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'testConnection'])->name('channels.test');
 
     // Developers Hub
-    Route::inertia('developers', 'developers/index')->name('developers.index');
+    Route::get('developers', function (\Illuminate\Http\Request $request) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id
+            ?? '';
+        $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)->get(['id', 'name', 'phone_number', 'phone_number_id', 'is_default']);
+        return \Inertia\Inertia::render('developers/index', [
+            'channels' => $channels,
+        ]);
+    })->name('developers.index');
+    Route::post('developers/send-test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'sendTestMessage'])->name('developers.send-test');
 
     // Bot Flows, Auto Responder & AI Agent
     Route::redirect('bot', 'flows')->name('bot.index');

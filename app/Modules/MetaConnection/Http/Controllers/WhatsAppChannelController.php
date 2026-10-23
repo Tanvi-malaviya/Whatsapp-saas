@@ -146,4 +146,67 @@ class WhatsAppChannelController extends Controller
             ], 500);
         }
     }
+
+    public function sendTestMessage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'message' => 'required|string',
+            'channel_id' => 'nullable|string',
+        ]);
+
+        $orgId = $this->resolveTenantId($request);
+        
+        $query = WhatsAppChannel::where('organization_id', $orgId);
+        if (!empty($validated['channel_id'])) {
+            $query->where('id', $validated['channel_id']);
+        }
+        $channel = $query->orderBy('is_default', 'desc')->first();
+
+        if (!$channel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No active WhatsApp channel found in this workspace. Please connect a number first.',
+            ], 422);
+        }
+
+        $cleanPhone = preg_replace('/\D/', '', $validated['phone']);
+
+        try {
+            $response = Http::withToken($channel->access_token)
+                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                    'messaging_product' => 'whatsapp',
+                    'recipient_type' => 'individual',
+                    'to' => $cleanPhone,
+                    'type' => 'text',
+                    'text' => [
+                        'preview_url' => false,
+                        'body' => $validated['message'],
+                    ],
+                ]);
+
+            $json = $response->json();
+
+            if ($response->successful()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'WhatsApp message dispatched successfully to ' . $cleanPhone,
+                    'channel' => $channel->name,
+                    'from' => $channel->phone_number,
+                    'meta_response' => $json,
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $json['error']['message'] ?? 'Meta API error',
+                'meta_response' => $json,
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not send WhatsApp message: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
