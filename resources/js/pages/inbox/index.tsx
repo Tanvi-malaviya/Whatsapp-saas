@@ -173,7 +173,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
             const data = await res.json();
             if (data.success) {
                 setShowSimDialog(false);
-                window.location.reload();
+                window.location.href = '/inbox';
             }
         } catch (err) {
             console.error(err);

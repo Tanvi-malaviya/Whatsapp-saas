@@ -20,9 +20,12 @@ class InboxController extends Controller
 {
     private function resolveOrg(Request $request): Organization
     {
-        return TenantContext::get() 
-            ?? $request->user()?->organizations()->first() 
-            ?? Organization::first();
+        $orgId = TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? Organization::first()?->id;
+
+        return Organization::find($orgId) ?? Organization::first();
     }
 
     public function index(Request $request): Response
@@ -143,57 +146,66 @@ class InboxController extends Controller
             'message' => 'required|string',
         ]);
 
-        $cleanPhone = preg_replace('/\D/', '', $validated['phone']);
+        $cleanPhone = (new \App\Shared\PhoneNumber($validated['phone']))->getE164();
         $name = $validated['name'] ?? 'WhatsApp User';
         $text = $validated['message'];
 
         $org = $this->resolveOrg($request);
+        TenantContext::set($org);
+
         $channel = WhatsAppChannel::where('organization_id', $org->id)->first();
         $phoneId = $channel ? $channel->phone_number_id : '1324567864076715';
 
-        $payload = [
-            'object' => 'whatsapp_business_account',
-            'entry' => [
-                [
-                    'id' => $channel ? $channel->waba_id : '934553439246885',
-                    'changes' => [
-                        [
-                            'value' => [
-                                'messaging_product' => 'whatsapp',
-                                'metadata' => [
-                                    'display_phone_number' => $channel ? $channel->phone_number : '+916352709531',
-                                    'phone_number_id' => $phoneId,
-                                ],
-                                'contacts' => [
-                                    [
-                                        'profile' => ['name' => $name],
-                                        'wa_id' => $cleanPhone,
-                                    ],
-                                ],
-                                'messages' => [
-                                    [
-                                        'from' => $cleanPhone,
-                                        'id' => 'wamid.' . uniqid(),
-                                        'timestamp' => time(),
-                                        'text' => [
-                                            'body' => $text,
-                                        ],
-                                        'type' => 'text',
-                                    ],
-                                ],
-                            ],
-                            'field' => 'messages',
-                        ],
-                    ],
-                ],
+        // Find or create active conversation thread in current org
+        $conversation = Conversation::firstOrCreate(
+            [
+                'organization_id' => $org->id,
+                'contact_phone' => $cleanPhone,
             ],
-        ];
+            [
+                'contact_name' => $name,
+                'channel_phone_number_id' => $phoneId,
+                'status' => 'open',
+            ]
+        );
 
-        // Call MetaWebhookController to process the exact payload
-        $webhookController = app(MetaWebhookController::class);
-        $simulatedRequest = Request::create('/webhooks/meta', 'POST', [], [], [], [], json_encode($payload));
-        $simulatedRequest->headers->set('Content-Type', 'application/json');
-        $webhookController->receive($simulatedRequest);
+        $conversation->update([
+            'contact_name' => $name,
+            'window_expires_at' => now()->addHours(24),
+            'last_message_at' => now(),
+        ]);
+
+        // Store inbound message
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'organization_id' => $org->id,
+            'direction' => 'inbound',
+            'sender_type' => 'contact',
+            'sender_id' => $cleanPhone,
+            'wamid' => 'wamid.' . uniqid(),
+            'type' => 'text',
+            'content' => $text,
+            'status' => 'received',
+            'meta_cost_paise' => 0,
+        ]);
+
+        // Auto-reply bot if matching
+        $botRule = \App\Modules\Bot\Models\BotRule::where('organization_id', $org->id)
+            ->where('is_enabled', true)
+            ->first();
+
+        if ($botRule && !empty($botRule->reply_text)) {
+            Message::create([
+                'conversation_id' => $conversation->id,
+                'organization_id' => $org->id,
+                'direction' => 'outbound',
+                'sender_type' => 'bot',
+                'type' => 'text',
+                'content' => $botRule->reply_text,
+                'status' => 'sent',
+                'meta_cost_paise' => 0,
+            ]);
+        }
 
         return response()->json([
             'success' => true,

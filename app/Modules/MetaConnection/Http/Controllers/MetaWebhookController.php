@@ -85,8 +85,16 @@ class MetaWebhookController extends Controller
         $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
         $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
 
-        // Associate with default/first organization for now
-        $org = Organization::first();
+        // Associate with correct organization matching channel or active tenant
+        $channel = null;
+        if ($phoneNumberId) {
+            $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first();
+        }
+
+        $org = ($channel ? Organization::find($channel->organization_id) : null)
+            ?? TenantContext::get()
+            ?? Organization::first();
+
         if (! $org) {
             return;
         }
