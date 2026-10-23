@@ -43,6 +43,9 @@ export default function Developers({ channels = [] }: Props) {
     const [isSending, setIsSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null);
 
+    const [msgType, setMsgType] = useState<'template' | 'text'>('template');
+    const [selectedTemplate, setSelectedTemplate] = useState('due_reminder_en');
+
     const webhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook';
     const verifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b';
     const apiKey = 'sk_live_sat_9a8f27b401e9d8c3f281e04';
@@ -55,7 +58,7 @@ export default function Developers({ channels = [] }: Props) {
 
     const handleSendRealMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!testPhone.trim() || !testMsg.trim()) return;
+        if (!testPhone.trim()) return;
 
         setIsSending(true);
         setSendResult(null);
@@ -72,6 +75,8 @@ export default function Developers({ channels = [] }: Props) {
                     phone: testPhone,
                     message: testMsg,
                     channel_id: selectedChannelId,
+                    type: msgType,
+                    template_name: selectedTemplate,
                 }),
             });
 
@@ -92,7 +97,17 @@ export default function Developers({ channels = [] }: Props) {
         }
     };
 
-    const curlSnippet = `curl -X POST "https://dukanhisab.in/api/v1/messages/send" \\
+    const curlSnippet = msgType === 'template' ? `curl -X POST "https://dukanhisab.in/api/v1/messages/send" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "to": "${testPhone}",
+    "type": "template",
+    "template": {
+      "name": "${selectedTemplate}",
+      "language": { "code": "en_US" }
+    }
+  }'` : `curl -X POST "https://dukanhisab.in/api/v1/messages/send" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -255,18 +270,86 @@ export default function Developers({ channels = [] }: Props) {
                                 </div>
                             </div>
 
-                            {/* Message Body */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Test Message Content *</Label>
-                                <textarea
-                                    required
-                                    rows={3}
-                                    value={testMsg}
-                                    onChange={(e) => setTestMsg(e.target.value)}
-                                    placeholder="Type test message text here..."
-                                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                />
+                            {/* Message Type Selector */}
+                            <div className="space-y-2">
+                                <Label className="text-xs font-semibold">Message Type / Method</Label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMsgType('template')}
+                                        className={`flex flex-col text-left p-3 rounded-lg border transition-all text-xs ${
+                                            msgType === 'template'
+                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
+                                                : 'border-border bg-background hover:bg-muted/50'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between font-semibold">
+                                            <span>⚡ Approved Template (Recommended)</span>
+                                            {msgType === 'template' && <Check className="size-3.5 text-[#47b672]" />}
+                                        </div>
+                                        <span className="text-[11px] text-muted-foreground mt-0.5">
+                                            Delivers directly anytime! No 24-hr customer initiation required.
+                                        </span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setMsgType('text')}
+                                        className={`flex flex-col text-left p-3 rounded-lg border transition-all text-xs ${
+                                            msgType === 'text'
+                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
+                                                : 'border-border bg-background hover:bg-muted/50'
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between font-semibold">
+                                            <span>💬 Custom Session Text Message</span>
+                                            {msgType === 'text' && <Check className="size-3.5 text-[#47b672]" />}
+                                        </div>
+                                        <span className="text-[11px] text-muted-foreground mt-0.5">
+                                            Requires user to have sent 'Hi' to WhatsApp number within 24 hours.
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
+
+                            {/* Template or Text Input */}
+                            {msgType === 'template' ? (
+                                <div className="space-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                    <Label className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                                        Select Meta Approved Template *
+                                    </Label>
+                                    <select
+                                        value={selectedTemplate}
+                                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <option value="due_reminder_en">due_reminder_en (Utility - Payment Due Reminder)</option>
+                                        <option value="sale_invoice_en">sale_invoice_en (Utility - Sale Invoice Notification)</option>
+                                        <option value="payment_received_en">payment_received_en (Utility - Payment Confirmation)</option>
+                                        <option value="appointment_cancelled">appointment_cancelled (General Alert)</option>
+                                    </select>
+                                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                                        ✅ This approved template bypasses Meta's anti-spam 24h restrictions and lands right on the recipient's phone.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">Custom Text Message *</Label>
+                                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                            ⚠️ Recipient must have texted this WhatsApp number in last 24h
+                                        </span>
+                                    </div>
+                                    <textarea
+                                        required
+                                        rows={3}
+                                        value={testMsg}
+                                        onChange={(e) => setTestMsg(e.target.value)}
+                                        placeholder="Type test message text here..."
+                                        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    />
+                                </div>
+                            )}
 
                             {/* Alert Banner Result */}
                             {sendResult && (

@@ -151,8 +151,10 @@ class WhatsAppChannelController extends Controller
     {
         $validated = $request->validate([
             'phone' => 'required|string',
-            'message' => 'required|string',
+            'message' => 'nullable|string',
             'channel_id' => 'nullable|string',
+            'type' => 'nullable|string|in:text,template',
+            'template_name' => 'nullable|string',
         ]);
 
         $orgId = $this->resolveTenantId($request);
@@ -171,26 +173,61 @@ class WhatsAppChannelController extends Controller
         }
 
         $cleanPhone = preg_replace('/\D/', '', $validated['phone']);
+        $msgType = $validated['type'] ?? 'template';
 
         try {
-            $response = Http::withToken($channel->access_token)
-                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+            if ($msgType === 'template') {
+                $templateName = $validated['template_name'] ?? 'due_reminder_en';
+                $payload = [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $cleanPhone,
+                    'type' => 'template',
+                    'template' => [
+                        'name' => $templateName,
+                        'language' => ['code' => 'en_US'],
+                        'components' => [
+                            [
+                                'type' => 'body',
+                                'parameters' => [
+                                    ['type' => 'text', 'text' => 'Tanvi'],
+                                    ['type' => 'text', 'text' => $channel->name],
+                                    ['type' => 'text', 'text' => 'Rs. 100'],
+                                    ['type' => 'text', 'text' => $channel->phone_number],
+                                ],
+                            ],
+                            [
+                                'type' => 'button',
+                                'sub_type' => 'url',
+                                'index' => '0',
+                                'parameters' => [
+                                    ['type' => 'text', 'text' => 'test-123'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ];
+            } else {
+                $payload = [
                     'messaging_product' => 'whatsapp',
                     'recipient_type' => 'individual',
                     'to' => $cleanPhone,
                     'type' => 'text',
                     'text' => [
                         'preview_url' => false,
-                        'body' => $validated['message'],
+                        'body' => $validated['message'] ?? 'Hello from Sathwara WhatsApp SaaS!',
                     ],
-                ]);
+                ];
+            }
+
+            $response = Http::withToken($channel->access_token)
+                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $payload);
 
             $json = $response->json();
 
             if ($response->successful()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'WhatsApp message dispatched successfully to ' . $cleanPhone,
+                    'message' => 'WhatsApp ' . ($msgType === 'template' ? 'Approved Template' : 'Text Message') . ' successfully delivered via Meta to ' . $cleanPhone,
                     'channel' => $channel->name,
                     'from' => $channel->phone_number,
                     'meta_response' => $json,
