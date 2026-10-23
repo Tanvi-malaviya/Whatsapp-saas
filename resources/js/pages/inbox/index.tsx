@@ -197,158 +197,63 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         <>
             <Head title="Chat - Sathwara InfoTech | WhatsApp Business SaaS" />
 
-            {/* Xobito 3-Column Chat Layout */}
+            {/* Clean Modern 2-Column WhatsApp Chat Layout */}
             <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-background">
-                {/* 1. Left Sub-Sidebar: Filters & Navigation (Matching Xobito Chat Submenu) */}
-                <aside className="w-56 shrink-0 border-r border-border/80 bg-card hidden md:flex flex-col p-3 overflow-y-auto">
-                    {/* HISTORY Filter Section */}
-                    <div className="mb-4">
-                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                            <span>HISTORY</span>
-                            <ChevronDown className="size-3" />
-                        </div>
-                        <div className="space-y-0.5 mt-1">
-                            {[
-                                { name: 'All', icon: MessageSquare, count: threads.length },
-                                { name: 'Assigned to me', icon: User, count: 1 },
-                                { name: 'Auto closed', icon: CheckCircle2, count: 0 },
-                                { name: 'Archived', icon: Archive, count: 0 },
-                            ].map((item) => {
-                                const isSelected = selectedHistoryFilter === item.name;
-                                return (
-                                    <button
-                                        key={item.name}
-                                        type="button"
-                                        onClick={() => setSelectedHistoryFilter(item.name)}
-                                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                                            isSelected
-                                                ? 'bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-semibold'
-                                                : 'text-foreground/80 hover:bg-muted'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <item.icon className="size-3.5" />
-                                            <span>{item.name}</span>
-                                        </div>
-                                        <span className="text-[10px] text-muted-foreground">{item.count}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* TYPE Filter Section */}
-                    <div className="mb-4">
-                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                            <span>TYPE</span>
-                            <ChevronDown className="size-3" />
-                        </div>
-                        <div className="space-y-0.5 mt-1 text-xs text-foreground/80">
-                            <label className="flex items-center gap-2 px-2.5 py-1 hover:bg-muted rounded-md cursor-pointer">
-                                <input type="checkbox" className="rounded border-border text-[#47b672] focus:ring-[#47b672]" />
-                                <span>CTWA (Ads)</span>
-                            </label>
-                            <label className="flex items-center gap-2 px-2.5 py-1 hover:bg-muted rounded-md cursor-pointer">
-                                <input type="checkbox" className="rounded border-border text-[#47b672] focus:ring-[#47b672]" />
-                                <span>FB page cta</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* CONV. STAGE Filter Section */}
-                    <div className="mb-4">
-                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                            <span>CONV. STAGE</span>
-                            <ChevronDown className="size-3" />
-                        </div>
-                        <div className="space-y-0.5 mt-1 text-xs text-foreground/80">
-                            {[
-                                { name: 'New', color: 'bg-amber-500' },
-                                { name: 'Qualified', color: 'bg-slate-400' },
-                                { name: 'Proposal', color: 'bg-emerald-500' },
-                                { name: 'green', color: 'bg-[#47b672]' },
-                                { name: 'Won', color: 'bg-teal-500' },
-                                { name: 'Lost', color: 'bg-blue-500' },
-                            ].map((stage) => (
-                                <label key={stage.name} className="flex items-center gap-2 px-2.5 py-1 hover:bg-muted rounded-md cursor-pointer">
-                                    <input type="checkbox" className="rounded border-border text-[#47b672] focus:ring-[#47b672]" />
-                                    <span className={`size-2 rounded-full ${stage.color}`}></span>
-                                    <span>{stage.name}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* LABELS Section */}
-                    <div>
-                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">
-                            <span>LABELS</span>
-                            <ChevronDown className="size-3" />
-                        </div>
-                        <div className="space-y-0.5 mt-1 text-xs text-foreground/80">
-                            {[
-                                { name: 'Prospect', color: 'bg-pink-500' },
-                                { name: 'Applicant', color: 'bg-red-500' },
-                                { name: 'Enrolled', color: 'bg-rose-500' },
-                            ].map((label) => (
-                                <label key={label.name} className="flex items-center gap-2 px-2.5 py-1 hover:bg-muted rounded-md cursor-pointer">
-                                    <input type="checkbox" className="rounded border-border text-[#47b672] focus:ring-[#47b672]" />
-                                    <span className={`size-2 rounded-full ${label.color}`}></span>
-                                    <span>{label.name}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                </aside>
-
-                {/* 2. Middle Column: Conversation List (Matching Xobito Chat List) */}
-                <div className="w-full sm:w-80 lg:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card">
-                    {/* Search & Dropdown Filters */}
-                    <div className="p-3 border-b border-border/80 space-y-2 bg-card">
+                {/* 1. Left Column: Conversation List */}
+                <div className="w-full sm:w-80 md:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card">
+                    {/* Search & Header */}
+                    <div className="p-3.5 border-b border-border/80 space-y-2.5 bg-card">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-foreground">Shared Team Inbox</span>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm font-bold text-foreground">Inbox</h2>
+                                <Badge className="bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] text-[11px] font-semibold border-0 px-2 py-0.5">
+                                    {filteredThreads.length}
+                                </Badge>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setShowSimDialog(true)}
-                                className="flex items-center gap-1 rounded bg-[#47b672]/15 px-2 py-0.5 text-[11px] font-semibold text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/25 transition-colors"
+                                className="flex items-center gap-1 rounded-full bg-[#47b672]/15 px-2.5 py-1 text-[11px] font-semibold text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/25 transition-colors border border-[#47b672]/30 shadow-2xs"
                                 title="Simulate incoming WhatsApp message for localhost testing"
                             >
                                 <Sparkles className="size-3" />
-                                ⚡ Test Inbound
+                                <span>Test Inbound</span>
                             </button>
                         </div>
 
                         <div className="relative">
-                            <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                            <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
                             <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search name, phone..."
-                                className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
+                                placeholder="Search customer, phone, or message..."
+                                className="w-full rounded-lg border border-input bg-background pl-9 pr-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
                             />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                            <select className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none">
-                                <option>All agents</option>
-                                <option>Bhavesh Sathwara</option>
-                                <option>Bot Auto-Reply</option>
-                            </select>
-
+                        <div className="flex items-center gap-1.5">
                             <select
                                 value={selectedChannelFilter}
                                 onChange={(e) => setSelectedChannelFilter(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none"
+                                className="w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs text-foreground focus:outline-none"
                             >
                                 <option>All channels</option>
-                                <option>DukanHisab</option>
+                                {channels.length === 0 ? (
+                                    <option>DukanHisab WhatsApp</option>
+                                ) : (
+                                    channels.map((ch: any) => (
+                                        <option key={ch.id} value={ch.name}>
+                                            {ch.name}
+                                        </option>
+                                    ))
+                                )}
                             </select>
                         </div>
                     </div>
 
                     {/* Chat Item List */}
-                    <div className="flex-1 overflow-y-auto divide-y divide-border/60">
+                    <div className="flex-1 overflow-y-auto divide-y divide-border/50">
                         {filteredThreads.map((thread) => {
                             const isSelected = selectedThread?.id === thread.id;
                             return (
@@ -357,39 +262,39 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     onClick={() => setSelectedThread(thread)}
                                     className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors relative ${
                                         isSelected
-                                            ? 'bg-muted/70 border-l-4 border-l-[#47b672]'
+                                            ? 'bg-[#47b672]/10 border-l-4 border-l-[#47b672]'
                                             : 'hover:bg-muted/40'
                                     }`}
                                 >
                                     {/* Avatar with Initials */}
-                                    <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted border border-border text-xs font-bold text-foreground">
+                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/20">
                                         {thread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
 
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-1.5 truncate">
-                                                <span className="text-xs font-bold text-foreground truncate">
-                                                    {thread.contactName}
-                                                </span>
-                                                <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground font-medium">
-                                                    {thread.channel}
-                                                </span>
-                                            </div>
-                                            <span className="text-[10px] text-muted-foreground shrink-0">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="text-xs font-bold text-foreground truncate">
+                                                {thread.contactName}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
                                                 {thread.time}
                                             </span>
                                         </div>
 
-                                        <p className="text-xs text-muted-foreground truncate mt-0.5 flex items-center gap-1">
-                                            <span className="text-red-500 font-bold text-[10px]">!</span>
-                                            <span>{thread.lastMessage}</span>
-                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground font-semibold truncate max-w-[120px]">
+                                                {thread.channel}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground truncate flex-1">
+                                                {thread.lastMessage}
+                                            </span>
+                                        </div>
 
-                                        <div className="flex items-center gap-1.5 mt-1.5">
-                                            <span className="size-1.5 rounded-full bg-amber-500"></span>
-                                            <span className="text-[10px] text-muted-foreground">{thread.stage}</span>
-                                            <span className="text-[10px] text-muted-foreground">• {thread.windowRemaining}</span>
+                                        <div className="flex items-center gap-2 mt-1.5">
+                                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                                <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                                24h Window: {thread.windowRemaining}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -397,52 +302,53 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                         })}
                     </div>
 
-                    {/* Floating WhatsApp Action Button */}
-                    <div className="p-3 border-t border-border flex items-center justify-between bg-card">
-                        <span className="text-[11px] text-muted-foreground">
-                            Channels: <strong className="text-foreground">DukanHisab (+91 79978 81665)</strong>
-                        </span>
+                    {/* Bottom Status Bar */}
+                    <div className="p-2.5 border-t border-border/80 flex items-center justify-between bg-card text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-1.5 truncate">
+                            <span className="size-2 rounded-full bg-emerald-500"></span>
+                            <span className="truncate">Active WhatsApp Connected</span>
+                        </div>
                         <Button
                             size="sm"
-                            className="size-9 rounded-full p-0 bg-[#47b672] text-white hover:bg-[#349c5e] shadow-md shadow-[#47b672]/30"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] text-[#28804c] dark:text-[#52c480]"
                             asChild
                         >
-                            <Link href="/whatsapp/connect">
-                                <Plus className="size-5" />
-                            </Link>
+                            <Link href="/whatsapp/connect">Manage</Link>
                         </Button>
                     </div>
                 </div>
 
-                {/* 3. Main Column: Chat Conversation Thread OR Empty State */}
+                {/* 2. Right Column: Chat Conversation Thread OR Empty State */}
                 <div className="flex-1 flex flex-col bg-muted/20 overflow-hidden">
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
                             {/* Thread Header */}
-                            <div className="h-16 border-b border-border/80 px-5 flex items-center justify-between bg-card">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex size-9 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs">
+                            <div className="h-16 border-b border-border/80 px-5 flex items-center justify-between bg-card shrink-0">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-sm font-bold text-foreground">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-sm font-bold text-foreground truncate">
                                                 {selectedThread.contactName}
                                             </h3>
-                                            <span className="rounded bg-[#47b672]/15 px-1.5 py-0.2 text-[10px] font-semibold text-[#28804c] dark:text-[#52c480]">
+                                            <span className="rounded bg-[#47b672]/15 px-2 py-0.5 text-[10px] font-semibold text-[#28804c] dark:text-[#52c480]">
                                                 {selectedThread.channel}
                                             </span>
                                         </div>
-                                        <p className="text-[11px] text-muted-foreground font-mono">
-                                            {selectedThread.phone} • 24h Window: {selectedThread.windowRemaining}
+                                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                                            {selectedThread.phone} • Session Window: <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{selectedThread.windowRemaining}</span>
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs border-[#47b672]/40 text-[#28804c] dark:text-[#52c480]">
-                                        Meta Cloud API
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <Badge variant="outline" className="text-xs border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] gap-1">
+                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        24h Window Open
                                     </Badge>
                                 </div>
                             </div>
@@ -487,28 +393,28 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                             </div>
 
                             {/* Message Reply Input Box */}
-                            <form onSubmit={handleSendReply} className="p-3 border-t border-border bg-card">
+                            <form onSubmit={handleSendReply} className="p-3 border-t border-border/80 bg-card shrink-0">
                                 <div className="flex items-center gap-2">
-                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground">
+                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground hover:text-foreground">
                                         <Smile className="size-4" />
                                     </Button>
-                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground">
+                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground hover:text-foreground">
                                         <Paperclip className="size-4" />
                                     </Button>
                                     <input
                                         type="text"
                                         value={replyText}
                                         onChange={(e) => setReplyText(e.target.value)}
-                                        placeholder={`Reply to ${selectedThread.contactName} via ${selectedThread.channel}...`}
-                                        className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        placeholder={`Type a WhatsApp reply to ${selectedThread.contactName}...`}
+                                        className="flex-1 rounded-lg border border-input bg-background px-3.5 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
                                     />
                                     <Button
                                         type="submit"
                                         size="sm"
-                                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5"
+                                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
                                     >
                                         <Send className="size-3.5" />
-                                        Send
+                                        <span>Send</span>
                                     </Button>
                                 </div>
                             </form>
