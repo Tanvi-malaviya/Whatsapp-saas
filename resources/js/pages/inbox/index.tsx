@@ -652,29 +652,29 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
-                            {/* Thread Header with Contact Options - Responsive, No Cropping */}
-                            <div className="min-h-16 border-b border-border/80 px-4 md:px-5 py-2.5 flex items-center justify-between bg-card shrink-0 gap-3">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
+                            {/* Thread Header with Contact Options - Compact, Single-line Badges */}
+                            <div className="h-13 border-b border-border/80 px-3.5 md:px-4 py-1.5 flex items-center justify-between bg-card shrink-0 gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
-                                    <div className="min-w-0 space-y-1">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="text-sm font-bold text-foreground truncate leading-none">
+                                    <div className="min-w-0 space-y-0.5">
+                                        <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+                                            <h3 className="text-xs sm:text-sm font-bold text-foreground truncate shrink-0 leading-none">
                                                 {selectedThread.contactName}
                                             </h3>
                                             <button
                                                 type="button"
                                                 onClick={handleOpenEditContact}
-                                                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
-                                                title="Save / Edit Contact Name & Status"
+                                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
+                                                title="Edit Contact Name & Pipeline"
                                             >
-                                                <Pencil className="size-3.5" />
+                                                <Pencil className="size-3" />
                                             </button>
-                                            <span className="rounded bg-[#47b672]/15 px-2 py-0.5 text-[10px] font-semibold text-[#28804c] dark:text-[#52c480]">
+                                            <span className="rounded bg-[#47b672]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[#28804c] dark:text-[#52c480] whitespace-nowrap shrink-0">
                                                 {selectedThread.channel}
                                             </span>
-                                            <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border inline-flex items-center gap-1 ${
+                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${
                                                 selectedThread.status === 'resolved'
                                                     ? 'bg-muted text-muted-foreground border-border/70'
                                                     : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
@@ -683,14 +683,14 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                 {selectedThread.status === 'resolved' ? 'Resolved' : 'Open'}
                                             </span>
                                             {selectedThread.stage && (
-                                                <span className={`rounded px-2 py-0.5 text-[10px] font-semibold border ${
+                                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border whitespace-nowrap shrink-0 ${
                                                     STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
                                                 }`}>
                                                     {STAGE_CONFIG[selectedThread.stage]?.icon || '🎯'} {selectedThread.stage}
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-mono">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono leading-none">
                                             <span>{selectedThread.phone}</span>
                                             <button
                                                 type="button"
@@ -698,9 +698,9 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                 className="hover:text-foreground text-muted-foreground p-0.5 transition-colors"
                                                 title="Copy phone number"
                                             >
-                                                <Copy className="size-3" />
+                                                <Copy className="size-2.5" />
                                             </button>
-                                            {copiedPhone && <span className="text-[10px] text-emerald-600 font-semibold font-sans">Copied!</span>}
+                                            {copiedPhone && <span className="text-[9px] text-emerald-600 font-semibold font-sans">Copied!</span>}
                                             <span>•</span>
                                             <span className="font-sans">Session Window:</span>
                                             <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-sans">{selectedThread.windowRemaining}</span>
@@ -709,7 +709,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                 </div>
 
                                 {/* Header Action Buttons */}
-                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                <div className="flex items-center gap-1.5 shrink-0">
                                     {/* Quick Mark Resolved / Reopen */}
                                     {selectedThread.status === 'resolved' ? (
                                         <Button
@@ -717,10 +717,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleToggleResolve('open')}
-                                            className="h-8 text-xs font-semibold gap-1.5 text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 shadow-2xs"
+                                            className="h-7 text-xs font-semibold gap-1 text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-2 shadow-2xs"
                                             title="Reopen this resolved conversation"
                                         >
-                                            <Archive className="size-3.5" />
+                                            <Archive className="size-3" />
                                             <span className="hidden sm:inline">Reopen Chat</span>
                                         </Button>
                                     ) : (
@@ -729,28 +729,15 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleToggleResolve('resolved')}
-                                            className="h-8 text-xs font-semibold gap-1.5 text-muted-foreground hover:text-emerald-700 hover:border-emerald-500/40 shadow-2xs"
+                                            className="h-7 text-xs font-semibold gap-1 text-muted-foreground hover:text-emerald-700 hover:border-emerald-500/40 px-2.5 shadow-2xs"
                                             title="Mark conversation as resolved"
                                         >
-                                            <CheckCircle2 className="size-3.5 text-emerald-600" />
+                                            <CheckCircle2 className="size-3 text-emerald-600" />
                                             <span className="hidden sm:inline">Resolve</span>
                                         </Button>
                                     )}
 
-                                    {/* Edit Contact Button */}
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleOpenEditContact}
-                                        className="h-8 text-xs font-semibold gap-1.5 shadow-2xs"
-                                        title="Edit Contact Name and Pipeline Options"
-                                    >
-                                        <Pencil className="size-3.5" />
-                                        <span className="hidden sm:inline">Edit Contact</span>
-                                    </Button>
-
-                                    <Badge variant="outline" className="hidden lg:flex text-xs border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] gap-1">
+                                    <Badge variant="outline" className="hidden lg:flex text-[10px] border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] gap-1 py-0.5 px-2">
                                         <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                         24h Window
                                     </Badge>
