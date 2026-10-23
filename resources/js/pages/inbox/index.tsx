@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
     MessageSquare,
@@ -29,6 +29,10 @@ import {
     Copy,
     Info,
     Briefcase,
+    Image as ImageIcon,
+    X,
+    Zap,
+    Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,12 +45,32 @@ const STAGE_CONFIG: Record<string, { label: string; badge: string; icon: string;
     Lost: { label: 'Deal Lost', badge: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30', icon: '❌', desc: 'Dropped or not interested' },
 };
 
+const EMOJI_GROUPS = [
+    { name: 'Smileys', emojis: ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😍', '🥰', '😘', '😋', '😎', '🤩', '🥳', '🤗', '🤔', '🤐', '🤫', '🤭', '🥱'] },
+    { name: 'Gestures', emojis: ['👍', '👎', '👏', '🙌', '🤝', '✌️', '🤞', '👌', '🙏', '💪', '👋', '🎉', '🔥', '✨', '⭐', '💯', '🚀', '🎯', '📍', '💡', '✅', '❌', '⚠️', '🚨'] },
+    { name: 'Hearts', emojis: ['❤️', '💚', '💙', '💜', '🤍', '🧡', '💛', '🖤', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟'] },
+    { name: 'Business', emojis: ['💼', '📁', '📄', '📊', '📈', '💰', '💵', '💳', '🏷️', '📦', '📞', '💬', '🔔', '📌', '🗓️', '⏰', '🛒', '🎓', '🏥', '🏢', '💻', '📱', '✉️', '📧'] },
+];
+
+const CANNED_RESPONSES = [
+    { title: '👋 Welcome Greeting', text: 'Hello! Thank you for contacting Acme Coaching Institute. How can we help you today? 😊' },
+    { title: '📄 Course Details', text: 'Here are the course details, curriculum, and batch timings you requested.' },
+    { title: '💳 Payment Details', text: 'You can make the enrollment payment via UPI or Net Banking. Please share the transaction receipt once done!' },
+    { title: '✅ Query Solved', text: 'Thank you for connecting with us! Please let us know if you need any further assistance.' },
+];
+
 type ChatMessage = {
     id: string;
     sender: 'contact' | 'agent' | 'bot';
     text: string;
     time: string;
     status?: 'sent' | 'delivered' | 'read' | 'failed' | 'pending';
+    attachment?: {
+        name: string;
+        size?: string;
+        type: 'image' | 'document';
+        url?: string;
+    };
 };
 
 type ChatThread = {
@@ -127,6 +151,22 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [searchQuery, setSearchQuery] = useState('');
     const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(initialMsgMap);
     const [replyText, setReplyText] = useState('');
+
+    // Emoji, Attachment and Canned state
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+    const [showQuickReplies, setShowQuickReplies] = useState(false);
+    const [selectedEmojiGroup, setSelectedEmojiGroup] = useState(0);
+    const [attachedFile, setAttachedFile] = useState<{
+        name: string;
+        size: string;
+        type: 'image' | 'document';
+        url?: string;
+    } | null>(null);
+
+    const imageInputRef = useRef<HTMLInputElement>(null);
+    const documentInputRef = useRef<HTMLInputElement>(null);
+    const replyInputRef = useRef<HTMLInputElement>(null);
 
     // Contact Edit Modal state
     const [showEditContactDialog, setShowEditContactDialog] = useState(false);
@@ -362,12 +402,63 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         }
     };
 
+    const handleInsertEmoji = (emoji: string) => {
+        setReplyText((prev) => prev + emoji);
+        replyInputRef.current?.focus();
+    };
+
+    const handleImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            const sizeFormatted = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            setAttachedFile({
+                name: file.name,
+                size: sizeFormatted,
+                type: 'image',
+                url,
+            });
+            setShowAttachmentMenu(false);
+            replyInputRef.current?.focus();
+        }
+    };
+
+    const handleDocumentSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const sizeFormatted = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+            setAttachedFile({
+                name: file.name,
+                size: sizeFormatted,
+                type: 'document',
+            });
+            setShowAttachmentMenu(false);
+            replyInputRef.current?.focus();
+        }
+    };
+
+    const handleSelectCanned = (text: string) => {
+        setReplyText(text);
+        setShowAttachmentMenu(false);
+        setShowQuickReplies(false);
+        replyInputRef.current?.focus();
+    };
+
     const handleSendReply = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!replyText.trim() || !selectedThread) return;
+        if ((!replyText.trim() && !attachedFile) || !selectedThread) return;
 
         const textToSend = replyText.trim();
+        const currentAttachment = attachedFile;
         setReplyText('');
+        setAttachedFile(null);
+        setShowEmojiPicker(false);
+        setShowAttachmentMenu(false);
+        setShowQuickReplies(false);
+
+        const fullMessageContent = currentAttachment
+            ? (textToSend ? `[${currentAttachment.name}] ${textToSend}` : `📎 ${currentAttachment.name}`)
+            : textToSend;
 
         const optimisticMsg: ChatMessage = {
             id: 'temp-' + Date.now(),
@@ -375,6 +466,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
             text: textToSend,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: 'sent', // Initially single gray tick
+            attachment: currentAttachment || undefined,
         };
 
         setMessages((prev) => ({
@@ -384,7 +476,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
         // Update last message in thread list
         setThreads((prev) =>
-            prev.map((t) => (t.id === selectedThread.id ? { ...t, lastMessage: textToSend, time: 'Just now' } : t))
+            prev.map((t) => (t.id === selectedThread.id ? { ...t, lastMessage: fullMessageContent, time: 'Just now' } : t))
         );
 
         if (!selectedThread.id.startsWith('mock-')) {
@@ -397,7 +489,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     },
                     body: JSON.stringify({
                         conversation_id: selectedThread.id,
-                        message: textToSend,
+                        message: fullMessageContent,
                     }),
                 });
                 const data = await res.json();
@@ -771,7 +863,33 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                     <Bot className="size-3" /> Auto-Bot Reply
                                                 </div>
                                             )}
-                                            <p>{msg.text}</p>
+
+                                            {/* Render Rich Attachment Card if exists */}
+                                            {msg.attachment && (
+                                                <div className="mb-2">
+                                                    {msg.attachment.type === 'image' && msg.attachment.url ? (
+                                                        <div className="rounded-xl overflow-hidden border border-black/10 dark:border-white/10 max-w-xs shadow-xs">
+                                                            <img
+                                                                src={msg.attachment.url}
+                                                                alt={msg.attachment.name}
+                                                                className="w-full max-h-52 object-cover"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs">
+                                                            <div className="size-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center shrink-0">
+                                                                <FileText className="size-4" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="font-semibold truncate">{msg.attachment.name}</p>
+                                                                {msg.attachment.size && <p className="text-[10px] text-muted-foreground">{msg.attachment.size}</p>}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {msg.text && <p>{msg.text}</p>}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
                                                 {msg.sender === 'agent' && (
@@ -804,16 +922,222 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                 ))}
                             </div>
 
-                            {/* Message Reply Input Box */}
-                            <form onSubmit={handleSendReply} className="p-3 border-t border-border/80 bg-card shrink-0">
+                            {/* Hidden File Input Pickers */}
+                            <input
+                                type="file"
+                                ref={imageInputRef}
+                                accept="image/*,video/*"
+                                className="hidden"
+                                onChange={handleImageSelected}
+                            />
+                            <input
+                                type="file"
+                                ref={documentInputRef}
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                                className="hidden"
+                                onChange={handleDocumentSelected}
+                            />
+
+                            {/* Message Reply Input Box with Interactive Popovers */}
+                            <form onSubmit={handleSendReply} className="relative p-3 border-t border-border/80 bg-card shrink-0">
+                                {/* 1. Attached File Preview Chip */}
+                                {attachedFile && (
+                                    <div className="mb-2 flex items-center justify-between px-3 py-1.5 rounded-xl bg-muted/60 border border-border/70 text-xs">
+                                        <div className="flex items-center gap-2.5 truncate">
+                                            {attachedFile.type === 'image' && attachedFile.url ? (
+                                                <img
+                                                    src={attachedFile.url}
+                                                    alt="preview"
+                                                    className="size-8 rounded-lg object-cover border border-border shrink-0"
+                                                />
+                                            ) : (
+                                                <div className="size-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center shrink-0">
+                                                    <FileText className="size-4" />
+                                                </div>
+                                            )}
+                                            <div className="truncate">
+                                                <p className="font-semibold text-foreground truncate">{attachedFile.name}</p>
+                                                <p className="text-[10px] text-muted-foreground">{attachedFile.size} • Ready to send</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAttachedFile(null)}
+                                            className="size-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                            title="Remove attachment"
+                                        >
+                                            <X className="size-3.5" />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* 2. Interactive Emoji Picker Popover */}
+                                {showEmojiPicker && (
+                                    <div className="absolute bottom-16 left-3 z-50 w-72 sm:w-80 rounded-2xl border border-border bg-card p-3 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-2">
+                                        <div className="flex items-center justify-between border-b border-border/70 pb-2">
+                                            <span className="text-xs font-bold text-foreground">Select Emoji</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowEmojiPicker(false)}
+                                                className="size-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted text-xs"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+
+                                        {/* Category Tabs */}
+                                        <div className="flex items-center gap-1 border-b border-border/50 pb-1.5 text-xs">
+                                            {EMOJI_GROUPS.map((grp, idx) => (
+                                                <button
+                                                    key={grp.name}
+                                                    type="button"
+                                                    onClick={() => setSelectedEmojiGroup(idx)}
+                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
+                                                        selectedEmojiGroup === idx
+                                                            ? 'bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480]'
+                                                            : 'text-muted-foreground hover:text-foreground'
+                                                    }`}
+                                                >
+                                                    {grp.name}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Emoji Grid */}
+                                        <div className="grid grid-cols-6 sm:grid-cols-7 gap-1 p-1 max-h-48 overflow-y-auto">
+                                            {EMOJI_GROUPS[selectedEmojiGroup].emojis.map((emoji) => (
+                                                <button
+                                                    key={emoji}
+                                                    type="button"
+                                                    onClick={() => handleInsertEmoji(emoji)}
+                                                    className="size-9 rounded-lg flex items-center justify-center text-xl hover:bg-muted transition-transform hover:scale-125"
+                                                >
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 3. Interactive Attachment Menu Popover */}
+                                {showAttachmentMenu && (
+                                    <div className="absolute bottom-16 left-10 z-50 w-64 rounded-2xl border border-border bg-card p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-1">
+                                        <div className="flex items-center justify-between px-2 py-1 text-xs font-bold text-foreground border-b border-border/70 mb-1">
+                                            <span>Attach Content</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAttachmentMenu(false)}
+                                                className="size-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted text-xs"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+
+                                        {/* Option: Photos & Videos */}
+                                        <button
+                                            type="button"
+                                            onClick={() => imageInputRef.current?.click()}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-muted/70 text-left transition-colors"
+                                        >
+                                            <div className="size-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                                                <ImageIcon className="size-4" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold text-foreground">Photos & Media</p>
+                                                <p className="text-[10px] text-muted-foreground">PNG, JPG, MP4, WebP</p>
+                                            </div>
+                                        </button>
+
+                                        {/* Option: Document / PDF */}
+                                        <button
+                                            type="button"
+                                            onClick={() => documentInputRef.current?.click()}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-muted/70 text-left transition-colors"
+                                        >
+                                            <div className="size-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                                                <FileText className="size-4" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-semibold text-foreground">Document & PDF</p>
+                                                <p className="text-[10px] text-muted-foreground">PDF, DOC, XLS, ZIP</p>
+                                            </div>
+                                        </button>
+
+                                        {/* Option: Canned Quick Responses */}
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowQuickReplies(!showQuickReplies)}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-muted/70 text-left transition-colors"
+                                        >
+                                            <div className="size-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center">
+                                                <Zap className="size-4" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-xs font-semibold text-foreground">Quick Responses</p>
+                                                <p className="text-[10px] text-muted-foreground">Frequently used replies</p>
+                                            </div>
+                                            <ChevronRight className="size-3.5 text-muted-foreground" />
+                                        </button>
+
+                                        {/* Quick Replies Submenu */}
+                                        {showQuickReplies && (
+                                            <div className="p-1 space-y-1 bg-muted/40 rounded-xl border border-border/60 mt-1 max-h-40 overflow-y-auto">
+                                                {CANNED_RESPONSES.map((cr) => (
+                                                    <button
+                                                        key={cr.title}
+                                                        type="button"
+                                                        onClick={() => handleSelectCanned(cr.text)}
+                                                        className="w-full p-2 text-left rounded-lg hover:bg-card text-xs transition-colors space-y-0.5 border border-transparent hover:border-border/60"
+                                                    >
+                                                        <p className="font-semibold text-[11px] text-foreground">{cr.title}</p>
+                                                        <p className="text-[10px] text-muted-foreground truncate">{cr.text}</p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Main Input Row */}
                                 <div className="flex items-center gap-2">
-                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground hover:text-foreground">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setShowEmojiPicker(!showEmojiPicker);
+                                            setShowAttachmentMenu(false);
+                                        }}
+                                        className={`size-8 p-0 transition-colors ${
+                                            showEmojiPicker
+                                                ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                        title="Insert emoji"
+                                    >
                                         <Smile className="size-4" />
                                     </Button>
-                                    <Button type="button" variant="ghost" size="sm" className="size-8 p-0 text-muted-foreground hover:text-foreground">
+
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setShowAttachmentMenu(!showAttachmentMenu);
+                                            setShowEmojiPicker(false);
+                                        }}
+                                        className={`size-8 p-0 transition-colors ${
+                                            showAttachmentMenu
+                                                ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                        title="Attach document, photo, or quick response"
+                                    >
                                         <Paperclip className="size-4" />
                                     </Button>
+
                                     <input
+                                        ref={replyInputRef}
                                         type="text"
                                         value={replyText}
                                         onChange={(e) => setReplyText(e.target.value)}
