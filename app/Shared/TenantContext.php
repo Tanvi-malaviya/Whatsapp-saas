@@ -23,6 +23,16 @@ class TenantContext
         return self::$currentOrganization?->id;
     }
 
+    public static function getTenantId(): ?string
+    {
+        return self::id();
+    }
+
+    public static function getTenant(): ?Organization
+    {
+        return self::get();
+    }
+
     public static function timezone(): string
     {
         return self::$currentOrganization?->timezone ?? 'Asia/Kolkata';

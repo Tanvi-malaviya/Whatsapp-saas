@@ -15,9 +15,17 @@ use Inertia\Response;
 
 class WhatsAppChannelController extends Controller
 {
+    private function resolveTenantId(Request $request): string
+    {
+        return TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? Organization::first()?->id
+            ?? '';
+    }
+
     public function index(Request $request): Response
     {
-        $orgId = TenantContext::getTenantId();
+        $orgId = $this->resolveTenantId($request);
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)
             ->orderBy('is_default', 'desc')
@@ -43,7 +51,7 @@ class WhatsAppChannelController extends Controller
             'app_secret' => 'nullable|string|max:100',
         ]);
 
-        $orgId = TenantContext::getTenantId();
+        $orgId = $this->resolveTenantId($request);
 
         // Optional: Ping Meta Graph API to check quality and connectivity
         $quality = 'GREEN';
@@ -94,17 +102,17 @@ class WhatsAppChannelController extends Controller
         return back()->with('success', "WhatsApp Number ({$validated['name']}) successfully connected!");
     }
 
-    public function destroy(string $id): RedirectResponse
+    public function destroy(Request $request, string $id): RedirectResponse
     {
-        $orgId = TenantContext::getTenantId();
+        $orgId = $this->resolveTenantId($request);
         WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->delete();
 
         return back()->with('success', 'WhatsApp channel disconnected.');
     }
 
-    public function testConnection(string $id): JsonResponse
+    public function testConnection(Request $request, string $id): JsonResponse
     {
-        $orgId = TenantContext::getTenantId();
+        $orgId = $this->resolveTenantId($request);
         $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->firstOrFail();
 
         try {
