@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Smartphone,
     CheckCircle2,
@@ -53,6 +53,9 @@ export default function WhatsAppConnect({
     defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
     defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
 }: Props) {
+    const { tenant } = usePage().props as any;
+    const currentOrg = tenant?.current;
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [connectMode, setConnectMode] = useState<'embedded' | 'manual'>('manual');
     const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -221,9 +224,14 @@ export default function WhatsAppConnect({
 
                 {/* Connected Channels List */}
                 <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                            Active Phone Numbers ({channels.length > 0 ? channels.length : 1})
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <span>Active Phone Numbers ({channels.length})</span>
+                            {currentOrg && (
+                                <Badge variant="outline" className="text-[10px] text-foreground font-normal border-border bg-muted/40">
+                                    Workspace: <strong className="ml-1 text-emerald-600 font-bold">{currentOrg.name}</strong>
+                                </Badge>
+                            )}
                         </h2>
                     </div>
 
