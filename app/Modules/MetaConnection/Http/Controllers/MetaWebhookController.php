@@ -75,6 +75,18 @@ class MetaWebhookController extends Controller
             return;
         }
 
+        // Process delivery/read receipt statuses from Meta
+        $statuses = $change['statuses'] ?? [];
+        if (! empty($statuses)) {
+            foreach ($statuses as $st) {
+                $statusWamid = $st['id'] ?? null;
+                $newStatus = $st['status'] ?? null; // 'sent', 'delivered', 'read', 'failed'
+                if ($statusWamid && $newStatus) {
+                    Message::where('wamid', $statusWamid)->update(['status' => $newStatus]);
+                }
+            }
+        }
+
         $messages = $change['messages'] ?? [];
         if (empty($messages)) {
             return;

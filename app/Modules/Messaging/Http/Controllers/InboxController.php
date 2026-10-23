@@ -61,6 +61,7 @@ class InboxController extends Controller
                     'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
                     'text' => $m->content,
                     'time' => $m->created_at ? $m->created_at->format('h:i A') : '',
+                    'status' => $m->status ?? 'sent',
                 ])->values()->all(),
             ];
         })->values()->all();
@@ -111,7 +112,7 @@ class InboxController extends Controller
         if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
             $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
             try {
-                Http::withToken($channel->access_token)
+                $resp = Http::withToken($channel->access_token)
                     ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                         'messaging_product' => 'whatsapp',
                         'recipient_type' => 'individual',
@@ -122,6 +123,14 @@ class InboxController extends Controller
                             'body' => $validated['message'],
                         ],
                     ]);
+                if ($resp->successful()) {
+                    $wamid = $resp->json('messages.0.id');
+                    if ($wamid) {
+                        $msg->update(['wamid' => $wamid, 'status' => 'sent']);
+                    }
+                } else {
+                    $msg->update(['status' => 'failed']);
+                }
             } catch (\Throwable $e) {
                 // Log and continue
             }
@@ -134,7 +143,43 @@ class InboxController extends Controller
                 'sender' => 'agent',
                 'text' => $msg->content,
                 'time' => now()->format('h:i A'),
+                'status' => $msg->status ?? 'sent',
             ],
+        ]);
+    }
+
+    public function updateContact(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'conversation_id' => 'required|string',
+            'contact_name' => 'required|string|max:100',
+            'status' => 'nullable|string|in:open,resolved,bot_handled',
+        ]);
+
+        $org = $this->resolveOrg($request);
+        $conversation = Conversation::where('organization_id', $org->id)
+            ->where('id', $validated['conversation_id'])
+            ->first();
+
+        if (! $conversation) {
+            return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
+        }
+
+        $updateData = [
+            'contact_name' => trim($validated['contact_name']),
+        ];
+
+        if (! empty($validated['status'])) {
+            $updateData['status'] = $validated['status'];
+        }
+
+        $conversation->update($updateData);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contact details updated successfully',
+            'contact_name' => $conversation->contact_name,
+            'status' => $conversation->status,
         ]);
     }
 

@@ -8,6 +8,7 @@ import {
     Send,
     Bot,
     Phone,
+    Check,
     CheckCheck,
     Tag,
     AlertCircle,
@@ -24,9 +25,19 @@ import {
     Sparkles,
     FileText,
     ExternalLink,
+    Pencil,
+    Copy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+
+type ChatMessage = {
+    id: string;
+    sender: 'contact' | 'agent' | 'bot';
+    text: string;
+    time: string;
+    status?: 'sent' | 'delivered' | 'read' | 'failed' | 'pending';
+};
 
 type ChatThread = {
     id: string;
@@ -80,14 +91,14 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const allInitialThreads = initialThreads.length > 0 ? [...initialThreads, ...defaultMockThreads] : defaultMockThreads;
     const [threads, setThreads] = useState<ChatThread[]>(allInitialThreads);
 
-    const initialMsgMap: Record<string, Array<{ id: string; sender: 'contact' | 'agent' | 'bot'; text: string; time: string }>> = {
+    const initialMsgMap: Record<string, ChatMessage[]> = {
         'mock-1': [
             { id: 'm1', sender: 'contact', text: 'Hello how are you', time: '11:10 AM' },
             { id: 'm2', sender: 'bot', text: 'Hello Bhavesh! Welcome to Sathwara InfoTech (DukanHisab). How can we assist you today?', time: '11:10 AM' },
         ],
         'mock-2': [
             { id: 'm3', sender: 'contact', text: 'Can you please share the syllabus for the Laravel course?', time: '10:45 AM' },
-            { id: 'm4', sender: 'agent', text: 'Sure Rahul! Sharing the brochure and course curriculum right now.', time: '10:47 AM' },
+            { id: 'm4', sender: 'agent', text: 'Sure Rahul! Sharing the brochure and course curriculum right now.', time: '10:47 AM', status: 'sent' },
         ],
     };
 
@@ -102,9 +113,20 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [selectedThread, setSelectedThread] = useState<ChatThread | null>(allInitialThreads[0] || null);
     const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
     const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
+    const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
     const [searchQuery, setSearchQuery] = useState('');
-    const [messages, setMessages] = useState(initialMsgMap);
+    const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(initialMsgMap);
     const [replyText, setReplyText] = useState('');
+
+    // Contact Edit Modal state
+    const [showEditContactDialog, setShowEditContactDialog] = useState(false);
+    const [editContactName, setEditContactName] = useState('');
+    const [editContactStatus, setEditContactStatus] = useState<'open' | 'resolved'>('open');
+    const [editContactStage, setEditContactStage] = useState<'New' | 'Qualified' | 'Proposal' | 'Won' | 'Lost'>('New');
+    const [editContactLabel, setEditContactLabel] = useState<'Prospect' | 'Applicant' | 'Enrolled'>('Prospect');
+    const [isSavingContact, setIsSavingContact] = useState(false);
+    const [saveNotice, setSaveNotice] = useState<string | null>(null);
+    const [copiedPhone, setCopiedPhone] = useState(false);
 
     // Inbound test simulation state
     const [showSimDialog, setShowSimDialog] = useState(false);
@@ -122,6 +144,116 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+    const handleOpenEditContact = () => {
+        if (!selectedThread) return;
+        setEditContactName(selectedThread.contactName === selectedThread.phone ? '' : selectedThread.contactName);
+        setEditContactStatus(selectedThread.status === 'resolved' ? 'resolved' : 'open');
+        setEditContactStage(selectedThread.stage || 'New');
+        setEditContactLabel(selectedThread.label || 'Prospect');
+        setSaveNotice(null);
+        setShowEditContactDialog(true);
+    };
+
+    const handleSaveContact = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedThread) return;
+
+        const newName = editContactName.trim() || selectedThread.phone;
+        setIsSavingContact(true);
+        setSaveNotice(null);
+
+        // Update local state immediately
+        setSelectedThread((prev) =>
+            prev
+                ? {
+                      ...prev,
+                      contactName: newName,
+                      status: editContactStatus,
+                      stage: editContactStage,
+                      label: editContactLabel,
+                  }
+                : null
+        );
+
+        setThreads((prev) =>
+            prev.map((t) =>
+                t.id === selectedThread.id
+                    ? {
+                          ...t,
+                          contactName: newName,
+                          status: editContactStatus,
+                          stage: editContactStage,
+                          label: editContactLabel,
+                      }
+                    : t
+            )
+        );
+
+        if (!selectedThread.id.startsWith('mock-')) {
+            try {
+                const res = await fetch('/inbox/update-contact', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                    },
+                    body: JSON.stringify({
+                        conversation_id: selectedThread.id,
+                        contact_name: newName,
+                        status: editContactStatus,
+                    }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    setSaveNotice('Contact updated successfully!');
+                    setTimeout(() => setShowEditContactDialog(false), 600);
+                } else {
+                    setSaveNotice(data.message || 'Could not update contact');
+                }
+            } catch (err: any) {
+                setSaveNotice(err.message || 'Network error saving contact');
+            } finally {
+                setIsSavingContact(false);
+            }
+        } else {
+            setSaveNotice('Updated local contact!');
+            setTimeout(() => setShowEditContactDialog(false), 500);
+            setIsSavingContact(false);
+        }
+    };
+
+    const handleToggleResolve = async (newStatus: 'open' | 'resolved') => {
+        if (!selectedThread) return;
+
+        setSelectedThread((prev) => (prev ? { ...prev, status: newStatus } : null));
+        setThreads((prev) => prev.map((t) => (t.id === selectedThread.id ? { ...t, status: newStatus } : t)));
+
+        if (!selectedThread.id.startsWith('mock-')) {
+            try {
+                await fetch('/inbox/update-contact', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                    },
+                    body: JSON.stringify({
+                        conversation_id: selectedThread.id,
+                        contact_name: selectedThread.contactName,
+                        status: newStatus,
+                    }),
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    };
+
+    const handleCopyPhone = (phone: string) => {
+        navigator.clipboard?.writeText(phone);
+        setCopiedPhone(true);
+        setTimeout(() => setCopiedPhone(false), 2000);
+    };
 
     const handleStartNewChat = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -169,11 +301,12 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         const textToSend = replyText.trim();
         setReplyText('');
 
-        const optimisticMsg = {
+        const optimisticMsg: ChatMessage = {
             id: 'temp-' + Date.now(),
-            sender: 'agent' as const,
+            sender: 'agent',
             text: textToSend,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'sent', // Initially single gray tick
         };
 
         setMessages((prev) => ({
@@ -181,9 +314,14 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
             [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
         }));
 
+        // Update last message in thread list
+        setThreads((prev) =>
+            prev.map((t) => (t.id === selectedThread.id ? { ...t, lastMessage: textToSend, time: 'Just now' } : t))
+        );
+
         if (!selectedThread.id.startsWith('mock-')) {
             try {
-                await fetch('/inbox/reply', {
+                const res = await fetch('/inbox/reply', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -194,6 +332,17 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                         message: textToSend,
                     }),
                 });
+                const data = await res.json();
+                if (data.success && data.message) {
+                    setMessages((prev) => ({
+                        ...prev,
+                        [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
+                            m.id === optimisticMsg.id
+                                ? { ...m, id: data.message.id, status: data.message.status || 'sent' }
+                                : m
+                        ),
+                    }));
+                }
             } catch (err) {
                 console.error(err);
             }
@@ -233,6 +382,12 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
     const filteredThreads = threads.filter((t) => {
         if (selectedChannelFilter !== 'All channels' && t.channel !== selectedChannelFilter) {
+            return false;
+        }
+        if (selectedStatusFilter === 'open' && t.status === 'resolved') {
+            return false;
+        }
+        if (selectedStatusFilter === 'resolved' && t.status !== 'resolved') {
             return false;
         }
         if (searchQuery) {
@@ -292,6 +447,43 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                             />
                         </div>
 
+                        {/* Status Filter Tabs (All / Open / Resolved) */}
+                        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-muted/60 text-xs">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedStatusFilter('all')}
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                    selectedStatusFilter === 'all'
+                                        ? 'bg-card text-foreground shadow-2xs'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                All ({threads.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedStatusFilter('open')}
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                    selectedStatusFilter === 'open'
+                                        ? 'bg-card text-[#28804c] dark:text-[#52c480] shadow-2xs'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                Open ({threads.filter((t) => t.status !== 'resolved').length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedStatusFilter('resolved')}
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                    selectedStatusFilter === 'resolved'
+                                        ? 'bg-card text-muted-foreground shadow-2xs'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                Resolved ({threads.filter((t) => t.status === 'resolved').length})
+                            </button>
+                        </div>
+
                         <div className="flex items-center gap-1.5">
                             <select
                                 value={selectedChannelFilter}
@@ -316,6 +508,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     <div className="flex-1 overflow-y-auto divide-y divide-border/50">
                         {filteredThreads.map((thread) => {
                             const isSelected = selectedThread?.id === thread.id;
+                            const isResolved = thread.status === 'resolved';
                             return (
                                 <div
                                     key={thread.id}
@@ -333,9 +526,16 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between gap-1">
-                                            <span className="text-xs font-bold text-foreground truncate">
-                                                {thread.contactName}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <span className="text-xs font-bold text-foreground truncate">
+                                                    {thread.contactName}
+                                                </span>
+                                                {isResolved && (
+                                                    <span className="rounded bg-muted px-1.5 py-0.2 text-[9px] font-semibold text-muted-foreground shrink-0 border border-border/70">
+                                                        Resolved
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
                                                 {thread.time}
                                             </span>
@@ -384,31 +584,101 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
-                            {/* Thread Header */}
-                            <div className="h-16 border-b border-border/80 px-5 flex items-center justify-between bg-card shrink-0">
+                            {/* Thread Header with Contact Options */}
+                            <div className="h-16 border-b border-border/80 px-4 md:px-5 flex items-center justify-between bg-card shrink-0 gap-2">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="text-sm font-bold text-foreground truncate">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            <h3 className="text-sm font-bold text-foreground truncate max-w-[200px] sm:max-w-none">
                                                 {selectedThread.contactName}
                                             </h3>
+                                            <button
+                                                type="button"
+                                                onClick={handleOpenEditContact}
+                                                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors"
+                                                title="Save / Edit Contact Name & Status"
+                                            >
+                                                <Pencil className="size-3.5" />
+                                            </button>
                                             <span className="rounded bg-[#47b672]/15 px-2 py-0.5 text-[10px] font-semibold text-[#28804c] dark:text-[#52c480]">
                                                 {selectedThread.channel}
                                             </span>
+                                            {selectedThread.status === 'resolved' ? (
+                                                <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground border border-border/60">
+                                                    Resolved
+                                                </span>
+                                            ) : (
+                                                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                    Open
+                                                </span>
+                                            )}
                                         </div>
-                                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
-                                            {selectedThread.phone} • Session Window: <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{selectedThread.windowRemaining}</span>
-                                        </p>
+                                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono mt-0.5">
+                                            <span>{selectedThread.phone}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopyPhone(selectedThread.phone)}
+                                                className="hover:text-foreground text-muted-foreground p-0.5 transition-colors"
+                                                title="Copy phone number"
+                                            >
+                                                <Copy className="size-3" />
+                                            </button>
+                                            {copiedPhone && <span className="text-[10px] text-emerald-600 font-semibold font-sans">Copied!</span>}
+                                            <span>•</span>
+                                            <span className="font-sans">Session Window:</span>
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-sans">{selectedThread.windowRemaining}</span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <Badge variant="outline" className="text-xs border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] gap-1">
+                                {/* Header Action Buttons */}
+                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                    {/* Quick Mark Resolved / Reopen */}
+                                    {selectedThread.status === 'resolved' ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleToggleResolve('open')}
+                                            className="h-8 text-xs font-semibold gap-1.5 text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 shadow-2xs"
+                                            title="Reopen this resolved conversation"
+                                        >
+                                            <Archive className="size-3.5" />
+                                            <span className="hidden sm:inline">Reopen Chat</span>
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleToggleResolve('resolved')}
+                                            className="h-8 text-xs font-semibold gap-1.5 text-muted-foreground hover:text-emerald-700 hover:border-emerald-500/40 shadow-2xs"
+                                            title="Mark conversation as resolved"
+                                        >
+                                            <CheckCircle2 className="size-3.5 text-emerald-600" />
+                                            <span className="hidden sm:inline">Resolve</span>
+                                        </Button>
+                                    )}
+
+                                    {/* Edit Contact Button */}
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleOpenEditContact}
+                                        className="h-8 text-xs font-semibold gap-1.5 shadow-2xs"
+                                        title="Edit Contact Name and Pipeline Options"
+                                    >
+                                        <Pencil className="size-3.5" />
+                                        <span className="hidden sm:inline">Edit Contact</span>
+                                    </Button>
+
+                                    <Badge variant="outline" className="hidden lg:flex text-xs border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] gap-1">
                                         <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        24h Window Open
+                                        24h Window
                                     </Badge>
                                 </div>
                             </div>
@@ -444,7 +714,28 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
                                                 {msg.sender === 'agent' && (
-                                                    <CheckCheck className="size-3.5 text-[#53bdeb]" />
+                                                    <span
+                                                        className="inline-flex items-center ml-0.5"
+                                                        title={
+                                                            msg.status === 'read'
+                                                                ? 'Read'
+                                                                : msg.status === 'delivered'
+                                                                ? 'Delivered'
+                                                                : msg.status === 'failed'
+                                                                ? 'Failed to send'
+                                                                : 'Sent'
+                                                        }
+                                                    >
+                                                        {msg.status === 'read' ? (
+                                                            <CheckCheck className="size-3.5 text-[#53bdeb]" />
+                                                        ) : msg.status === 'delivered' ? (
+                                                            <CheckCheck className="size-3.5 text-muted-foreground/70" />
+                                                        ) : msg.status === 'failed' ? (
+                                                            <AlertCircle className="size-3.5 text-red-500" />
+                                                        ) : (
+                                                            <Check className="size-3.5 text-muted-foreground/70" />
+                                                        )}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
@@ -752,6 +1043,129 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                 >
                                     <Send className="size-3.5" />
                                     {isStartingChat ? 'Sending & Opening...' : '🚀 Start Chat & Send'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Contact & Conversation Modal */}
+            {showEditContactDialog && selectedThread && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
+                    <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="size-8 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
+                                    <Pencil className="size-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground">Edit Contact & Conversation</h3>
+                                    <p className="text-[11px] text-muted-foreground">Save customer name and update pipeline status</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowEditContactDialog(false)}
+                                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {saveNotice && (
+                            <div className={`p-2.5 rounded-lg text-xs ${
+                                saveNotice.includes('successfully') || saveNotice.includes('Updated')
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                                    : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
+                            }`}>
+                                {saveNotice}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSaveContact} className="space-y-3.5">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground">Contact / Customer Name *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={editContactName}
+                                    onChange={(e) => setEditContactName(e.target.value)}
+                                    placeholder="Enter full name (e.g. Tanvi Malaviya)..."
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#47b672]"
+                                />
+                                <span className="text-[10px] text-muted-foreground">This name will be displayed in your shared inbox & contact directory.</span>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground">WhatsApp Mobile Number</label>
+                                <div className="flex items-center justify-between rounded-md border border-input bg-muted/40 px-3 py-1.5 text-xs font-mono text-muted-foreground">
+                                    <span>{selectedThread.phone}</span>
+                                    <span className="text-[10px] text-[#28804c] font-sans font-semibold bg-[#47b672]/15 px-2 py-0.5 rounded">
+                                        WhatsApp
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-foreground">Conversation Status</label>
+                                    <select
+                                        value={editContactStatus}
+                                        onChange={(e) => setEditContactStatus(e.target.value as 'open' | 'resolved')}
+                                        className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                    >
+                                        <option value="open">🟢 Open (Active)</option>
+                                        <option value="resolved">⚪ Resolved (Closed)</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-foreground">Pipeline Stage</label>
+                                    <select
+                                        value={editContactStage}
+                                        onChange={(e) => setEditContactStage(e.target.value as any)}
+                                        className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                    >
+                                        <option value="New">New</option>
+                                        <option value="Qualified">Qualified</option>
+                                        <option value="Proposal">Proposal</option>
+                                        <option value="Won">Won</option>
+                                        <option value="Lost">Lost</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold text-foreground">Customer Label / Tag</label>
+                                <select
+                                    value={editContactLabel}
+                                    onChange={(e) => setEditContactLabel(e.target.value as any)}
+                                    className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                >
+                                    <option value="Prospect">Prospect</option>
+                                    <option value="Applicant">Applicant</option>
+                                    <option value="Enrolled">Enrolled Customer</option>
+                                </select>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowEditContactDialog(false)}
+                                    className="text-xs"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    disabled={isSavingContact}
+                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
+                                >
+                                    <CheckCircle2 className="size-3.5" />
+                                    {isSavingContact ? 'Saving...' : 'Save Changes'}
                                 </Button>
                             </div>
                         </form>
