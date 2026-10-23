@@ -25,21 +25,27 @@ type LeadCard = {
     phone: string;
     dealValue: number;
     interest: string;
-    stage: 'New' | 'Qualified' | 'Demo Booked' | 'Proposal' | 'Won' | 'Lost';
+    stage: 'New' | 'Qualified' | 'Proposal' | 'Won' | 'Lost';
     daysInStage: number;
     lastActive: string;
+    lastMessage?: string;
+    status?: string;
 };
 
 const STAGES: { id: LeadCard['stage']; label: string; color: string }[] = [
-    { id: 'New', label: 'New Inbound Lead', color: 'border-blue-500/40 bg-blue-500/5' },
-    { id: 'Qualified', label: 'Qualified Interest', color: 'border-purple-500/40 bg-purple-500/5' },
-    { id: 'Demo Booked', label: 'Live Demo Booked', color: 'border-amber-500/40 bg-amber-500/5' },
-    { id: 'Proposal', label: 'Proposal / Quote Sent', color: 'border-indigo-500/40 bg-indigo-500/5' },
-    { id: 'Won', label: 'Won / Customer Onboarded', color: 'border-emerald-500/40 bg-emerald-500/5' },
+    { id: 'New', label: '🎯 New Lead', color: 'border-sky-500/40 bg-sky-500/5' },
+    { id: 'Qualified', label: '⚡ Qualified', color: 'border-indigo-500/40 bg-indigo-500/5' },
+    { id: 'Proposal', label: '📑 Proposal Sent', color: 'border-amber-500/40 bg-amber-500/5' },
+    { id: 'Won', label: '🏆 Deal Won', color: 'border-emerald-500/40 bg-emerald-500/5' },
+    { id: 'Lost', label: '❌ Deal Lost', color: 'border-rose-500/40 bg-rose-500/5' },
 ];
 
-export default function ChatStages() {
-    const [leads, setLeads] = useState<LeadCard[]>([
+interface ChatStagesProps {
+    initialLeads?: LeadCard[];
+}
+
+export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
+    const defaultMockLeads: LeadCard[] = [
         {
             id: '1',
             contactName: 'Bhavesh Sathwara',
@@ -60,51 +66,47 @@ export default function ChatStages() {
             daysInStage: 1,
             lastActive: '1h ago',
         },
-        {
-            id: '3',
-            contactName: 'Kunal Shah (Surat)',
-            phone: '+91 99090 44332',
-            dealValue: 24999,
-            interest: 'Enterprise 5-Number Broadcast Setup',
-            stage: 'Demo Booked',
-            daysInStage: 3,
-            lastActive: 'Yesterday',
-        },
-        {
-            id: '4',
-            contactName: 'Pooja Mehta',
-            phone: '+91 98791 22334',
-            dealValue: 2999,
-            interest: 'WhatsApp Bot Starter',
-            stage: 'Proposal',
-            daysInStage: 4,
-            lastActive: '2d ago',
-        },
-        {
-            id: '5',
-            contactName: 'Vijay Varma (Rajkot)',
-            phone: '+91 94280 99887',
-            dealValue: 12000,
-            interest: 'E-commerce Order Notifications',
-            stage: 'Won',
-            daysInStage: 5,
-            lastActive: '3d ago',
-        },
-    ]);
+    ];
 
-    const moveStage = (leadId: string, direction: 'next' | 'prev') => {
-        setLeads(leads.map(lead => {
-            if (lead.id !== leadId) return lead;
-            const currentIndex = STAGES.findIndex(s => s.id === lead.stage);
-            const targetIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-            if (targetIndex >= 0 && targetIndex < STAGES.length) {
-                return { ...lead, stage: STAGES[targetIndex].id, daysInStage: 0 };
-            }
-            return lead;
-        }));
+    const [leads, setLeads] = useState<LeadCard[]>(
+        initialLeads && initialLeads.length > 0 ? initialLeads : defaultMockLeads
+    );
+
+    const moveStage = async (leadId: string, direction: 'next' | 'prev') => {
+        const lead = leads.find((l) => l.id === leadId);
+        if (!lead) return;
+
+        const currentIndex = STAGES.findIndex((s) => s.id === lead.stage);
+        const targetIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+        if (targetIndex < 0 || targetIndex >= STAGES.length) return;
+
+        const targetStage = STAGES[targetIndex].id;
+
+        // Optimistic UI update
+        setLeads((prev) =>
+            prev.map((l) => (l.id === leadId ? { ...l, stage: targetStage, daysInStage: 0 } : l))
+        );
+
+        // Persist to backend database
+        try {
+            await fetch('/chat/stages/update-stage', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN':
+                        (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    conversation_id: leadId,
+                    stage: targetStage,
+                }),
+            });
+        } catch (e) {
+            console.error('Error updating stage:', e);
+        }
     };
 
-    const totalPipelineValue = leads.reduce((sum, l) => sum + (l.stage !== 'Won' ? l.dealValue : 0), 0);
+    const totalPipelineValue = leads.reduce((sum, l) => sum + (l.stage !== 'Won' && l.stage !== 'Lost' ? l.dealValue : 0), 0);
     const wonValue = leads.filter(l => l.stage === 'Won').reduce((sum, l) => sum + l.dealValue, 0);
 
     return (

@@ -494,4 +494,102 @@ class InboxController extends Controller
             'message' => "Simulated inbound WhatsApp message from {$name} ({$cleanPhone}) processed successfully!",
         ]);
     }
+
+    public function history(Request $request): Response
+    {
+        $org = $this->resolveOrg($request);
+        $conversations = Conversation::where('organization_id', $org->id)
+            ->with(['messages' => fn ($q) => $q->orderBy('created_at', 'asc')])
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $defaultChannel = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->value('name') ?? 'DukanHisab WhatsApp';
+
+        $sessions = $conversations->map(function ($c) use ($defaultChannel) {
+            $msgs = $c->messages;
+            $firstMsg = $msgs->first();
+            $lastMsg = $msgs->last();
+            $duration = '5m';
+            if ($firstMsg && $lastMsg && $firstMsg->created_at && $lastMsg->created_at) {
+                $mins = max(1, $firstMsg->created_at->diffInMinutes($lastMsg->created_at));
+                $duration = $mins >= 60 ? floor($mins / 60) . 'h ' . ($mins % 60) . 'm' : $mins . 'm';
+            }
+
+            return [
+                'id' => (string) $c->id,
+                'contactName' => $c->contact_name ?: $c->contact_phone,
+                'phone' => $c->contact_phone,
+                'channel' => $defaultChannel,
+                'agent' => 'Support Agent',
+                'status' => $c->status === 'resolved' ? 'Resolved' : ($c->status === 'bot_handled' ? 'Auto-Closed' : 'Active'),
+                'messagesCount' => $msgs->count(),
+                'duration' => $duration,
+                'closedAt' => $c->updated_at ? $c->updated_at->timezone('Asia/Kolkata')->format('M d, h:i A') : 'Recently',
+                'summary' => $lastMsg ? $lastMsg->content : 'No messages recorded',
+                'transcript' => $msgs->map(fn ($m) => [
+                    'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
+                    'text' => $m->content,
+                    'time' => $m->created_at ? $m->created_at->timezone('Asia/Kolkata')->format('h:i A') : '',
+                ])->values()->all(),
+            ];
+        })->values()->all();
+
+        return Inertia::render('inbox/history', [
+            'initialSessions' => $sessions,
+        ]);
+    }
+
+    public function stages(Request $request): Response
+    {
+        $org = $this->resolveOrg($request);
+        $conversations = Conversation::where('organization_id', $org->id)
+            ->with(['messages' => fn ($q) => $q->latest()->take(1)])
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $leads = $conversations->map(function ($c) {
+            $lastMsg = $c->messages->first();
+            $daysInStage = $c->updated_at ? max(1, (int) $c->updated_at->diffInDays(now())) : 1;
+
+            return [
+                'id' => (string) $c->id,
+                'contactName' => $c->contact_name ?: $c->contact_phone,
+                'phone' => $c->contact_phone,
+                'dealValue' => 4999,
+                'interest' => $c->label ?: 'WhatsApp Prospect',
+                'stage' => in_array($c->pipeline_stage, ['New', 'Qualified', 'Proposal', 'Won', 'Lost']) ? $c->pipeline_stage : 'New',
+                'daysInStage' => $daysInStage,
+                'lastActive' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
+                'lastMessage' => $lastMsg ? $lastMsg->content : '',
+                'status' => $c->status,
+            ];
+        })->values()->all();
+
+        return Inertia::render('inbox/stages', [
+            'initialLeads' => $leads,
+        ]);
+    }
+
+    public function updateStage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'conversation_id' => 'required|string',
+            'stage' => 'required|string',
+        ]);
+
+        $org = $this->resolveOrg($request);
+        $conversation = Conversation::where('organization_id', $org->id)
+            ->where('id', $validated['conversation_id'])
+            ->first();
+
+        if (! $conversation) {
+            return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
+        }
+
+        $conversation->update(['pipeline_stage' => $validated['stage']]);
+
+        return response()->json(['success' => true, 'message' => 'Stage updated successfully']);
+    }
 }

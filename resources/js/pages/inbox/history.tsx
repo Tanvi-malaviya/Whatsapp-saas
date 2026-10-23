@@ -42,18 +42,22 @@ type HistorySession = {
     transcript: { sender: 'contact' | 'agent' | 'bot'; text: string; time: string }[];
 };
 
-export default function ChatHistory() {
+interface ChatHistoryProps {
+    initialSessions?: HistorySession[];
+}
+
+export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
 
-    const [sessions, setSessions] = useState<HistorySession[]>([
+    const defaultMockSessions: HistorySession[] = [
         {
             id: '1',
             contactName: 'Bhavesh Sathwara',
             phone: '+91 79978 81665',
-            channel: 'DukanHisab',
-            agent: 'Bhavesh (You)',
+            channel: 'DukanHisab WhatsApp',
+            agent: 'Support Agent',
             status: 'Resolved',
             messagesCount: 14,
             duration: '18m',
@@ -71,7 +75,7 @@ export default function ChatHistory() {
             id: '2',
             contactName: 'Rahul Patel',
             phone: '+91 98250 12345',
-            channel: 'DukanHisab',
+            channel: 'DukanHisab WhatsApp',
             agent: 'Tanvi Malaviya',
             status: 'Resolved',
             messagesCount: 8,
@@ -84,39 +88,36 @@ export default function ChatHistory() {
                 { sender: 'contact', text: 'Thank you, registering today.', time: '4:14 PM' },
             ],
         },
-        {
-            id: '3',
-            contactName: 'Amit Shah (Surat)',
-            phone: '+91 98790 54321',
-            channel: 'Sathwara InfoTech',
-            agent: 'Auto Bot',
-            status: 'Auto-Closed',
-            messagesCount: 4,
-            duration: '24h',
-            closedAt: 'Oct 21, 2026',
-            summary: 'Inactivity timeout after bot delivered business address and pricing brochure.',
-            transcript: [
-                { sender: 'contact', text: 'location?', time: 'Oct 20, 2:10 PM' },
-                { sender: 'bot', text: '📍 Office: Sathwara InfoTech, Ahmedabad, Gujarat.', time: 'Oct 20, 2:10 PM' },
-            ],
-        },
-        {
-            id: '4',
-            contactName: 'Kiran Desai',
-            phone: '+91 94260 78910',
-            channel: 'DukanHisab',
-            agent: 'Tanvi Malaviya',
-            status: 'Archived',
-            messagesCount: 22,
-            duration: '45m',
-            closedAt: 'Oct 19, 2026',
-            summary: 'Annual SaaS subscription renewed & invoice #1042 dispatched via WhatsApp.',
-            transcript: [
-                { sender: 'contact', text: 'UPI payment completed for renewal.', time: 'Oct 19, 11:15 AM' },
-                { sender: 'agent', text: 'Received ₹4,999. Invoice receipt attached.', time: 'Oct 19, 11:25 AM' },
-            ],
-        },
-    ]);
+    ];
+
+    const [sessions, setSessions] = useState<HistorySession[]>(
+        initialSessions && initialSessions.length > 0 ? initialSessions : defaultMockSessions
+    );
+
+    const handleExportCSV = () => {
+        const rows = [
+            ['Contact Name', 'Phone', 'Channel', 'Agent', 'Duration', 'Messages Count', 'Status', 'Closed At', 'Summary'],
+            ...filteredSessions.map((s) => [
+                `"${s.contactName.replace(/"/g, '""')}"`,
+                `"${s.phone}"`,
+                `"${s.channel}"`,
+                `"${s.agent}"`,
+                `"${s.duration}"`,
+                s.messagesCount,
+                `"${s.status}"`,
+                `"${s.closedAt}"`,
+                `"${(s.summary || '').replace(/"/g, '""')}"`,
+            ]),
+        ];
+        const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((r) => r.join(',')).join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `whatsapp_chat_history_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     const filteredSessions = sessions.filter(s => {
         if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
@@ -141,7 +142,7 @@ export default function ChatHistory() {
                                 Chat History &amp; Resolved Conversations
                             </h2>
                             <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                {sessions.length} Archived Sessions
+                                {sessions.length} Live Sessions
                             </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -154,7 +155,7 @@ export default function ChatHistory() {
                             variant="outline"
                             size="sm"
                             className="text-xs h-9 border-border"
-                            onClick={() => alert('Exporting full chat archive to CSV...')}
+                            onClick={handleExportCSV}
                         >
                             <FileSpreadsheet className="size-3.5 mr-1.5 text-emerald-600" />
                             Export CSV
