@@ -40,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Chat: Inbox, History, Stages
     Route::get('inbox', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'index'])->name('inbox.index');
     Route::post('inbox/reply', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'reply'])->name('inbox.reply');
+    Route::post('inbox/new-chat', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'startConversation'])->name('inbox.new-chat');
     Route::post('inbox/simulate-inbound', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'simulateInbound'])->name('inbox.simulate');
     Route::inertia('chat/history', 'inbox/history')->name('chat.history');
     Route::inertia('chat/stages', 'inbox/stages')->name('chat.stages');

@@ -138,6 +138,138 @@ class InboxController extends Controller
         ]);
     }
 
+    public function startConversation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'name' => 'nullable|string',
+            'message' => 'nullable|string',
+            'type' => 'nullable|string|in:text,template',
+            'template_name' => 'nullable|string',
+        ]);
+
+        $cleanPhone = (new \App\Shared\PhoneNumber($validated['phone']))->getE164();
+        $name = $validated['name'] ?: $cleanPhone;
+        $type = $validated['type'] ?? 'template';
+        $messageText = $validated['message'] ?? '';
+        $templateName = $validated['template_name'] ?? 'due_reminder_en';
+
+        $org = $this->resolveOrg($request);
+        TenantContext::set($org);
+
+        $channel = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->orderBy('is_default', 'desc')
+            ->first();
+
+        $phoneId = $channel ? $channel->phone_number_id : '1324567864076715';
+        $metaDelivered = false;
+        $metaError = null;
+
+        if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
+            $digitsPhone = preg_replace('/\D/', '', $cleanPhone);
+            try {
+                if ($type === 'template') {
+                    $payload = [
+                        'messaging_product' => 'whatsapp',
+                        'to' => $digitsPhone,
+                        'type' => 'template',
+                        'template' => [
+                            'name' => $templateName,
+                            'language' => ['code' => 'en_US'],
+                            'components' => [
+                                [
+                                    'type' => 'body',
+                                    'parameters' => [
+                                        ['type' => 'text', 'text' => $name],
+                                        ['type' => 'text', 'text' => $channel->name],
+                                        ['type' => 'text', 'text' => 'Rs. 100'],
+                                        ['type' => 'text', 'text' => $channel->phone_number],
+                                    ],
+                                ],
+                                [
+                                    'type' => 'button',
+                                    'sub_type' => 'url',
+                                    'index' => '0',
+                                    'parameters' => [
+                                        ['type' => 'text', 'text' => 'test-123'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ];
+                } else {
+                    $payload = [
+                        'messaging_product' => 'whatsapp',
+                        'recipient_type' => 'individual',
+                        'to' => $digitsPhone,
+                        'type' => 'text',
+                        'text' => [
+                            'preview_url' => false,
+                            'body' => $messageText ?: 'Hello from Sathwara WhatsApp SaaS!',
+                        ],
+                    ];
+                }
+
+                $resp = Http::withToken($channel->access_token)
+                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $payload);
+
+                if ($resp->successful()) {
+                    $metaDelivered = true;
+                } else {
+                    $metaError = $resp->json('error.message') ?? 'Meta API error';
+                }
+            } catch (\Throwable $e) {
+                $metaError = $e->getMessage();
+            }
+        }
+
+        // Create or find conversation
+        $conversation = Conversation::firstOrCreate(
+            [
+                'organization_id' => $org->id,
+                'contact_phone' => $cleanPhone,
+            ],
+            [
+                'contact_name' => $name,
+                'channel_phone_number_id' => $phoneId,
+                'status' => 'open',
+                'window_expires_at' => now()->addHours(24),
+                'last_message_at' => now(),
+            ]
+        );
+
+        $conversation->update([
+            'contact_name' => $name,
+            'last_message_at' => now(),
+            'window_expires_at' => now()->addHours(24),
+        ]);
+
+        $savedContent = $type === 'template' ? "[Template: {$templateName}]" : ($messageText ?: 'Hello!');
+
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'organization_id' => $org->id,
+            'direction' => 'outbound',
+            'sender_type' => 'agent',
+            'sender_id' => (string) ($request->user()?->id ?? 'agent'),
+            'type' => $type,
+            'content' => $savedContent,
+            'status' => $metaDelivered ? 'sent' : ($metaError ? 'failed' : 'sent'),
+            'meta_cost_paise' => 0,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'conversation_id' => (string) $conversation->id,
+            'message' => $metaDelivered 
+                ? "Message dispatched to {$cleanPhone} and chat opened!" 
+                : "Chat thread created for {$cleanPhone}." . ($metaError ? " (Meta notice: {$metaError})" : ''),
+            'meta_delivered' => $metaDelivered,
+            'meta_error' => $metaError,
+        ]);
+    }
+
     public function simulateInbound(Request $request): JsonResponse
     {
         $validated = $request->validate([

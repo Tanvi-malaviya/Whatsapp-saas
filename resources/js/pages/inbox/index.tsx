@@ -113,6 +113,55 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [simText, setSimText] = useState('Hi! I need software details for my business.');
     const [isSimulating, setIsSimulating] = useState(false);
 
+    // Start New Conversation state
+    const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+    const [newChatPhone, setNewChatPhone] = useState('');
+    const [newChatName, setNewChatName] = useState('');
+    const [newChatMsgType, setNewChatMsgType] = useState<'template' | 'text'>('template');
+    const [newChatTemplate, setNewChatTemplate] = useState('due_reminder_en');
+    const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
+    const [isStartingChat, setIsStartingChat] = useState(false);
+    const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+    const handleStartNewChat = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newChatPhone.trim()) return;
+        setIsStartingChat(true);
+        setNewChatStatus(null);
+
+        try {
+            const res = await fetch('/inbox/new-chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    phone: newChatPhone,
+                    name: newChatName,
+                    type: newChatMsgType,
+                    template_name: newChatTemplate,
+                    message: newChatMessage,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setNewChatStatus({ success: true, message: data.message });
+                setTimeout(() => {
+                    setShowNewChatDialog(false);
+                    window.location.href = '/inbox';
+                }, 800);
+            } else {
+                setNewChatStatus({ success: false, message: data.message || 'Could not start chat' });
+            }
+        } catch (err: any) {
+            setNewChatStatus({ success: false, message: err.message || 'Network error' });
+        } finally {
+            setIsStartingChat(false);
+        }
+    };
+
     const handleSendReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!replyText.trim() || !selectedThread) return;
@@ -210,15 +259,26 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     {filteredThreads.length}
                                 </Badge>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowSimDialog(true)}
-                                className="flex items-center gap-1 rounded-full bg-[#47b672]/15 px-2.5 py-1 text-[11px] font-semibold text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/25 transition-colors border border-[#47b672]/30 shadow-2xs"
-                                title="Simulate incoming WhatsApp message for localhost testing"
-                            >
-                                <Sparkles className="size-3" />
-                                <span>Test Inbound</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                                <Button
+                                    size="sm"
+                                    onClick={() => setShowNewChatDialog(true)}
+                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold h-7 px-2.5 gap-1 rounded-full shadow-2xs"
+                                    title="Start a new WhatsApp conversation with any phone number"
+                                >
+                                    <Plus className="size-3.5" />
+                                    <span>New Chat</span>
+                                </Button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSimDialog(true)}
+                                    className="flex items-center gap-1 rounded-full bg-muted hover:bg-muted/80 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border border-border/70"
+                                    title="Simulate incoming WhatsApp message for localhost testing"
+                                >
+                                    <Sparkles className="size-3" />
+                                    <span>Test</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div className="relative">
@@ -542,6 +602,156 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                 >
                                     <Send className="size-3.5" />
                                     {isSimulating ? 'Processing...' : '🚀 Simulate Inbound'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Start New Conversation Modal */}
+            {showNewChatDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
+                    <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="size-8 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
+                                    <Plus className="size-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground">Start New WhatsApp Conversation</h3>
+                                    <p className="text-[11px] text-muted-foreground">Send a WhatsApp message directly to any phone number</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowNewChatDialog(false)}
+                                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {newChatStatus && (
+                            <div className={`p-2.5 rounded-lg text-xs ${
+                                newChatStatus.success
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                                    : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
+                            }`}>
+                                {newChatStatus.message}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleStartNewChat} className="space-y-3.5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">Recipient Mobile Number *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={newChatPhone}
+                                        onChange={(e) => setNewChatPhone(e.target.value)}
+                                        placeholder="e.g. 919898096798"
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">Include country code (e.g. 91 for India)</span>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">Contact Name (Optional)</label>
+                                    <input
+                                        type="text"
+                                        value={newChatName}
+                                        onChange={(e) => setNewChatName(e.target.value)}
+                                        placeholder="e.g. Rahul Patel"
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+                                    />
+                                    <span className="text-[10px] text-muted-foreground">Name saved in your contacts</span>
+                                </div>
+                            </div>
+
+                            {/* Message Type Toggle */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold">Message Type</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewChatMsgType('template')}
+                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                                            newChatMsgType === 'template'
+                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
+                                                : 'border-border bg-background hover:bg-muted/40'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-foreground">⚡ Approved Template</div>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">Delivers anytime to any number</p>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setNewChatMsgType('text')}
+                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
+                                            newChatMsgType === 'text'
+                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
+                                                : 'border-border bg-background hover:bg-muted/40'
+                                        }`}
+                                    >
+                                        <div className="font-semibold text-foreground">💬 Custom Text</div>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">If customer messaged in last 24h</p>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {newChatMsgType === 'template' ? (
+                                <div className="space-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                    <label className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                                        Select Meta Approved Template *
+                                    </label>
+                                    <select
+                                        value={newChatTemplate}
+                                        onChange={(e) => setNewChatTemplate(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <option value="due_reminder_en">due_reminder_en (Payment Due Reminder)</option>
+                                        <option value="sale_invoice_en">sale_invoice_en (Sale Invoice Notification)</option>
+                                        <option value="payment_received_en">payment_received_en (Payment Received Confirmation)</option>
+                                        <option value="appointment_cancelled">appointment_cancelled (Alert Notification)</option>
+                                    </select>
+                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                                        Pre-approved templates land directly on the user's phone to start the conversation.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">Message Text *</label>
+                                    <textarea
+                                        required
+                                        rows={3}
+                                        value={newChatMessage}
+                                        onChange={(e) => setNewChatMessage(e.target.value)}
+                                        placeholder="Type your WhatsApp message..."
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowNewChatDialog(false)}
+                                    className="text-xs"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    disabled={isStartingChat}
+                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
+                                >
+                                    <Send className="size-3.5" />
+                                    {isStartingChat ? 'Sending & Opening...' : '🚀 Start Chat & Send'}
                                 </Button>
                             </div>
                         </form>
