@@ -113,7 +113,7 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
         <>
             <Head title="Chat Stages Pipeline - Sathwara InfoTech" />
 
-            <div className="space-y-6">
+            <div className="flex-1 flex flex-col gap-6 p-4 sm:p-6 lg:p-8 min-w-0">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
