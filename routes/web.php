@@ -38,7 +38,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('ai-agent', 'bot/ai-agent')->name('ai-agent.index');
 
     // Chat: Inbox, History, Stages
-    Route::inertia('inbox', 'inbox/index')->name('inbox.index');
+    Route::get('inbox', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'index'])->name('inbox.index');
+    Route::post('inbox/reply', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'reply'])->name('inbox.reply');
+    Route::post('inbox/simulate-inbound', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'simulateInbound'])->name('inbox.simulate');
     Route::inertia('chat/history', 'inbox/history')->name('chat.history');
     Route::inertia('chat/stages', 'inbox/stages')->name('chat.stages');
 

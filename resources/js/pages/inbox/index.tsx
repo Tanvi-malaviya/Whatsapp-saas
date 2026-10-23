@@ -42,10 +42,15 @@ type ChatThread = {
     status: 'open' | 'bot_handled' | 'resolved';
 };
 
-export default function TeamInbox() {
-    const [threads, setThreads] = useState<ChatThread[]>([
+interface TeamInboxProps {
+    initialThreads?: any[];
+    channels?: any[];
+}
+
+export default function TeamInbox({ initialThreads = [], channels = [] }: TeamInboxProps) {
+    const defaultMockThreads: ChatThread[] = [
         {
-            id: '1',
+            id: 'mock-1',
             contactName: 'Bhavesh Sathwara',
             phone: '+91 79978 81665',
             channel: 'DukanHisab',
@@ -58,7 +63,7 @@ export default function TeamInbox() {
             status: 'open',
         },
         {
-            id: '2',
+            id: 'mock-2',
             contactName: 'Rahul Patel',
             phone: '+91 98250 12345',
             channel: 'DukanHisab',
@@ -70,59 +75,111 @@ export default function TeamInbox() {
             label: 'Applicant',
             status: 'open',
         },
-        {
-            id: '3',
-            contactName: 'Priya Sharma',
-            phone: '+91 94280 67890',
-            channel: 'DukanHisab',
-            lastMessage: 'Got the fees details, thank you!',
-            time: '18m ago',
-            unread: 0,
-            windowRemaining: '22h 15m',
-            stage: 'Proposal',
-            label: 'Prospect',
-            status: 'bot_handled',
-        },
-    ]);
+    ];
 
-    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(null);
-    const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
-    const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
-    const [searchQuery, setSearchQuery] = useState('');
+    const allInitialThreads = initialThreads.length > 0 ? [...initialThreads, ...defaultMockThreads] : defaultMockThreads;
+    const [threads, setThreads] = useState<ChatThread[]>(allInitialThreads);
 
-    const [messages, setMessages] = useState<Record<string, Array<{ id: string; sender: 'contact' | 'agent' | 'bot'; text: string; time: string }>>>({
-        '1': [
+    const initialMsgMap: Record<string, Array<{ id: string; sender: 'contact' | 'agent' | 'bot'; text: string; time: string }>> = {
+        'mock-1': [
             { id: 'm1', sender: 'contact', text: 'Hello how are you', time: '11:10 AM' },
             { id: 'm2', sender: 'bot', text: 'Hello Bhavesh! Welcome to Sathwara InfoTech (DukanHisab). How can we assist you today?', time: '11:10 AM' },
         ],
-        '2': [
+        'mock-2': [
             { id: 'm3', sender: 'contact', text: 'Can you please share the syllabus for the Laravel course?', time: '10:45 AM' },
             { id: 'm4', sender: 'agent', text: 'Sure Rahul! Sharing the brochure and course curriculum right now.', time: '10:47 AM' },
         ],
-        '3': [
-            { id: 'm5', sender: 'contact', text: 'Got the fees details, thank you!', time: 'Yesterday' },
-        ],
-    });
+    };
 
+    if (initialThreads.length > 0) {
+        initialThreads.forEach((t) => {
+            if (t.messages && t.messages.length > 0) {
+                initialMsgMap[t.id] = t.messages;
+            }
+        });
+    }
+
+    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(allInitialThreads[0] || null);
+    const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
+    const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [messages, setMessages] = useState(initialMsgMap);
     const [replyText, setReplyText] = useState('');
 
-    const handleSendReply = (e: React.FormEvent) => {
+    // Inbound test simulation state
+    const [showSimDialog, setShowSimDialog] = useState(false);
+    const [simPhone, setSimPhone] = useState('919898696798');
+    const [simName, setSimName] = useState('Tanvi Malaviya');
+    const [simText, setSimText] = useState('Hi! I need software details for my business.');
+    const [isSimulating, setIsSimulating] = useState(false);
+
+    const handleSendReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!replyText.trim() || !selectedThread) return;
 
-        const currentMessages = messages[selectedThread.id] || [];
-        const newMsg = {
-            id: Date.now().toString(),
+        const textToSend = replyText.trim();
+        setReplyText('');
+
+        const optimisticMsg = {
+            id: 'temp-' + Date.now(),
             sender: 'agent' as const,
-            text: replyText.trim(),
+            text: textToSend,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
 
-        setMessages({
-            ...messages,
-            [selectedThread.id]: [...currentMessages, newMsg],
-        });
-        setReplyText('');
+        setMessages((prev) => ({
+            ...prev,
+            [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
+        }));
+
+        if (!selectedThread.id.startsWith('mock-')) {
+            try {
+                await fetch('/inbox/reply', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                    },
+                    body: JSON.stringify({
+                        conversation_id: selectedThread.id,
+                        message: textToSend,
+                    }),
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    };
+
+    const handleSimulateInbound = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!simPhone.trim() || !simText.trim()) return;
+        setIsSimulating(true);
+
+        try {
+            const res = await fetch('/inbox/simulate-inbound', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify({
+                    phone: simPhone,
+                    name: simName,
+                    message: simText,
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setShowSimDialog(false);
+                window.location.reload();
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsSimulating(false);
+        }
     };
 
     const filteredThreads = threads.filter((t) => {
@@ -248,6 +305,19 @@ export default function TeamInbox() {
                 <div className="w-full sm:w-80 lg:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card">
                     {/* Search & Dropdown Filters */}
                     <div className="p-3 border-b border-border/80 space-y-2 bg-card">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-foreground">Shared Team Inbox</span>
+                            <button
+                                type="button"
+                                onClick={() => setShowSimDialog(true)}
+                                className="flex items-center gap-1 rounded bg-[#47b672]/15 px-2 py-0.5 text-[11px] font-semibold text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/25 transition-colors"
+                                title="Simulate incoming WhatsApp message for localhost testing"
+                            >
+                                <Sparkles className="size-3" />
+                                ⚡ Test Inbound
+                            </button>
+                        </div>
+
                         <div className="relative">
                             <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
                             <input
@@ -484,6 +554,94 @@ export default function TeamInbox() {
                     )}
                 </div>
             </div>
+
+            {/* Inbound WhatsApp Simulation Modal */}
+            {showSimDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
+                    <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-border pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="size-7 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
+                                    <Sparkles className="size-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground">Simulate Inbound WhatsApp Test</h3>
+                                    <p className="text-[11px] text-muted-foreground">Test two-way live inbox on localhost</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowSimDialog(false)}
+                                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                            💡 <strong>Why Simulation?</strong> When you run on <code>localhost:8000</code>, Meta's internet servers cannot directly reach your laptop without a public tunnel. This tool sends the exact Meta Webhook payload into your backend, creating the chat thread and triggering Bot Auto-Responders!
+                        </div>
+
+                        <form onSubmit={handleSimulateInbound} className="space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Customer Mobile Number (with 91) *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={simPhone}
+                                    onChange={(e) => setSimPhone(e.target.value)}
+                                    placeholder="e.g. 919898696798"
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Customer Name *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={simName}
+                                    onChange={(e) => setSimName(e.target.value)}
+                                    placeholder="e.g. Tanvi Malaviya"
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Customer Message Content *</label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={simText}
+                                    onChange={(e) => setSimText(e.target.value)}
+                                    placeholder="Type what customer said on WhatsApp..."
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowSimDialog(false)}
+                                    className="text-xs"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    disabled={isSimulating}
+                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5"
+                                >
+                                    <Send className="size-3.5" />
+                                    {isSimulating ? 'Processing...' : '🚀 Simulate Inbound'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
