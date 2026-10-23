@@ -236,55 +236,23 @@ export default function WhatsAppConnect({
                     </div>
 
                     {channels.length === 0 ? (
-                        /* Default display if no channel in db yet, showing DukanHisab channel card */
-                        <Card className="border-border/80 bg-card overflow-hidden shadow-xs hover:border-[#47b672]/40 transition-colors">
-                            <div className="flex flex-col lg:flex-row lg:items-center justify-between p-5 gap-4">
-                                <div className="flex items-start gap-3.5">
-                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold">
-                                        <Smartphone className="size-5" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h3 className="text-base font-bold text-foreground">
-                                                DukanHisab
-                                            </h3>
-                                            <Badge className="bg-[#47b672] text-white text-[10px] font-semibold">
-                                                DEFAULT CHANNEL
-                                            </Badge>
-                                            <Badge variant="outline" className="text-[10px] border-[#47b672]/40 text-[#28804c] dark:text-[#52c480]">
-                                                QUALITY: HIGH
-                                            </Badge>
-                                        </div>
-                                        <p className="text-xs font-mono text-muted-foreground">
-                                            Phone: <strong className="text-foreground">+91 79978 81665</strong> • Phone ID: <span className="font-semibold text-foreground">1431069246745536</span> • WABA ID: <span className="font-semibold text-foreground">799788166562792</span>
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Connected for live customer inbound chats, automatic bot replies, and broadcast marketing.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={openEditModal}
-                                        className="h-8 text-xs border-border gap-1"
-                                    >
-                                        <Sliders className="size-3.5 text-muted-foreground" />
-                                        Update Credentials
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        className="h-8 text-xs bg-[#47b672] text-white hover:bg-[#349c5e]"
-                                        asChild
-                                    >
-                                        <Link href="/inbox">
-                                            Open Inbox
-                                        </Link>
-                                    </Button>
-                                </div>
+                        <Card className="border-border/80 bg-card p-8 text-center shadow-xs">
+                            <div className="flex size-12 mx-auto items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] mb-3">
+                                <Smartphone className="size-6 text-[#47b672]" />
                             </div>
+                            <h3 className="text-base font-bold text-foreground">
+                                No WhatsApp Channels Connected
+                            </h3>
+                            <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
+                                Link your first WhatsApp Business number to {currentOrg?.name || 'this workspace'} to enable automated replies and bulk broadcasts.
+                            </p>
+                            <Button
+                                onClick={handleOpenNewModal}
+                                className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
+                            >
+                                <Plus className="size-4" />
+                                Connect WhatsApp Number
+                            </Button>
                         </Card>
                     ) : (
                         channels.map((ch) => (
