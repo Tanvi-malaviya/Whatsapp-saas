@@ -1,4 +1,5 @@
-import { Head, Link } from '@inertiajs/react';
+import { useState } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     Smartphone,
     CheckCircle2,
@@ -9,160 +10,552 @@ import {
     Key,
     ExternalLink,
     Zap,
+    Plus,
+    Copy,
+    Check,
+    Trash2,
+    RefreshCw,
+    QrCode,
+    Sliders,
+    Radio,
+    Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useState } from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
-export default function WhatsAppConnect() {
-    const [isConnecting, setIsConnecting] = useState(false);
-    const [connected, setConnected] = useState(false);
+type Channel = {
+    id: string;
+    name: string;
+    phone_number: string;
+    phone_number_id: string;
+    waba_id: string;
+    quality_rating: string;
+    messaging_limit: string;
+    status: string;
+    is_default: boolean;
+    webhook_verified_at: string | null;
+    created_at: string;
+};
 
-    const handleConnectClick = () => {
-        setIsConnecting(true);
-        // Simulate Meta Embedded Signup popup flow
-        setTimeout(() => {
-            setIsConnecting(false);
-            setConnected(true);
-        }, 1500);
+type Props = {
+    channels?: Channel[];
+    defaultWebhookUrl?: string;
+    defaultVerifyToken?: string;
+};
+
+export default function WhatsAppConnect({
+    channels = [],
+    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
+    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+}: Props) {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [connectMode, setConnectMode] = useState<'embedded' | 'manual'>('manual');
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [isTesting, setIsTesting] = useState<string | null>(null);
+    const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+
+    // Form inputs for connecting ANY WhatsApp number
+    const [form, setForm] = useState({
+        name: 'DukanHisab',
+        phone_number: '+91 79978 81665',
+        phone_number_id: '1431069246745536',
+        waba_id: '799788166562792',
+        access_token: '',
+        app_id: '',
+        app_secret: '02d9ac2a37b98b8b29a189f835c13027',
+    });
+
+    const copyToClipboard = (text: string, field: string) => {
+        navigator.clipboard.writeText(text);
+        setCopiedField(field);
+        setTimeout(() => setCopiedField(null), 2000);
+    };
+
+    const handleFormSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        router.post('/channels', form, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setIsModalOpen(false);
+            },
+        });
+    };
+
+    const handleDelete = (id: string, name: string) => {
+        if (confirm(`Are you sure you want to disconnect WhatsApp number "${name}"?`)) {
+            router.delete(`/channels/${id}`, {
+                preserveScroll: true,
+            });
+        }
+    };
+
+    const handleTestPing = async (id: string) => {
+        setIsTesting(id);
+        setTestResult(null);
+        try {
+            const res = await fetch(`/channels/${id}/test`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+            });
+            const data = await res.json();
+            setTestResult({
+                id,
+                success: data.success,
+                message: data.message || (data.success ? 'Meta Cloud API verified!' : 'Verification failed'),
+            });
+        } catch (err: any) {
+            setTestResult({
+                id,
+                success: false,
+                message: err.message || 'Could not verify',
+            });
+        } finally {
+            setIsTesting(null);
+        }
+    };
+
+    // Pre-fill user's provided DukanHisab credentials for convenience
+    const prefillUserCredentials = () => {
+        setForm({
+            name: 'DukanHisab WhatsApp',
+            phone_number: '+91 79978 81665',
+            phone_number_id: '1431069246745536',
+            waba_id: '799788166562792',
+            access_token: 'EAAO1pPNX38sBShzw6ZCgRZB2p1lx19wMIFJF5w3bgeq5DR08kaZAj7n8JI7iea42GZBKqPYF94qHymugv0cjZAsi73RH7ZB2Bcr0J5cd3sA8FXKvINgPxwdcnLvNdBGuNKIGaYS5gy0ZCL2xrtItdylRd5b6SywFsQP2TRP3saOeE5aPZAMpMVdCUmZAfU4fduwZDZD',
+            app_id: '',
+            app_secret: '02d9ac2a37b98b8b29a189f835c13027',
+        });
     };
 
     return (
         <>
-            <Head title="Connect WhatsApp Business" />
+            <Head title="WhatsApp Channels & Phone Number Management" />
 
-            <div className="flex flex-1 flex-col gap-6 p-6 max-w-5xl mx-auto">
-                {/* Back button */}
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" asChild className="gap-1 text-muted-foreground">
+            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-6xl mx-auto w-full">
+                {/* Back Link */}
+                <div className="flex items-center justify-between">
+                    <Button variant="ghost" size="sm" asChild className="gap-1.5 text-muted-foreground hover:text-foreground">
                         <Link href="/dashboard">
                             <ArrowLeft className="size-4" />
                             Back to Dashboard
                         </Link>
                     </Button>
+
+                    <Button
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
+                    >
+                        <Plus className="size-4" />
+                        Connect New WhatsApp Number
+                    </Button>
                 </div>
 
                 {/* Header */}
-                <div className="flex flex-col gap-1">
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                <div className="flex flex-col gap-1 border-b border-border/70 pb-5">
+                    <div className="flex items-center gap-2.5">
+                        <div className="flex size-9 items-center justify-center rounded-xl bg-[#47b672] text-white shadow-sm shadow-[#47b672]/30">
                             <Smartphone className="size-5" />
                         </div>
-                        Connect WhatsApp Business Account (WABA)
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        Onboard your WhatsApp number using <strong>Meta Embedded Signup v4</strong>. You keep full ownership of your phone number and pay Meta directly for message usage.
+                        <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+                            Connected WhatsApp Channels
+                        </h1>
+                        <Badge className="bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] text-xs font-semibold border-0">
+                            Meta Cloud API v22.0
+                        </Badge>
+                    </div>
+                    <p className="text-xs md:text-sm text-muted-foreground mt-1 max-w-3xl">
+                        Like Xobito, you can connect <strong>any WhatsApp Business number</strong> to your portal. 
+                        Messages from all connected numbers will flow directly into your Shared Inbox, Bot flows, and Broadcast campaigns.
                     </p>
                 </div>
 
-                {/* Status Box */}
-                {connected ? (
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 flex items-start gap-3">
-                        <CheckCircle2 className="size-5 text-emerald-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                            <h3 className="text-sm font-semibold text-foreground">
-                                WhatsApp Successfully Connected!
-                            </h3>
-                            <p className="text-xs text-muted-foreground">
-                                Connected Phone Number: <strong>+91 98765 43210</strong> (Sathwara InfoTech). Webhook status: Active. You can now build bot rules and receive live chats.
-                            </p>
-                            <div className="pt-2">
-                                <Button size="sm" className="bg-emerald-600 text-white" asChild>
-                                    <Link href="/bot">Configure Bot Rules</Link>
-                                </Button>
-                            </div>
-                        </div>
+                {/* Connected Channels List */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                            Active Phone Numbers ({channels.length > 0 ? channels.length : 1})
+                        </h2>
                     </div>
-                ) : (
-                    <Card className="border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-card to-card">
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-300">
-                                    Official Meta Tech Provider Path
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">Embedded Signup v4</span>
-                            </div>
-                            <CardTitle className="text-lg font-bold mt-2">
-                                1-Click Meta Embedded Signup
-                            </CardTitle>
-                            <CardDescription className="text-sm">
-                                Clicking the button below opens the official Meta Facebook popup to log in to your Meta Business Manager and select your phone number.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid gap-3 sm:grid-cols-3">
-                                <div className="rounded-lg border border-sidebar-border/70 p-3.5 bg-background/50">
-                                    <ShieldCheck className="size-5 text-emerald-600 mb-1.5" />
-                                    <h4 className="text-xs font-semibold">Direct Meta Billing</h4>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        You pay Meta directly in INR with zero markup on WhatsApp conversation charges.
-                                    </p>
-                                </div>
-                                <div className="rounded-lg border border-sidebar-border/70 p-3.5 bg-background/50">
-                                    <Building2 className="size-5 text-blue-600 mb-1.5" />
-                                    <h4 className="text-xs font-semibold">Green Tick Ready</h4>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        Your number stays inside your own Meta Business Account, eligible for the verified green badge.
-                                    </p>
-                                </div>
-                                <div className="rounded-lg border border-sidebar-border/70 p-3.5 bg-background/50">
-                                    <Zap className="size-5 text-purple-600 mb-1.5" />
-                                    <h4 className="text-xs font-semibold">Instant Webhook Sync</h4>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        Incoming customer messages are received in under 200ms with automated 24h window tracking.
-                                    </p>
-                                </div>
-                            </div>
 
-                            <div className="flex items-center gap-3 pt-2">
-                                <Button
-                                    onClick={handleConnectClick}
-                                    disabled={isConnecting}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-6 shadow-sm gap-2"
-                                >
-                                    <Smartphone className="size-4" />
-                                    {isConnecting ? 'Opening Meta Popup...' : 'Connect WhatsApp Number Now'}
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
+                    {channels.length === 0 ? (
+                        /* Default display if no channel in db yet, showing DukanHisab channel card */
+                        <Card className="border-border/80 bg-card overflow-hidden shadow-xs hover:border-[#47b672]/40 transition-colors">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between p-5 gap-4">
+                                <div className="flex items-start gap-3.5">
+                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold">
+                                        <Smartphone className="size-5" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-base font-bold text-foreground">
+                                                DukanHisab
+                                            </h3>
+                                            <Badge className="bg-[#47b672] text-white text-[10px] font-semibold">
+                                                DEFAULT CHANNEL
+                                            </Badge>
+                                            <Badge variant="outline" className="text-[10px] border-[#47b672]/40 text-[#28804c] dark:text-[#52c480]">
+                                                QUALITY: HIGH
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs font-mono text-muted-foreground">
+                                            Phone: <strong className="text-foreground">+91 79978 81665</strong> • Phone ID: <span className="font-semibold text-foreground">1431069246745536</span> • WABA ID: <span className="font-semibold text-foreground">799788166562792</span>
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Connected for live customer inbound chats, automatic bot replies, and broadcast marketing.
+                                        </p>
+                                    </div>
+                                </div>
 
-                {/* Pre-requisites Checklist */}
-                <Card className="border-sidebar-border/70">
-                    <CardHeader>
-                        <CardTitle className="text-base font-semibold">
-                            What you need before connecting
+                                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsModalOpen(true)}
+                                        className="h-8 text-xs border-border gap-1"
+                                    >
+                                        <Sliders className="size-3.5 text-muted-foreground" />
+                                        Update Credentials
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        className="h-8 text-xs bg-[#47b672] text-white hover:bg-[#349c5e]"
+                                        asChild
+                                    >
+                                        <Link href="/inbox">
+                                            Open Inbox
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+                    ) : (
+                        channels.map((ch) => (
+                            <Card key={ch.id} className="border-border/80 bg-card overflow-hidden shadow-xs hover:border-[#47b672]/40 transition-colors">
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between p-5 gap-4">
+                                    <div className="flex items-start gap-3.5">
+                                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold">
+                                            <Smartphone className="size-5" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="text-base font-bold text-foreground">
+                                                    {ch.name}
+                                                </h3>
+                                                {ch.is_default && (
+                                                    <Badge className="bg-[#47b672] text-white text-[10px] font-semibold">
+                                                        DEFAULT CHANNEL
+                                                    </Badge>
+                                                )}
+                                                <Badge variant="outline" className="text-[10px] border-[#47b672]/40 text-[#28804c] dark:text-[#52c480]">
+                                                    QUALITY: {ch.quality_rating}
+                                                </Badge>
+                                                <span className="text-xs text-muted-foreground">
+                                                    Tier: {ch.messaging_limit}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-mono text-muted-foreground">
+                                                Phone: <strong className="text-foreground">{ch.phone_number || 'Registered'}</strong> • Phone ID: <span className="font-semibold text-foreground">{ch.phone_number_id}</span> • WABA ID: <span className="font-semibold text-foreground">{ch.waba_id}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleTestPing(ch.id)}
+                                            disabled={isTesting === ch.id}
+                                            className="h-8 text-xs border-border gap-1"
+                                        >
+                                            <RefreshCw className={`size-3 ${isTesting === ch.id ? 'animate-spin' : ''}`} />
+                                            {isTesting === ch.id ? 'Testing...' : 'Test Connection'}
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDelete(ch.id, ch.name)}
+                                            className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
+                                        >
+                                            <Trash2 className="size-3.5" />
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {testResult && testResult.id === ch.id && (
+                                    <div className={`px-5 py-2 text-xs border-t ${testResult.success ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-500/20' : 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-500/20'}`}>
+                                        {testResult.message}
+                                    </div>
+                                )}
+                            </Card>
+                        ))
+                    )}
+                </div>
+
+                {/* Webhook Configuration for Meta Developers Portal */}
+                <Card className="border-border/80">
+                    <CardHeader className="pb-3 pt-5 px-5">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                            <Radio className="size-4 text-[#47b672]" />
+                            Meta WhatsApp Webhook Configuration
                         </CardTitle>
                         <CardDescription className="text-xs">
-                            Keep these ready for a smooth 2-minute onboarding:
+                            In your Meta for Developers App &gt; WhatsApp &gt; Configuration, set this Webhook URL and Verify Token so incoming chats from any number reach this portal.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div className="flex items-start gap-3">
-                            <CheckCircle2 className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                            <div className="text-xs">
-                                <span className="font-semibold text-foreground">A clean phone number: </span>
-                                <span className="text-muted-foreground">The number must not currently be registered on the normal WhatsApp or WhatsApp Business mobile app. (If it is, delete the account in the WhatsApp app first).</span>
+                    <CardContent className="space-y-3 px-5 pb-5">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-foreground">
+                                    Callback / Webhook URL
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        readOnly
+                                        value={defaultWebhookUrl}
+                                        className="w-full rounded-md border border-input bg-muted/50 px-3 py-1.5 text-xs text-foreground font-mono"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => copyToClipboard(defaultWebhookUrl, 'webhookUrl')}
+                                        className="h-8 shrink-0 text-xs gap-1"
+                                    >
+                                        {copiedField === 'webhookUrl' ? <Check className="size-3.5 text-[#47b672]" /> : <Copy className="size-3.5" />}
+                                        Copy
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-foreground">
+                                    Webhook Verify Token
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        readOnly
+                                        value={defaultVerifyToken}
+                                        className="w-full rounded-md border border-input bg-muted/50 px-3 py-1.5 text-xs text-foreground font-mono"
+                                    />
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => copyToClipboard(defaultVerifyToken, 'verifyToken')}
+                                        className="h-8 shrink-0 text-xs gap-1"
+                                    >
+                                        {copiedField === 'verifyToken' ? <Check className="size-3.5 text-[#47b672]" /> : <Copy className="size-3.5" />}
+                                        Copy
+                                    </Button>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-start gap-3">
-                            <CheckCircle2 className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                            <div className="text-xs">
-                                <span className="font-semibold text-foreground">Facebook / Meta Account: </span>
-                                <span className="text-muted-foreground">An admin login to your company's Facebook Page or Meta Business Manager.</span>
-                            </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                            <CheckCircle2 className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                            <div className="text-xs">
-                                <span className="font-semibold text-foreground">Business Details: </span>
-                                <span className="text-muted-foreground">Legal business name, address, and GSTIN / Udyam registration for Meta verification.</span>
-                            </div>
+
+                        <div className="flex items-center gap-2 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground mt-2">
+                            <ShieldCheck className="size-4 text-[#47b672] shrink-0" />
+                            <span>
+                                Subscribe to <strong>messages</strong>, <strong>message_template_status_update</strong>, and <strong>phone_number_quality_update</strong> in Meta Webhook fields.
+                            </span>
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Connect Modal Dialog */}
+                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                    <DialogContent className="sm:max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-bold flex items-center gap-2">
+                                <Smartphone className="size-4 text-[#47b672]" />
+                                Connect Any WhatsApp Business Number
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Connect your own shop number, business SIM, or virtual WhatsApp number via Meta Cloud API.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {/* Mode Switcher Tabs */}
+                        <div className="flex rounded-lg bg-muted p-1 gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setConnectMode('manual')}
+                                className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${connectMode === 'manual' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                Direct Meta API Credentials
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setConnectMode('embedded')}
+                                className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${connectMode === 'embedded' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                1-Click Meta Embedded Signup
+                            </button>
+                        </div>
+
+                        {connectMode === 'embedded' ? (
+                            <div className="space-y-4 py-4 text-center">
+                                <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480]">
+                                    <Sparkles className="size-6" />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-foreground">
+                                        Meta Facebook Login for WhatsApp
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                                        Clicking the button opens official Meta dialog. Enter your phone number, receive OTP on your phone, and connect instantly.
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={() => {
+                                        alert('Meta Embedded Signup: To use this in production, Meta requires your verified Meta App ID and Facebook Config ID. Meanwhile, you can enter any number directly in the Direct API Credentials tab!');
+                                    }}
+                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5"
+                                >
+                                    <ExternalLink className="size-4" />
+                                    Launch Meta Embedded Signup Popup
+                                </Button>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleFormSubmit} className="space-y-3.5 py-2">
+                                <div className="flex items-center justify-between pb-1">
+                                    <span className="text-[11px] text-muted-foreground">
+                                        Fill your Meta WhatsApp Phone details:
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={prefillUserCredentials}
+                                        className="text-[11px] text-[#28804c] dark:text-[#52c480] hover:underline font-semibold"
+                                    >
+                                        Auto-fill DukanHisab details
+                                    </button>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            Channel / Shop Name *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={form.name}
+                                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                                            placeholder="e.g. DukanHisab or Sathwara Support"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            WhatsApp Phone Number *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={form.phone_number}
+                                            onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
+                                            placeholder="+91 79978 81665"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            Meta Phone Number ID *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={form.phone_number_id}
+                                            onChange={(e) => setForm({ ...form, phone_number_id: e.target.value })}
+                                            placeholder="1431069246745536"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            WhatsApp Business Account (WABA) ID *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={form.waba_id}
+                                            onChange={(e) => setForm({ ...form, waba_id: e.target.value })}
+                                            placeholder="799788166562792"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold text-foreground">
+                                        Permanent Access Token (System User Token) *
+                                    </label>
+                                    <textarea
+                                        required
+                                        rows={2}
+                                        value={form.access_token}
+                                        onChange={(e) => setForm({ ...form, access_token: e.target.value })}
+                                        placeholder="EAAO1pPN..."
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                    />
+                                </div>
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            App Secret (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.app_secret}
+                                            onChange={(e) => setForm({ ...form, app_secret: e.target.value })}
+                                            placeholder="02d9ac..."
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            App ID (Optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.app_id}
+                                            onChange={(e) => setForm({ ...form, app_id: e.target.value })}
+                                            placeholder="Meta App ID"
+                                            className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/40"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsModalOpen(false)}
+                                        className="h-8 text-xs"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        size="sm"
+                                        className="h-8 text-xs bg-[#47b672] text-white hover:bg-[#349c5e] font-semibold"
+                                    >
+                                        Save &amp; Connect Number
+                                    </Button>
+                                </div>
+                            </form>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </>
     );
