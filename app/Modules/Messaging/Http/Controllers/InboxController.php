@@ -92,7 +92,10 @@ class InboxController extends Controller
     {
         $validated = $request->validate([
             'conversation_id' => 'required|string',
-            'message' => 'required|string',
+            'message' => 'nullable|string',
+            'attachment' => 'nullable|file|max:51200', // Up to 50MB
+            'attachment_name' => 'nullable|string',
+            'attachment_type' => 'nullable|string',
         ]);
 
         $org = $this->resolveOrg($request);
@@ -104,6 +107,28 @@ class InboxController extends Controller
             return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
         }
 
+        $hasAttachment = $request->hasFile('attachment');
+        $uploadedFile = $hasAttachment ? $request->file('attachment') : null;
+        $messageText = trim($request->input('message') ?? '');
+        $attachmentName = $request->input('attachment_name') ?: ($uploadedFile ? $uploadedFile->getClientOriginalName() : null);
+
+        // Store attachment locally if uploaded
+        $storedPath = null;
+        if ($uploadedFile) {
+            $storedPath = $uploadedFile->store('attachments', 'public');
+        }
+
+        // Determine message type and database content
+        $msgType = 'text';
+        $finalContent = $messageText;
+
+        if ($hasAttachment && $attachmentName) {
+            $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
+            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
+            $msgType = $isImage ? 'image' : 'document';
+            $finalContent = $messageText ? "[{$attachmentName}] {$messageText}" : "📎 {$attachmentName}";
+        }
+
         // Store outbound agent message in database
         $msg = Message::create([
             'conversation_id' => $conversation->id,
@@ -111,8 +136,8 @@ class InboxController extends Controller
             'direction' => 'outbound',
             'sender_type' => 'agent',
             'sender_id' => (string) ($request->user()?->id ?? 'agent'),
-            'type' => 'text',
-            'content' => $validated['message'],
+            'type' => $msgType,
+            'content' => $finalContent,
             'status' => 'sent',
             'meta_cost_paise' => 0,
         ]);
@@ -128,18 +153,70 @@ class InboxController extends Controller
         if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
             $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
             try {
-                $resp = Http::withToken($channel->access_token)
-                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
-                        'messaging_product' => 'whatsapp',
-                        'recipient_type' => 'individual',
-                        'to' => $cleanPhone,
-                        'type' => 'text',
-                        'text' => [
-                            'preview_url' => false,
-                            'body' => $validated['message'],
-                        ],
-                    ]);
-                if ($resp->successful()) {
+                if ($hasAttachment && $uploadedFile) {
+                    $mime = $uploadedFile->getMimeType() ?: 'application/octet-stream';
+                    $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
+                    $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
+                    $mediaType = $isImage ? 'image' : 'document';
+
+                    // 1. Upload to Meta Media API
+                    $mediaResp = Http::withToken($channel->access_token)
+                        ->attach('file', file_get_contents($uploadedFile->getRealPath()), $attachmentName, ['Content-Type' => $mime])
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/media", [
+                            'messaging_product' => 'whatsapp',
+                            'type' => $mime,
+                        ]);
+
+                    $mediaId = $mediaResp->successful() ? $mediaResp->json('id') : null;
+
+                    if ($mediaId) {
+                        // 2. Dispatch real WhatsApp media message (document or image) to recipient phone
+                        $mediaPayload = ['id' => $mediaId];
+                        if (! empty($messageText)) {
+                            $mediaPayload['caption'] = $messageText;
+                        }
+                        if ($mediaType === 'document') {
+                            $mediaPayload['filename'] = $attachmentName;
+                        }
+
+                        $resp = Http::withToken($channel->access_token)
+                            ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                                'messaging_product' => 'whatsapp',
+                                'recipient_type' => 'individual',
+                                'to' => $cleanPhone,
+                                'type' => $mediaType,
+                                $mediaType => $mediaPayload,
+                            ]);
+                    } else {
+                        // Fallback to text message if media upload was rejected
+                        $resp = Http::withToken($channel->access_token)
+                            ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                                'messaging_product' => 'whatsapp',
+                                'recipient_type' => 'individual',
+                                'to' => $cleanPhone,
+                                'type' => 'text',
+                                'text' => [
+                                    'preview_url' => false,
+                                    'body' => $finalContent,
+                                ],
+                            ]);
+                    }
+                } else {
+                    // Standard text message
+                    $resp = Http::withToken($channel->access_token)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                            'messaging_product' => 'whatsapp',
+                            'recipient_type' => 'individual',
+                            'to' => $cleanPhone,
+                            'type' => 'text',
+                            'text' => [
+                                'preview_url' => false,
+                                'body' => $finalContent,
+                            ],
+                        ]);
+                }
+
+                if (isset($resp) && $resp->successful()) {
                     $wamid = $resp->json('messages.0.id');
                     if ($wamid) {
                         $msg->update(['wamid' => $wamid, 'status' => 'sent']);

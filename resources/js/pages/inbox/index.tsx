@@ -162,6 +162,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         size: string;
         type: 'image' | 'document';
         url?: string;
+        rawFile?: File;
     } | null>(null);
 
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -417,6 +418,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 size: sizeFormatted,
                 type: 'image',
                 url,
+                rawFile: file,
             });
             setShowAttachmentMenu(false);
             replyInputRef.current?.focus();
@@ -433,6 +435,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 size: sizeFormatted,
                 type: 'document',
                 url,
+                rawFile: file,
             });
             setShowAttachmentMenu(false);
             replyInputRef.current?.focus();
@@ -599,17 +602,37 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
         if (!selectedThread.id.startsWith('mock-')) {
             try {
-                const res = await fetch('/inbox/reply', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                    },
-                    body: JSON.stringify({
-                        conversation_id: selectedThread.id,
-                        message: fullMessageContent,
-                    }),
-                });
+                let res: Response;
+                const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
+
+                if (currentAttachment?.rawFile) {
+                    const formData = new FormData();
+                    formData.append('conversation_id', selectedThread.id);
+                    formData.append('message', textToSend);
+                    formData.append('attachment', currentAttachment.rawFile);
+                    formData.append('attachment_name', currentAttachment.name);
+                    formData.append('attachment_type', currentAttachment.type);
+
+                    res = await fetch('/inbox/reply', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: formData,
+                    });
+                } else {
+                    res = await fetch('/inbox/reply', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: JSON.stringify({
+                            conversation_id: selectedThread.id,
+                            message: fullMessageContent,
+                        }),
+                    });
+                }
                 const data = await res.json();
                 if (data.success && data.message) {
                     setMessages((prev) => ({
