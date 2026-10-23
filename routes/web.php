@@ -20,6 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::inertia('bot', 'bot/index')->name('bot.index');
     Route::inertia('inbox', 'inbox/index')->name('inbox.index');
+    Route::inertia('chat/history', 'inbox/index')->name('chat.history');
+    Route::inertia('chat/stages', 'inbox/index')->name('chat.stages');
     Route::inertia('contacts', 'contacts/index')->name('contacts.index');
     Route::inertia('campaigns', 'campaigns/index')->name('campaigns.index');
     Route::inertia('reports', 'reports/index')->name('reports.index');
