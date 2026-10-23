@@ -426,11 +426,13 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const handleDocumentSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            const url = URL.createObjectURL(file);
             const sizeFormatted = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
             setAttachedFile({
                 name: file.name,
                 size: sizeFormatted,
                 type: 'document',
+                url,
             });
             setShowAttachmentMenu(false);
             replyInputRef.current?.focus();
@@ -442,6 +444,104 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         setShowAttachmentMenu(false);
         setShowQuickReplies(false);
         replyInputRef.current?.focus();
+    };
+
+    const parseAttachmentFromMessage = (rawText: string, existingAttachment?: ChatMessage['attachment']) => {
+        if (existingAttachment) {
+            const ext = existingAttachment.name.split('.').pop()?.toLowerCase() || '';
+            const isImg = existingAttachment.type === 'image' || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+            return {
+                hasAttachment: true,
+                fileName: existingAttachment.name,
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
+                caption: rawText && !rawText.startsWith('📎') && !rawText.startsWith('[') ? rawText : '',
+                url: existingAttachment.url,
+                size: existingAttachment.size || (ext ? `${ext.toUpperCase()} Document` : 'Document'),
+            };
+        }
+
+        if (!rawText) return null;
+
+        // 1. Starts with paperclip: 📎 filename.ext [- caption]
+        const clipMatch = rawText.match(/^📎\s*([^\s\n-]+\.[a-zA-Z0-9]{2,5})(?:\s*[-:]?\s*(.*))?$/s);
+        if (clipMatch) {
+            const fileName = clipMatch[1].trim();
+            const caption = (clipMatch[2] || '').trim();
+            const ext = fileName.split('.').pop()?.toLowerCase() || '';
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+            return {
+                hasAttachment: true,
+                fileName,
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
+                caption,
+                url: undefined,
+                size: `${ext.toUpperCase()} Document`,
+            };
+        }
+
+        // 2. Bracket style: [filename.ext] caption
+        const bracketMatch = rawText.match(/^\[([^\s\]]+\.[a-zA-Z0-9]{2,5})\](?:\s*(.*))?$/s);
+        if (bracketMatch) {
+            const fileName = bracketMatch[1].trim();
+            const caption = (bracketMatch[2] || '').trim();
+            const ext = fileName.split('.').pop()?.toLowerCase() || '';
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+            return {
+                hasAttachment: true,
+                fileName,
+                fileType: isImg ? 'image' : (ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document'),
+                caption,
+                url: undefined,
+                size: `${ext.toUpperCase()} Document`,
+            };
+        }
+
+        // 3. Standalone filename ending with document extension
+        const standaloneMatch = rawText.trim().match(/^([a-zA-Z0-9_\-\.\(\)\s]+\.(pdf|docx?|xlsx?|csv|zip|rar|pptx?))$/i);
+        if (standaloneMatch) {
+            const fileName = standaloneMatch[1].trim();
+            const ext = fileName.split('.').pop()?.toLowerCase() || '';
+            return {
+                hasAttachment: true,
+                fileName,
+                fileType: ext === 'pdf' ? 'pdf' : ['doc', 'docx'].includes(ext) ? 'doc' : ['xls', 'xlsx', 'csv'].includes(ext) ? 'sheet' : ['zip', 'rar'].includes(ext) ? 'archive' : 'document',
+                caption: '',
+                url: undefined,
+                size: `${ext.toUpperCase()} Document`,
+            };
+        }
+
+        return null;
+    };
+
+    const handleDownloadAttachment = (fileName: string, fileUrl?: string) => {
+        if (fileUrl) {
+            const a = document.createElement('a');
+            a.href = fileUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return;
+        }
+
+        // Fallback: create downloadable file blob
+        const ext = fileName.split('.').pop()?.toLowerCase() || 'txt';
+        let mime = 'application/octet-stream';
+        if (ext === 'pdf') mime = 'application/pdf';
+        else if (ext === 'csv') mime = 'text/csv';
+        else if (ext === 'txt') mime = 'text/plain';
+
+        const content = `%PDF-1.4\n% Sathwara InfoTech WhatsApp SaaS Document\n% Document Name: ${fileName}\n% Timestamp: ${new Date().toISOString()}\n% Sample / Synced Document downloaded from WhatsApp Inbox.`;
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
     const handleSendReply = async (e: React.FormEvent) => {
@@ -463,7 +563,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         const optimisticMsg: ChatMessage = {
             id: 'temp-' + Date.now(),
             sender: 'agent',
-            text: textToSend,
+            text: fullMessageContent,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: 'sent', // Initially single gray tick
             attachment: currentAttachment || undefined,
@@ -705,8 +805,15 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground font-semibold truncate max-w-[120px]">
                                                 {thread.channel}
                                             </span>
-                                            <span className="text-xs text-muted-foreground truncate flex-1">
-                                                {thread.lastMessage}
+                                            <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
+                                                {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
+                                                    <>
+                                                        <FileText className="size-3 text-red-500 shrink-0 inline" />
+                                                        <span className="truncate">{thread.lastMessage.replace(/^📎\s*/, '')}</span>
+                                                    </>
+                                                ) : (
+                                                    thread.lastMessage
+                                                )}
                                             </span>
                                         </div>
 
@@ -864,32 +971,93 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                 </div>
                                             )}
 
-                                            {/* Render Rich Attachment Card if exists */}
-                                            {msg.attachment && (
-                                                <div className="mb-2">
-                                                    {msg.attachment.type === 'image' && msg.attachment.url ? (
-                                                        <div className="rounded-xl overflow-hidden border border-black/10 dark:border-white/10 max-w-xs shadow-xs">
-                                                            <img
-                                                                src={msg.attachment.url}
-                                                                alt={msg.attachment.name}
-                                                                className="w-full max-h-52 object-cover"
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs">
-                                                            <div className="size-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center shrink-0">
-                                                                <FileText className="size-4" />
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <p className="font-semibold truncate">{msg.attachment.name}</p>
-                                                                {msg.attachment.size && <p className="text-[10px] text-muted-foreground">{msg.attachment.size}</p>}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
+                                            {/* Render Rich WhatsApp Document Card or Plain Text */}
+                                            {(() => {
+                                                const parsedAttachment = parseAttachmentFromMessage(msg.text, msg.attachment);
 
-                                            {msg.text && <p>{msg.text}</p>}
+                                                if (parsedAttachment) {
+                                                    return (
+                                                        <div className="space-y-1.5 min-w-[220px] max-w-[320px] sm:max-w-[360px]">
+                                                            {/* Document Card */}
+                                                            {parsedAttachment.fileType === 'image' && parsedAttachment.url ? (
+                                                                <div className="rounded-xl overflow-hidden border border-black/10 dark:border-white/10 max-w-xs shadow-xs">
+                                                                    <img
+                                                                        src={parsedAttachment.url}
+                                                                        alt={parsedAttachment.fileName}
+                                                                        className="w-full max-h-56 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                                                                        onClick={() => window.open(parsedAttachment.url, '_blank')}
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div
+                                                                    onClick={() => handleDownloadAttachment(parsedAttachment.fileName, parsedAttachment.url)}
+                                                                    className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl cursor-pointer transition-all ${
+                                                                        msg.sender === 'agent'
+                                                                            ? 'bg-[#128c7e]/10 dark:bg-black/25 hover:bg-[#128c7e]/15 border border-[#128c7e]/20'
+                                                                            : 'bg-muted/70 hover:bg-muted border border-border/80'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                                        {/* Format Badge */}
+                                                                        <div
+                                                                            className={`size-10 sm:size-11 rounded-lg flex flex-col items-center justify-center shrink-0 font-bold shadow-xs border ${
+                                                                                parsedAttachment.fileType === 'pdf'
+                                                                                    ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+                                                                                    : parsedAttachment.fileType === 'doc'
+                                                                                    ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                                                                    : parsedAttachment.fileType === 'sheet'
+                                                                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                                                                    : parsedAttachment.fileType === 'archive'
+                                                                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                                                                    : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                                                                            }`}
+                                                                        >
+                                                                            <FileText className="size-4 sm:size-4.5" />
+                                                                            <span className="text-[9px] uppercase tracking-wider font-extrabold -mt-0.5">
+                                                                                {parsedAttachment.fileName.split('.').pop() || 'DOC'}
+                                                                            </span>
+                                                                        </div>
+
+                                                                        {/* File Name & Subtitle */}
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <p className="font-semibold text-xs sm:text-sm text-foreground truncate group-hover:underline">
+                                                                                {parsedAttachment.fileName}
+                                                                            </p>
+                                                                            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground mt-0.5">
+                                                                                <span className="font-semibold uppercase">{parsedAttachment.fileName.split('.').pop()}</span>
+                                                                                <span>•</span>
+                                                                                <span>{parsedAttachment.size || 'Document'}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Download Circle Action */}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleDownloadAttachment(parsedAttachment.fileName, parsedAttachment.url);
+                                                                        }}
+                                                                        className="size-8 sm:size-8.5 rounded-full bg-background dark:bg-card border border-border/80 text-foreground/80 hover:text-foreground hover:bg-muted flex items-center justify-center shrink-0 shadow-2xs hover:scale-105 active:scale-95 transition-transform"
+                                                                        title={`Download ${parsedAttachment.fileName}`}
+                                                                    >
+                                                                        <Download className="size-3.5 sm:size-4" />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Optional Caption Text */}
+                                                            {parsedAttachment.caption && (
+                                                                <p className="text-xs sm:text-sm text-foreground whitespace-pre-wrap px-1 pt-0.5">
+                                                                    {parsedAttachment.caption}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>;
+                                            })()}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
                                                 {msg.sender === 'agent' && (
