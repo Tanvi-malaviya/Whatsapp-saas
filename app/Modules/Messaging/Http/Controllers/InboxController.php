@@ -48,7 +48,7 @@ class InboxController extends Controller
                 'phone' => $c->contact_phone,
                 'channel' => $channelObj ? $channelObj->name : 'DukanHisab',
                 'lastMessage' => $lastMsg ? $lastMsg->content : 'No messages',
-                'time' => $c->last_message_at ? $c->last_message_at->diffForHumans() : 'Just now',
+                'time' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
                 'unread' => 0,
                 'windowRemaining' => $windowMinutes > 0 ? floor($windowMinutes / 60) . 'h ' . ($windowMinutes % 60) . 'm' : 'Closed',
                 'stage' => 'New',
@@ -58,7 +58,7 @@ class InboxController extends Controller
                     'id' => (string) $m->id,
                     'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
                     'text' => $m->content,
-                    'time' => $m->created_at ? $m->created_at->format('h:i A') : '',
+                    'time' => $m->created_at ? $m->created_at->timezone('Asia/Kolkata')->format('h:i A') : '',
                     'status' => $m->status ?? 'sent',
                 ])->values()->all(),
             ];
@@ -158,7 +158,7 @@ class InboxController extends Controller
                 'id' => (string) $msg->id,
                 'sender' => 'agent',
                 'text' => $msg->content,
-                'time' => now()->format('h:i A'),
+                'time' => now('Asia/Kolkata')->format('h:i A'),
                 'status' => $msg->status ?? 'sent',
             ],
         ]);

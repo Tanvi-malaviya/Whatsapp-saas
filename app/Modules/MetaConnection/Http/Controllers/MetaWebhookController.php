@@ -8,6 +8,7 @@ use App\Modules\Foundation\Models\Organization;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\WebhookInbox;
+use App\Modules\MetaConnection\Models\WhatsAppChannel;
 use App\Shared\PhoneNumber;
 use App\Shared\TenantContext;
 use Illuminate\Http\Request;
@@ -97,21 +98,10 @@ class MetaWebhookController extends Controller
         $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
         $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
 
-        // Associate with correct organization matching channel or active tenant
-        $channel = null;
-        if ($phoneNumberId) {
-            $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first();
-        }
-
-        $org = ($channel ? Organization::find($channel->organization_id) : null)
-            ?? TenantContext::get()
-            ?? Organization::first();
-
-        if (! $org) {
-            return;
-        }
-
-        TenantContext::set($org);
+        // Sender profile info
+        $contactProfile = $change['contacts'][0] ?? null;
+        $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
+        $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
 
         foreach ($messages as $msg) {
             $wamid = $msg['id'] ?? null;
@@ -130,7 +120,44 @@ class MetaWebhookController extends Controller
 
             $normalizedPhone = (new PhoneNumber($fromNumber))->getE164();
 
-            // Find or create active conversation thread
+            // 1. Match existing active conversation thread for this contact phone
+            $existingConv = Conversation::where('contact_phone', $normalizedPhone)
+                ->orderBy('last_message_at', 'desc')
+                ->first();
+
+            $org = null;
+            if ($existingConv) {
+                $org = Organization::find($existingConv->organization_id);
+            }
+
+            // 2. Fallback to active logged in user's current organization
+            if (! $org) {
+                $activeUserOrg = \App\Models\User::first()?->current_organization_id;
+                if ($activeUserOrg && $phoneNumberId) {
+                    $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)
+                        ->where('organization_id', $activeUserOrg)
+                        ->first();
+                    if ($channel) {
+                        $org = Organization::find($channel->organization_id);
+                    }
+                }
+            }
+
+            // 3. Fallback to channel's organization
+            if (! $org && $phoneNumberId) {
+                $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first();
+                $org = $channel ? Organization::find($channel->organization_id) : null;
+            }
+
+            $org = $org ?? TenantContext::get() ?? Organization::first();
+
+            if (! $org) {
+                continue;
+            }
+
+            TenantContext::set($org);
+
+            // Find or create active conversation thread in resolved organization
             $conversation = Conversation::firstOrCreate(
                 [
                     'organization_id' => $org->id,
@@ -143,8 +170,9 @@ class MetaWebhookController extends Controller
                 ]
             );
 
-            // Extend 24h customer service window
+            // Extend 24h customer service window & update last activity
             $conversation->extendWindow();
+            $conversation->update(['last_message_at' => now()]);
 
             // Store inbound message
             Message::create([
