@@ -35,6 +35,9 @@ type Channel = {
     messaging_limit: string;
     status: string;
     is_default: boolean;
+    access_token?: string;
+    app_id?: string;
+    app_secret?: string;
     webhook_verified_at: string | null;
     created_at: string;
 };
@@ -68,6 +71,29 @@ export default function WhatsAppConnect({
 
     // Form inputs for connecting ANY WhatsApp number (blank by default)
     const [form, setForm] = useState(emptyForm);
+    const [isEditing, setIsEditing] = useState(false);
+
+    const handleEditChannel = (ch: Channel) => {
+        setIsEditing(true);
+        setConnectMode('manual');
+        setForm({
+            name: ch.name || '',
+            phone_number: ch.phone_number || '',
+            phone_number_id: ch.phone_number_id || '',
+            waba_id: ch.waba_id || '',
+            access_token: ch.access_token || '',
+            app_id: ch.app_id || '',
+            app_secret: ch.app_secret || '',
+        });
+        setIsModalOpen(true);
+    };
+
+    const handleOpenNewModal = () => {
+        setIsEditing(false);
+        setForm(emptyForm);
+        setConnectMode('manual');
+        setIsModalOpen(true);
+    };
 
     const copyToClipboard = (text: string, field: string) => {
         navigator.clipboard.writeText(text);
@@ -81,6 +107,7 @@ export default function WhatsAppConnect({
             preserveScroll: true,
             onSuccess: () => {
                 setIsModalOpen(false);
+                setIsEditing(false);
             },
         });
     };
@@ -286,6 +313,16 @@ export default function WhatsAppConnect({
                                         <Button
                                             variant="outline"
                                             size="sm"
+                                            onClick={() => handleEditChannel(ch)}
+                                            className="h-8 text-xs border-border gap-1 text-foreground hover:bg-muted"
+                                        >
+                                            <Sliders className="size-3 text-[#47b672]" />
+                                            Edit Credentials
+                                        </Button>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
                                             onClick={() => handleTestPing(ch.id)}
                                             disabled={isTesting === ch.id}
                                             className="h-8 text-xs border-border gap-1"
@@ -388,10 +425,10 @@ export default function WhatsAppConnect({
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Smartphone className="size-4 text-[#47b672]" />
-                                Connect Any WhatsApp Business Number
+                                {isEditing ? `Edit Credentials: ${form.name}` : 'Connect Any WhatsApp Business Number'}
                             </DialogTitle>
                             <DialogDescription className="text-xs">
-                                Connect your own shop number, business SIM, or virtual WhatsApp number via Meta Cloud API.
+                                {isEditing ? 'Update your Meta Permanent Access Token, Phone Number ID or WABA ID.' : 'Connect your own shop number, business SIM, or virtual WhatsApp number via Meta Cloud API.'}
                             </DialogDescription>
                         </DialogHeader>
 
