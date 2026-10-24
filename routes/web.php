@@ -59,6 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('reports', 'reports/index')->name('reports.index');
 
     Route::post('/workspace/switch/{organization}', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'switch'])->name('workspace.switch');
+    Route::post('/workspace/store', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'store'])->name('workspace.store');
 });
 
 require __DIR__.'/settings.php';

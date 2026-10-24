@@ -21,4 +21,34 @@ class WorkspaceController extends Controller
 
         return back();
     }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+        ]);
+
+        $baseSlug = \Illuminate\Support\Str::slug($validated['name']);
+        $slug = $baseSlug ?: 'workspace';
+        $counter = 1;
+        while (Organization::where('slug', $slug)->exists()) {
+            $slug = $baseSlug . '-' . $counter++;
+        }
+
+        $user = $request->user();
+
+        $org = Organization::create([
+            'name' => $validated['name'],
+            'slug' => $slug,
+            'billing_email' => $user->email,
+            'timezone' => 'Asia/Kolkata',
+            'currency' => 'INR',
+            'status' => 'active',
+        ]);
+
+        $user->organizations()->attach($org->id, ['role' => 'Owner']);
+        $user->switchOrganization($org);
+
+        return back();
+    }
 }
