@@ -336,29 +336,6 @@ export default function CampaignsList({
                     </div>
                 </div>
 
-                {/* Empty State for Campaigns */}
-                {recentCampaigns.length === 0 && (
-                    <Card className="border-border shadow-2xs">
-                        <CardContent className="flex flex-col items-center justify-center p-8 sm:p-12 text-center">
-                            <div className="size-14 rounded-full bg-[#47b672]/15 flex items-center justify-center text-[#28804c] dark:text-[#52c480] mb-3">
-                                <Send className="size-6 text-[#47b672]" />
-                            </div>
-                            <h3 className="text-base font-bold text-foreground">
-                                No Broadcast Campaigns Yet
-                            </h3>
-                            <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
-                                Broadcast official Meta-approved WhatsApp templates to your audience with live delivery tracking.
-                            </p>
-                            <Button
-                                onClick={handleNewCampaignClick}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
-                            >
-                                <Plus className="size-4" />
-                                New Campaign
-                            </Button>
-                        </CardContent>
-                    </Card>
-                )}
 
                 {/* Recent Broadcast Campaigns History */}
                 {recentCampaigns.length > 0 && (
@@ -587,7 +564,21 @@ export default function CampaignsList({
                             </p>
                         </div>
                     </div>
-                ) : null}
+                ) : (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
+                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                            <Send className="size-7 opacity-60 text-[#47b672]" />
+                        </div>
+                        <div className="max-w-md space-y-1">
+                            <h3 className="text-base font-bold text-foreground">
+                                No Broadcast Templates Available
+                            </h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                Connect your WhatsApp Business number to start broadcasting campaigns. Click the <strong>"+ New Campaign"</strong> button above to connect.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* WhatsApp Connect Required Modal */}
