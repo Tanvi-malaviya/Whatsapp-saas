@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Send,
     Plus,
@@ -85,9 +85,13 @@ export default function CampaignsList({
     recentCampaigns = [],
     channel,
 }: CampaignsPageProps) {
+    const { tenant } = usePage().props as any;
+    const currentOrg = tenant?.current;
+
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false);
 
     // Broadcast Modal State
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -148,6 +152,18 @@ export default function CampaignsList({
         setManualPhoneInput('');
         setBroadcastResult(null);
         setIsBroadcastOpen(true);
+    };
+
+    const handleNewCampaignClick = () => {
+        if (!channel || channel.status !== 'connected') {
+            setIsConnectPromptOpen(true);
+            return;
+        }
+        if (templates.length === 0) {
+            alert('No approved Meta templates found for this workspace. Please create templates in your WhatsApp Business Manager.');
+            return;
+        }
+        openBroadcastModal();
     };
 
     const handleSelectTemplateInModal = (templateName: string) => {
@@ -311,7 +327,7 @@ export default function CampaignsList({
                     <div className="flex items-center gap-2">
                         <Button
                             size="sm"
-                            onClick={() => openBroadcastModal()}
+                            onClick={handleNewCampaignClick}
                             className="bg-[#47b672] hover:bg-[#3ca062] text-white gap-1.5 h-9 text-xs font-semibold shadow-xs"
                         >
                             <Plus className="size-4" />
@@ -319,6 +335,30 @@ export default function CampaignsList({
                         </Button>
                     </div>
                 </div>
+
+                {/* Empty State for Campaigns */}
+                {recentCampaigns.length === 0 && (
+                    <Card className="border-border shadow-2xs">
+                        <CardContent className="flex flex-col items-center justify-center p-8 sm:p-12 text-center">
+                            <div className="size-14 rounded-full bg-[#47b672]/15 flex items-center justify-center text-[#28804c] dark:text-[#52c480] mb-3">
+                                <Send className="size-6 text-[#47b672]" />
+                            </div>
+                            <h3 className="text-base font-bold text-foreground">
+                                No Broadcast Campaigns Yet
+                            </h3>
+                            <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
+                                Broadcast official Meta-approved WhatsApp templates to your audience with live delivery tracking.
+                            </p>
+                            <Button
+                                onClick={handleNewCampaignClick}
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
+                            >
+                                <Plus className="size-4" />
+                                New Campaign
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Recent Broadcast Campaigns History */}
                 {recentCampaigns.length > 0 && (
@@ -401,44 +441,8 @@ export default function CampaignsList({
                     </Card>
                 )}
 
-                {/* Main Content Area */}
-                {!channel || channel.status !== 'connected' ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-4 my-4">
-                        <div className="size-16 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                            <Radio className="size-8" />
-                        </div>
-                        <div className="max-w-md space-y-1">
-                            <h3 className="text-base font-bold text-foreground">
-                                WhatsApp Channel Not Connected
-                            </h3>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                This workspace does not have an active WhatsApp Business API channel connected yet. Connect your WhatsApp number to fetch approved Meta templates and launch broadcasts.
-                            </p>
-                        </div>
-                        <Button
-                            asChild
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
-                        >
-                            <Link href="/whatsapp/connect">
-                                Connect WhatsApp Number
-                            </Link>
-                        </Button>
-                    </div>
-                ) : templates.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
-                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                            <FileText className="size-7 opacity-60" />
-                        </div>
-                        <div className="max-w-md space-y-1">
-                            <h3 className="text-base font-bold text-foreground">
-                                No Templates Found on Meta
-                            </h3>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                No approved WhatsApp message templates were found in your Meta WABA account for this workspace. Please create or submit templates for approval in your Meta WhatsApp Business Manager.
-                            </p>
-                        </div>
-                    </div>
-                ) : (
+                {/* Templates Section */}
+                {templates.length > 0 ? (
                     <>
                         {/* Templates Filter & Search Controls */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
@@ -569,8 +573,58 @@ export default function CampaignsList({
                             </div>
                         )}
                     </>
-                )}
+                ) : channel && channel.status === 'connected' ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
+                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                            <FileText className="size-7 opacity-60" />
+                        </div>
+                        <div className="max-w-md space-y-1">
+                            <h3 className="text-base font-bold text-foreground">
+                                No Templates Found on Meta
+                            </h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                No approved WhatsApp message templates were found in your Meta WABA account for this workspace. Please create or submit templates for approval in your Meta WhatsApp Business Manager.
+                            </p>
+                        </div>
+                    </div>
+                ) : null}
             </div>
+
+            {/* WhatsApp Connect Required Modal */}
+            <Dialog open={isConnectPromptOpen} onOpenChange={setIsConnectPromptOpen}>
+                <DialogContent className="sm:max-w-md text-center p-6">
+                    <div className="size-14 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-600 dark:text-amber-400 mx-auto mb-2">
+                        <Radio className="size-7" />
+                    </div>
+                    <DialogHeader className="text-center sm:text-center">
+                        <DialogTitle className="text-base font-bold text-foreground">
+                            WhatsApp Channel Not Connected
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                            First you need to connect your WhatsApp Business number to <strong>{currentOrg?.name || 'this workspace'}</strong> before you can fetch approved Meta templates and launch broadcast campaigns.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-4">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsConnectPromptOpen(false)}
+                            className="w-full sm:w-auto text-xs h-9"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            asChild
+                            size="sm"
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs w-full sm:w-auto"
+                        >
+                            <Link href="/whatsapp/connect">
+                                Connect WhatsApp Number
+                            </Link>
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Broadcast Launch Modal Dialog */}
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>

@@ -27,22 +27,14 @@ export function WhatsAppStatusPill({ isConnected = false, phoneNumber }: Props) 
 
     return (
         <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-50/60 px-2.5 py-1 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+            <Link
+                href="/whatsapp/connect"
+                className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-50/60 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-100/80 dark:bg-amber-950/40 dark:text-amber-300 transition-colors"
+                title="Click to connect WhatsApp number"
+            >
                 <span className="size-2 rounded-full bg-amber-500"></span>
                 <span className="font-medium">WhatsApp Disconnected</span>
-            </div>
-            {!isConnectPage && (
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-0 shadow-xs"
-                    asChild
-                >
-                    <Link href="/whatsapp/connect">
-                        Connect Number
-                    </Link>
-                </Button>
-            )}
+            </Link>
         </div>
     );
 }
