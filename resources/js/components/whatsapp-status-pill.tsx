@@ -1,7 +1,7 @@
 import { MessageSquare, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 
 type Props = {
     isConnected?: boolean;
@@ -9,6 +9,9 @@ type Props = {
 };
 
 export function WhatsAppStatusPill({ isConnected = false, phoneNumber }: Props) {
+    const { url } = usePage();
+    const isConnectPage = url.startsWith('/whatsapp/connect') || url.startsWith('/channels');
+
     if (isConnected) {
         return (
             <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50/60 px-3 py-1 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -28,16 +31,18 @@ export function WhatsAppStatusPill({ isConnected = false, phoneNumber }: Props) 
                 <span className="size-2 rounded-full bg-amber-500"></span>
                 <span className="font-medium">WhatsApp Disconnected</span>
             </div>
-            <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-0 shadow-xs"
-                asChild
-            >
-                <Link href="/whatsapp/connect">
-                    Connect Number
-                </Link>
-            </Button>
+            {!isConnectPage && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white border-0 shadow-xs"
+                    asChild
+                >
+                    <Link href="/whatsapp/connect">
+                        Connect Number
+                    </Link>
+                </Button>
+            )}
         </div>
     );
 }

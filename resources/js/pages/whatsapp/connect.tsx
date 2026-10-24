@@ -194,13 +194,15 @@ export default function WhatsAppConnect({
                         </Link>
                     </Button>
 
-                    <Button
-                        onClick={openNewChannelModal}
-                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
-                    >
-                        <Plus className="size-4" />
-                        Connect New WhatsApp Number
-                    </Button>
+                    {channels.length > 0 && (
+                        <Button
+                            onClick={openNewChannelModal}
+                            className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
+                        >
+                            <Plus className="size-4" />
+                            Connect New WhatsApp Number
+                        </Button>
+                    )}
                 </div>
 
                 {/* Header */}
