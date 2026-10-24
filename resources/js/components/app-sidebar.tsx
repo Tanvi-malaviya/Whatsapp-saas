@@ -31,6 +31,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
+import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 
 export function AppSidebar() {
     const { url } = usePage();
@@ -60,22 +61,7 @@ export function AppSidebar() {
         <Sidebar collapsible="icon" variant="inset" className="border-r border-border bg-card">
             {/* 1. Workspace Profile Header */}
             <SidebarHeader className="border-b border-border/80 p-3">
-                <div className="flex items-center justify-between rounded-xl border border-border bg-background p-2 group-data-[collapsible=icon]:p-1 shadow-2xs">
-                    <div className="flex items-center gap-2.5 truncate">
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-black text-[#f59e0b] font-bold text-sm shadow-xs">
-                            S
-                        </div>
-                        <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
-                            <span className="truncate text-xs font-bold text-foreground">
-                                {currentOrg?.name || 'Sathwara InfoTech'}
-                            </span>
-                            <span className="truncate text-[10px] text-muted-foreground font-medium">
-                                Admin
-                            </span>
-                        </div>
-                    </div>
-                    <ChevronDown className="size-3.5 text-muted-foreground opacity-70 group-data-[collapsible=icon]:hidden" />
-                </div>
+                <WorkspaceSwitcher />
             </SidebarHeader>
 
             {/* 2. Main Navigation Items */}

@@ -106,14 +106,14 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
         }
     };
 
-    const totalPipelineValue = leads.reduce((sum, l) => sum + (l.stage !== 'Won' && l.stage !== 'Lost' ? l.dealValue : 0), 0);
-    const wonValue = leads.filter(l => l.stage === 'Won').reduce((sum, l) => sum + l.dealValue, 0);
+    const activeLeadsCount = leads.filter((l) => l.stage !== 'Won' && l.stage !== 'Lost').length;
+    const wonCount = leads.filter((l) => l.stage === 'Won').length;
 
     return (
         <>
             <Head title="Chat Stages Pipeline - Sathwara InfoTech" />
 
-            <div className="flex-1 flex flex-col gap-6 p-4 sm:p-6 lg:p-4 min-w-0">
+            <div className="flex-1 flex flex-col gap-6 p-4 sm:p-6 lg:p-6 min-w-0">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
@@ -122,9 +122,6 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                                 <Kanban className="size-5 text-[#47b672]" />
                                 Chat Lead Stages &amp; Pipeline
                             </h2>
-                            <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                Kanban CRM
-                            </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5">
                             Track every WhatsApp prospect from initial message to paid conversion.
@@ -132,14 +129,14 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <div className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-right shadow-2xs">
-                            <span className="text-muted-foreground text-[10px] block">Active Pipeline</span>
-                            <span className="font-bold text-foreground">₹{totalPipelineValue.toLocaleString()}</span>
+                        <div className="rounded-lg border border-border bg-card px-3.5 py-1.5 text-xs text-right shadow-2xs">
+                            <span className="text-muted-foreground text-[10px] block font-medium">Active Leads</span>
+                            <span className="font-bold text-foreground text-sm">{activeLeadsCount} Leads</span>
                         </div>
 
-                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-right shadow-2xs">
-                            <span className="text-emerald-600 text-[10px] block">Won Revenue</span>
-                            <span className="font-bold text-emerald-600">₹{wonValue.toLocaleString()}</span>
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-1.5 text-xs text-right shadow-2xs">
+                            <span className="text-emerald-600 dark:text-emerald-400 text-[10px] block font-medium">Won Conversions</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{wonCount} Won</span>
                         </div>
                     </div>
                 </div>
@@ -147,8 +144,7 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                 {/* Kanban Pipeline Board (Horizontal Scrollable) */}
                 <div className="flex gap-4 overflow-x-auto pb-4 items-start">
                     {STAGES.map((col) => {
-                        const colLeads = leads.filter(l => l.stage === col.id);
-                        const colTotal = colLeads.reduce((acc, l) => acc + l.dealValue, 0);
+                        const colLeads = leads.filter((l) => l.stage === col.id);
 
                         return (
                             <div
@@ -161,13 +157,9 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                                         <h3 className="font-bold text-xs text-foreground truncate">
                                             {col.label}
                                         </h3>
-                                        <Badge variant="outline" className="text-[10px] bg-background/80 font-bold">
-                                            {colLeads.length}
+                                        <Badge variant="outline" className="text-[10px] bg-background/80 font-bold px-2 py-0.5">
+                                            {colLeads.length} {colLeads.length === 1 ? 'lead' : 'leads'}
                                         </Badge>
-                                    </div>
-                                    <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
-                                        <span>Total:</span>
-                                        <span className="font-semibold text-foreground">₹{colTotal.toLocaleString()}</span>
                                     </div>
                                 </div>
 
@@ -179,22 +171,24 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                                             className="rounded-lg border border-border bg-background p-3 shadow-2xs hover:border-[#47b672]/60 transition-all space-y-2"
                                         >
                                             <div className="flex items-start justify-between gap-1">
-                                                <div>
-                                                    <h4 className="font-semibold text-xs text-foreground">
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-semibold text-xs text-foreground truncate">
                                                         {lead.contactName}
                                                     </h4>
-                                                    <span className="text-[10px] text-muted-foreground font-mono">
+                                                    <span className="text-[10px] text-muted-foreground font-mono block">
                                                         {lead.phone}
                                                     </span>
                                                 </div>
-                                                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                                    ₹{lead.dealValue.toLocaleString()}
-                                                </span>
+                                                <Badge variant="outline" className="text-[10px] font-medium bg-muted/60 text-muted-foreground px-1.5 py-0.2 shrink-0">
+                                                    {lead.interest || 'Prospect'}
+                                                </Badge>
                                             </div>
 
-                                            <div className="rounded bg-muted/40 p-1.5 text-[10px] text-muted-foreground">
-                                                {lead.interest}
-                                            </div>
+                                            {lead.lastMessage && (
+                                                <p className="text-[11px] text-muted-foreground line-clamp-2 bg-muted/30 rounded p-1.5 border border-border/50">
+                                                    {lead.lastMessage}
+                                                </p>
+                                            )}
 
                                             <div className="flex items-center justify-between pt-1 border-t border-border/60 text-[10px] text-muted-foreground">
                                                 <span>In stage: {lead.daysInStage}d</span>
@@ -207,7 +201,7 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                                                     asChild
                                                     variant="outline"
                                                     size="sm"
-                                                    className="h-6 text-[10px] px-2 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
+                                                    className="h-6 text-[10px] px-2 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30 hover:bg-[#47b672]/10"
                                                 >
                                                     <Link href="/inbox">
                                                         <MessageSquare className="size-2.5 mr-1" />
@@ -216,22 +210,22 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
                                                 </Button>
 
                                                 <div className="flex items-center gap-1">
-                                                    {STAGES.findIndex(s => s.id === lead.stage) > 0 && (
+                                                    {STAGES.findIndex((s) => s.id === lead.stage) > 0 && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="h-6 w-6 p-0 text-muted-foreground"
+                                                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                                                             onClick={() => moveStage(lead.id, 'prev')}
                                                             title="Move backward"
                                                         >
                                                             ‹
                                                         </Button>
                                                     )}
-                                                    {STAGES.findIndex(s => s.id === lead.stage) < STAGES.length - 1 && (
+                                                    {STAGES.findIndex((s) => s.id === lead.stage) < STAGES.length - 1 && (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="h-6 w-6 p-0 text-[#47b672] font-bold"
+                                                            className="h-6 w-6 p-0 text-[#47b672] font-bold hover:bg-[#47b672]/10"
                                                             onClick={() => moveStage(lead.id, 'next')}
                                                             title="Advance stage"
                                                         >
