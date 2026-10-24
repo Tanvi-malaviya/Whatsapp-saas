@@ -50,13 +50,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // CRM & Segments
     Route::get('contacts', function (\Illuminate\Http\Request $request) {
-        $org = \App\Shared\TenantContext::organization()
-            ?? $request->user()?->currentOrganization
-            ?? \App\Modules\Foundation\Models\Organization::first();
-        
-        $orgId = $org?->id;
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
 
-        $contacts = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        \App\Shared\TenantContext::set($org);
+
+        $contacts = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)
             ->orderByDesc('last_message_at')
             ->get()
             ->map(function ($c) {
@@ -84,9 +86,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'phone' => 'required|string|max:30',
         ]);
 
-        $org = \App\Shared\TenantContext::organization()
-            ?? $request->user()?->currentOrganization
-            ?? \App\Modules\Foundation\Models\Organization::first();
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
 
         $phone = preg_replace('/[^\d+]/', '', $request->phone);
         if (!str_starts_with($phone, '+')) {

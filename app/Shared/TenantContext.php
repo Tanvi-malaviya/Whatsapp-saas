@@ -33,6 +33,11 @@ class TenantContext
         return self::get();
     }
 
+    public static function organization(): ?Organization
+    {
+        return self::get();
+    }
+
     public static function timezone(): string
     {
         return self::$currentOrganization?->timezone ?? 'Asia/Kolkata';
