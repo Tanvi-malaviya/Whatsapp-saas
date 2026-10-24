@@ -53,7 +53,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('segments', 'contacts/segments')->name('segments.index');
 
     // Broadcasts & Templates
-    Route::inertia('campaigns', 'campaigns/index')->name('campaigns.index');
+    Route::get('campaigns', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'index'])->name('campaigns.index');
+    Route::post('campaigns/broadcast', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'broadcast'])->name('campaigns.broadcast');
     Route::inertia('templates', 'campaigns/templates')->name('templates.index');
 
     Route::inertia('reports', 'reports/index')->name('reports.index');
