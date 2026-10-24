@@ -114,6 +114,87 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return back()->with('success', 'Contact created successfully.');
     })->name('contacts.store');
 
+    Route::post('contacts/bulk', function (\Illuminate\Http\Request $request) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+
+        $list = $request->input('contacts', []);
+        foreach ($list as $item) {
+            $name = trim($item['name'] ?? '');
+            $phone = trim($item['phone'] ?? '');
+            if (empty($phone)) continue;
+
+            $cleanPhone = preg_replace('/[^\d+]/', '', $phone);
+            if (!str_starts_with($cleanPhone, '+')) {
+                $cleanPhone = '+' . ltrim($cleanPhone, '0');
+            }
+
+            \App\Modules\Messaging\Models\Conversation::updateOrCreate(
+                [
+                    'organization_id' => $org->id,
+                    'contact_phone' => $cleanPhone,
+                ],
+                [
+                    'contact_name' => $name ?: $cleanPhone,
+                    'pipeline_stage' => 'New',
+                    'status' => 'active',
+                    'last_message_at' => now(),
+                ]
+            );
+        }
+
+        return back()->with('success', count($list) . ' contacts imported.');
+    })->name('contacts.bulk');
+
+    Route::put('contacts/{id}', function (\Illuminate\Http\Request $request, string $id) {
+        $validated = $request->validate([
+            'name' => 'required|string|max:100',
+            'phone' => 'required|string|max:30',
+            'stage' => 'nullable|string|in:New,Contacted,Interested,Won',
+        ]);
+
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+
+        $conv = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
+            ->where('id', $id)
+            ->first();
+
+        if ($conv) {
+            $cleanPhone = preg_replace('/[^\d+]/', '', $validated['phone']);
+            if (!str_starts_with($cleanPhone, '+')) {
+                $cleanPhone = '+' . ltrim($cleanPhone, '0');
+            }
+
+            $conv->update([
+                'contact_name' => $validated['name'],
+                'contact_phone' => $cleanPhone,
+                'pipeline_stage' => $validated['stage'] ?? $conv->pipeline_stage,
+            ]);
+        }
+
+        return back()->with('success', 'Contact updated successfully.');
+    })->name('contacts.update');
+
+    Route::delete('contacts/{id}', function (\Illuminate\Http\Request $request, string $id) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id
+            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+
+        \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
+            ->where('id', $id)
+            ->delete();
+
+        return back()->with('success', 'Contact deleted successfully.');
+    })->name('contacts.destroy');
+
     Route::inertia('segments', 'contacts/segments')->name('segments.index');
 
     // Broadcasts & Templates

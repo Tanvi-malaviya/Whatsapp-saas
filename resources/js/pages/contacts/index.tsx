@@ -11,6 +11,8 @@ import {
     ArrowLeft,
     Check,
     FileSpreadsheet,
+    Pencil,
+    Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,9 +57,78 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const [stage, setStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
     const [optIn, setOptIn] = useState(true);
 
+    // Edit Form State
+    const [editingContact, setEditingContact] = useState<Contact | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editPhone, setEditPhone] = useState('');
+    const [editStage, setEditStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
+
+    // Delete Confirmation Modal State
+    const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const [isUploading, setIsUploading] = useState(false);
+
     const showToast = (msg: string) => {
         setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 3000);
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const text = event.target?.result as string;
+            if (!text) {
+                setIsUploading(false);
+                return;
+            }
+            const lines = text.split(/[\r\n]+/).map((l) => l.trim()).filter((l) => l.length > 0);
+            if (lines.length === 0) {
+                setIsUploading(false);
+                showToast('Uploaded CSV file is empty.');
+                return;
+            }
+
+            const firstLine = lines[0].toLowerCase();
+            const dataLines = firstLine.includes('phone') || firstLine.includes('name') ? lines.slice(1) : lines;
+            const parsedContacts: { name: string; phone: string }[] = [];
+
+            for (const line of dataLines) {
+                const parts = line.split(',').map((p) => p.trim());
+                if (parts.length >= 2 && parts[1].length >= 8) {
+                    parsedContacts.push({ name: parts[0] || 'Customer', phone: parts[1] });
+                } else if (parts.length === 1 && parts[0].length >= 8) {
+                    parsedContacts.push({ name: 'Contact ' + parts[0], phone: parts[0] });
+                }
+            }
+
+            if (parsedContacts.length === 0) {
+                setIsUploading(false);
+                showToast('No valid contacts found in CSV. Please ensure each row has at least Name,Phone.');
+                return;
+            }
+
+            router.post(
+                '/contacts/bulk',
+                { contacts: parsedContacts },
+                {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        setIsImportOpen(false);
+                        setIsUploading(false);
+                        showToast(`Successfully imported ${parsedContacts.length} contacts!`);
+                    },
+                    onError: () => {
+                        setIsUploading(false);
+                    },
+                }
+            );
+        };
+        reader.readAsText(file);
     };
 
     const handleAddContact = (e: React.FormEvent) => {
@@ -91,6 +162,62 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                 setStage('New');
                 setOptIn(true);
                 showToast(`Contact "${name.trim()}" saved successfully!`);
+            },
+        });
+    };
+
+    const openEditModal = (contact: Contact) => {
+        setEditingContact(contact);
+        setEditName(contact.name);
+        setEditPhone(contact.phone);
+        setEditStage(contact.stage);
+    };
+
+    const handleUpdateContact = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingContact || !editName.trim() || !editPhone.trim()) return;
+
+        let cleaned = editPhone.replace(/[^\d+]/g, '');
+        if (!cleaned.startsWith('+')) {
+            if (cleaned.length === 10) {
+                cleaned = '+91' + cleaned;
+            } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+                cleaned = '+' + cleaned;
+            } else {
+                cleaned = '+91' + cleaned;
+            }
+        }
+
+        router.put(
+            `/contacts/${editingContact.id}`,
+            {
+                name: editName.trim(),
+                phone: cleaned,
+                stage: editStage,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setEditingContact(null);
+                    showToast(`Contact "${editName.trim()}" updated successfully!`);
+                },
+            }
+        );
+    };
+
+    const handleConfirmDelete = () => {
+        if (!deletingContact) return;
+        setIsDeleting(true);
+        router.delete(`/contacts/${deletingContact.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                const deletedName = deletingContact.name;
+                setDeletingContact(null);
+                setIsDeleting(false);
+                showToast(`Contact "${deletedName}" deleted successfully.`);
+            },
+            onError: () => {
+                setIsDeleting(false);
             },
         });
     };
@@ -206,6 +333,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                         <th className="p-3.5">City</th>
                                         <th className="p-3.5">Lead Stage</th>
                                         <th className="p-3.5">Consent / Opt-in</th>
+                                        <th className="p-3.5 text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border/40">
@@ -238,6 +366,28 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                                         <XCircle className="size-3.5" /> Suppressed (Opt-Out)
                                                     </span>
                                                 )}
+                                            </td>
+                                            <td className="p-3.5 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => openEditModal(contact)}
+                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                                        title="Edit contact"
+                                                    >
+                                                        <Pencil className="size-3.5 text-emerald-600" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setDeletingContact(contact)}
+                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+                                                        title="Delete contact"
+                                                    >
+                                                        <Trash2 className="size-3.5 text-destructive" />
+                                                    </Button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -367,20 +517,29 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             Import Contacts from CSV
                         </DialogTitle>
                         <DialogDescription className="text-xs">
-                            Upload a spreadsheet or CSV file with names, WhatsApp numbers, and city.
+                            Upload a spreadsheet or CSV file with customer names and WhatsApp numbers.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
-                        <div className="rounded-lg border-2 border-dashed border-sidebar-border p-6 text-center hover:bg-muted/20 transition-colors cursor-pointer">
-                            <Upload className="mx-auto size-8 text-muted-foreground mb-2" />
-                            <p className="text-xs font-semibold text-foreground">Click to upload CSV or drag and drop</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Columns: Name, Phone, Email, City (Max 5,000 rows)</p>
-                        </div>
+                        <label className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-sidebar-border p-6 text-center hover:bg-muted/20 transition-colors cursor-pointer">
+                            <Upload className="size-8 text-muted-foreground mb-2" />
+                            <p className="text-xs font-semibold text-foreground">
+                                {isUploading ? 'Importing CSV Contacts...' : 'Click to select CSV file'}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Columns: Name, Phone (Max 5,000 rows)</p>
+                            <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                className="hidden"
+                                disabled={isUploading}
+                                onChange={handleFileUpload}
+                            />
+                        </label>
 
                         <div className="rounded-md bg-muted/40 p-3 text-[11px] text-muted-foreground space-y-1">
                             <p className="font-semibold text-foreground">CSV Format Example:</p>
-                            <p className="font-mono text-[10px]">Name,Phone,Email,City<br/>Rahul Patel,9825012345,rahul@mail.com,Ahmedabad</p>
+                            <p className="font-mono text-[10px]">Name,Phone<br/>Customer Name,919876543210</p>
                         </div>
                     </div>
 
@@ -389,17 +548,125 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             type="button"
                             variant="outline"
                             size="sm"
+                            disabled={isUploading}
                             onClick={() => setIsImportOpen(false)}
+                        >
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            {/* Modal 3: Edit Contact Dialog */}
+            <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <Pencil className="size-4 text-emerald-600" />
+                            Edit Contact Details
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Update contact name, WhatsApp phone number, and lead pipeline stage.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleUpdateContact} className="space-y-3.5 py-2">
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">Full Name *</label>
+                            <input
+                                type="text"
+                                required
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">WhatsApp Number *</label>
+                            <input
+                                type="text"
+                                required
+                                value={editPhone}
+                                onChange={(e) => setEditPhone(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold">Lead Stage</label>
+                            <select
+                                value={editStage}
+                                onChange={(e) => setEditStage(e.target.value as any)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            >
+                                <option value="New">New</option>
+                                <option value="Contacted">Contacted</option>
+                                <option value="Interested">Interested</option>
+                                <option value="Won">Won</option>
+                            </select>
+                        </div>
+
+                        <DialogFooter className="pt-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingContact(null)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                                Update Contact
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 4: Delete Confirmation Dialog */}
+            <Dialog
+                open={!!deletingContact}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) setDeletingContact(null);
+                }}
+            >
+                <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40 mb-2">
+                            <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                        </div>
+                        <DialogTitle className="text-center text-base font-bold text-foreground">
+                            Delete Contact
+                        </DialogTitle>
+                        <DialogDescription className="text-center text-xs text-muted-foreground pt-1">
+                            Are you sure you want to delete <span className="font-semibold text-foreground">{deletingContact?.name}</span> ({deletingContact?.phone})?
+                            This contact and conversation will be permanently removed.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <DialogFooter className="flex-row gap-2 sm:justify-center pt-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isDeleting}
+                            onClick={() => setDeletingContact(null)}
+                            className="flex-1"
                         >
                             Cancel
                         </Button>
                         <Button
                             type="button"
                             size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                            onClick={handleImportSample}
+                            disabled={isDeleting}
+                            onClick={handleConfirmDelete}
+                            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium"
                         >
-                            Simulate Import
+                            {isDeleting ? 'Deleting...' : 'Yes, Delete'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

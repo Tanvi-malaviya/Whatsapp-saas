@@ -149,6 +149,19 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
 
+    // Prevent outer main window scrollbar on the inbox screen
+    useEffect(() => {
+        const origHtmlOverflow = document.documentElement.style.overflow;
+        const origBodyOverflow = document.body.style.overflow;
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.documentElement.style.overflow = origHtmlOverflow;
+            document.body.style.overflow = origBodyOverflow;
+        };
+    }, []);
+
     // Sync state when initialThreads prop changes (e.g. on workspace switch)
     useEffect(() => {
         setThreads(initialThreads);
@@ -622,8 +635,8 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         <>
             <Head title="Chat - Sathwara InfoTech | WhatsApp Business SaaS" />
 
-            {/* Clean Modern 2-Column WhatsApp Chat Layout */}
-            <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-background">
+            {/* Clean Modern 2-Column WhatsApp Chat Layout - Single Screen, No Outer Scrollbar */}
+            <div className="flex flex-1 h-[calc(100dvh-64px)] max-h-[calc(100dvh-64px)] overflow-hidden bg-background">
                 {/* 1. Left Column: Conversation List */}
                 <div className="w-full sm:w-80 md:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card">
                     {/* Search & Header */}
