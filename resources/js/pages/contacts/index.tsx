@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     Users,
     Plus,
@@ -23,7 +23,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type Contact = {
     id: string;
@@ -35,45 +35,12 @@ type Contact = {
     consent: 'opted_in' | 'opted_out';
 };
 
-export default function ContactsList() {
-    const [contacts, setContacts] = useState<Contact[]>([
-        {
-            id: '1',
-            name: 'Rahul Patel',
-            phone: '+919825012345',
-            email: 'rahul@example.com',
-            city: 'Ahmedabad',
-            stage: 'Interested',
-            consent: 'opted_in',
-        },
-        {
-            id: '2',
-            name: 'Priya Sharma',
-            phone: '+919428067890',
-            email: 'priya@example.com',
-            city: 'Surat',
-            stage: 'Contacted',
-            consent: 'opted_in',
-        },
-        {
-            id: '3',
-            name: 'Amit Shah',
-            phone: '+917984054321',
-            email: 'amit@example.com',
-            city: 'Vadodara',
-            stage: 'Won',
-            consent: 'opted_in',
-        },
-        {
-            id: '4',
-            name: 'Dhaval Joshi',
-            phone: '+919898099887',
-            email: 'dhaval@example.com',
-            city: 'Rajkot',
-            stage: 'New',
-            consent: 'opted_out',
-        },
-    ]);
+export default function ContactsList({ initialContacts = [] }: { initialContacts?: Contact[] }) {
+    const [contacts, setContacts] = useState<Contact[]>(initialContacts);
+
+    useEffect(() => {
+        setContacts(initialContacts);
+    }, [initialContacts]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddOpen, setIsAddOpen] = useState(false);
@@ -109,35 +76,23 @@ export default function ContactsList() {
             }
         }
 
-        const newContact: Contact = {
-            id: Date.now().toString(),
+        router.post('/contacts', {
             name: name.trim(),
             phone: cleaned,
-            email: email.trim() || '—',
-            city: city.trim() || 'Gujarat',
             stage,
-            consent: optIn ? 'opted_in' : 'opted_out',
-        };
-
-        setContacts([newContact, ...contacts]);
-        setIsAddOpen(false);
-        setName('');
-        setPhone('');
-        setEmail('');
-        setCity('');
-        setStage('New');
-        setOptIn(true);
-        showToast(`Contact "${newContact.name}" added successfully!`);
-    };
-
-    const handleImportSample = () => {
-        const sampleContacts: Contact[] = [
-            { id: Date.now().toString() + '1', name: 'Kavita Mehta', phone: '+919879112233', email: 'kavita@mehta.in', city: 'Bhavnagar', stage: 'New', consent: 'opted_in' },
-            { id: Date.now().toString() + '2', name: 'Jignesh Vora', phone: '+919909223344', email: 'jignesh@vora.in', city: 'Gandhinagar', stage: 'Interested', consent: 'opted_in' },
-        ];
-        setContacts([...sampleContacts, ...contacts]);
-        setIsImportOpen(false);
-        showToast('Successfully imported 2 sample contacts from CSV!');
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setIsAddOpen(false);
+                setName('');
+                setPhone('');
+                setEmail('');
+                setCity('');
+                setStage('New');
+                setOptIn(true);
+                showToast(`Contact "${name.trim()}" saved successfully!`);
+            },
+        });
     };
 
     const filtered = contacts.filter(
@@ -217,54 +172,79 @@ export default function ContactsList() {
 
                 {/* Contacts Data Table */}
                 <Card className="border-sidebar-border/70 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                            <thead className="bg-muted/50 border-b border-sidebar-border/60 uppercase font-semibold text-muted-foreground text-[10px]">
-                                <tr>
-                                    <th className="p-3.5">Name</th>
-                                    <th className="p-3.5">WhatsApp Number</th>
-                                    <th className="p-3.5">Email</th>
-                                    <th className="p-3.5">City</th>
-                                    <th className="p-3.5">Lead Stage</th>
-                                    <th className="p-3.5">Consent / Opt-in</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-sidebar-border/40">
-                                {filtered.map((contact) => (
-                                    <tr key={contact.id} className="hover:bg-muted/20 transition-colors">
-                                        <td className="p-3.5 font-semibold text-foreground">
-                                            {contact.name}
-                                        </td>
-                                        <td className="p-3.5 font-mono text-muted-foreground">
-                                            {contact.phone}
-                                        </td>
-                                        <td className="p-3.5 text-muted-foreground">
-                                            {contact.email}
-                                        </td>
-                                        <td className="p-3.5 text-muted-foreground">
-                                            {contact.city}
-                                        </td>
-                                        <td className="p-3.5">
-                                            <Badge variant="outline" className="text-[10px]">
-                                                {contact.stage}
-                                            </Badge>
-                                        </td>
-                                        <td className="p-3.5">
-                                            {contact.consent === 'opted_in' ? (
-                                                <span className="flex items-center gap-1 text-emerald-600 font-medium text-[11px]">
-                                                    <CheckCircle2 className="size-3.5" /> Opted In
-                                                </span>
-                                            ) : (
-                                                <span className="flex items-center gap-1 text-red-600 font-medium text-[11px]">
-                                                    <XCircle className="size-3.5" /> Suppressed (Opt-Out)
-                                                </span>
-                                            )}
-                                        </td>
+                    {filtered.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-12 text-center">
+                            <div className="size-14 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-3">
+                                <Users className="size-7" />
+                            </div>
+                            <h3 className="text-base font-bold text-foreground">
+                                No Contacts Found
+                            </h3>
+                            <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
+                                {searchTerm
+                                    ? 'No contacts match your search query.'
+                                    : 'Contacts are automatically captured when customers message you on WhatsApp, or you can add contacts manually.'}
+                            </p>
+                            {!searchTerm && (
+                                <Button
+                                    onClick={() => setIsAddOpen(true)}
+                                    className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
+                                >
+                                    <Plus className="size-4" />
+                                    Add First Contact
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead className="bg-muted/50 border-b border-sidebar-border/60 uppercase font-semibold text-muted-foreground text-[10px]">
+                                    <tr>
+                                        <th className="p-3.5">Name</th>
+                                        <th className="p-3.5">WhatsApp Number</th>
+                                        <th className="p-3.5">Email</th>
+                                        <th className="p-3.5">City</th>
+                                        <th className="p-3.5">Lead Stage</th>
+                                        <th className="p-3.5">Consent / Opt-in</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-sidebar-border/40">
+                                    {filtered.map((contact) => (
+                                        <tr key={contact.id} className="hover:bg-muted/20 transition-colors">
+                                            <td className="p-3.5 font-semibold text-foreground">
+                                                {contact.name}
+                                            </td>
+                                            <td className="p-3.5 font-mono text-muted-foreground">
+                                                {contact.phone}
+                                            </td>
+                                            <td className="p-3.5 text-muted-foreground">
+                                                {contact.email}
+                                            </td>
+                                            <td className="p-3.5 text-muted-foreground">
+                                                {contact.city}
+                                            </td>
+                                            <td className="p-3.5">
+                                                <Badge variant="outline" className="text-[10px]">
+                                                    {contact.stage}
+                                                </Badge>
+                                            </td>
+                                            <td className="p-3.5">
+                                                {contact.consent === 'opted_in' ? (
+                                                    <span className="flex items-center gap-1 text-emerald-600 font-medium text-[11px]">
+                                                        <CheckCircle2 className="size-3.5" /> Opted In
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1 text-red-600 font-medium text-[11px]">
+                                                        <XCircle className="size-3.5" /> Suppressed (Opt-Out)
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </Card>
             </div>
 

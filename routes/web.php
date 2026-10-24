@@ -49,7 +49,66 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('chat/stages/update-stage', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'updateStage'])->name('chat.stages.update');
 
     // CRM & Segments
-    Route::inertia('contacts', 'contacts/index')->name('contacts.index');
+    Route::get('contacts', function (\Illuminate\Http\Request $request) {
+        $org = \App\Shared\TenantContext::organization()
+            ?? $request->user()?->currentOrganization
+            ?? \App\Modules\Foundation\Models\Organization::first();
+        
+        $orgId = $org?->id;
+
+        $contacts = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
+            ->orderByDesc('last_message_at')
+            ->get()
+            ->map(function ($c) {
+                return [
+                    'id' => (string) $c->id,
+                    'name' => $c->contact_name ?: ($c->contact_phone ?: 'Unknown Contact'),
+                    'phone' => $c->contact_phone,
+                    'email' => '—',
+                    'city' => '—',
+                    'stage' => $c->pipeline_stage ?: 'New',
+                    'consent' => 'opted_in',
+                ];
+            })
+            ->values()
+            ->all();
+
+        return \Inertia\Inertia::render('contacts/index', [
+            'initialContacts' => $contacts,
+        ]);
+    })->name('contacts.index');
+
+    Route::post('contacts', function (\Illuminate\Http\Request $request) {
+        $request->validate([
+            'name' => 'required|string|max:100',
+            'phone' => 'required|string|max:30',
+        ]);
+
+        $org = \App\Shared\TenantContext::organization()
+            ?? $request->user()?->currentOrganization
+            ?? \App\Modules\Foundation\Models\Organization::first();
+
+        $phone = preg_replace('/[^\d+]/', '', $request->phone);
+        if (!str_starts_with($phone, '+')) {
+            $phone = '+' . ltrim($phone, '0');
+        }
+
+        \App\Modules\Messaging\Models\Conversation::updateOrCreate(
+            [
+                'organization_id' => $org->id,
+                'contact_phone' => $phone,
+            ],
+            [
+                'contact_name' => $request->name,
+                'pipeline_stage' => $request->stage ?? 'New',
+                'status' => 'active',
+                'last_message_at' => now(),
+            ]
+        );
+
+        return back()->with('success', 'Contact created successfully.');
+    })->name('contacts.store');
+
     Route::inertia('segments', 'contacts/segments')->name('segments.index');
 
     // Broadcasts & Templates

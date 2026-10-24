@@ -57,7 +57,6 @@ export default function WhatsAppConnect({
     const currentOrg = tenant?.current;
 
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [connectMode, setConnectMode] = useState<'embedded' | 'manual'>('manual');
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
@@ -78,7 +77,6 @@ export default function WhatsAppConnect({
 
     const handleEditChannel = (ch: Channel) => {
         setIsEditing(true);
-        setConnectMode('manual');
         setForm({
             name: ch.name || '',
             phone_number: ch.phone_number || '',
@@ -94,7 +92,6 @@ export default function WhatsAppConnect({
     const handleOpenNewModal = () => {
         setIsEditing(false);
         setForm(emptyForm);
-        setConnectMode('manual');
         setIsModalOpen(true);
     };
 
@@ -151,33 +148,10 @@ export default function WhatsAppConnect({
         }
     };
 
-    // Pre-fill user's provided DukanHisab credentials for convenience
-    const prefillUserCredentials = () => {
-        setForm({
-            name: 'DukanHisab WhatsApp',
-            phone_number: '+91 79978 81665',
-            phone_number_id: '1431069246745536',
-            waba_id: '799788166562792',
-            access_token: 'EAAO1pPNX38sBShzw6ZCgRZB2p1lx19wMIFJF5w3bgeq5DR08kaZAj7n8JI7iea42GZBKqPYF94qHymugv0cjZAsi73RH7ZB2Bcr0J5cd3sA8FXKvINgPxwdcnLvNdBGuNKIGaYS5gy0ZCL2xrtItdylRd5b6SywFsQP2TRP3saOeE5aPZAMpMVdCUmZAfU4fduwZDZD',
-            app_id: '',
-            app_secret: '02d9ac2a37b98b8b29a189f835c13027',
-        });
-    };
-
     const openNewChannelModal = () => {
+        setIsEditing(false);
         setForm(emptyForm);
-        setConnectMode('manual');
         setIsModalOpen(true);
-    };
-
-    const openEditModal = () => {
-        prefillUserCredentials();
-        setConnectMode('manual');
-        setIsModalOpen(true);
-    };
-
-    const clearForm = () => {
-        setForm(emptyForm);
     };
 
     return (
@@ -403,79 +377,15 @@ export default function WhatsAppConnect({
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Smartphone className="size-4 text-[#47b672]" />
-                                {isEditing ? `Edit Credentials: ${form.name}` : 'Connect Any WhatsApp Business Number'}
+                                {isEditing ? `Edit Credentials: ${form.name}` : 'Connect WhatsApp Business Number'}
                             </DialogTitle>
                             <DialogDescription className="text-xs">
-                                {isEditing ? 'Update your Meta Permanent Access Token, Phone Number ID or WABA ID.' : 'Connect your own shop number, business SIM, or virtual WhatsApp number via Meta Cloud API.'}
+                                {isEditing ? 'Update your Meta Permanent Access Token, Phone Number ID or WABA ID.' : 'Connect your official WhatsApp Business number via Meta Cloud API credentials.'}
                             </DialogDescription>
                         </DialogHeader>
 
-                        {/* Mode Switcher Tabs */}
-                        <div className="flex rounded-lg bg-muted p-1 gap-1">
-                            <button
-                                type="button"
-                                onClick={() => setConnectMode('manual')}
-                                className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${connectMode === 'manual' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
-                            >
-                                Direct Meta API Credentials
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setConnectMode('embedded')}
-                                className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${connectMode === 'embedded' ? 'bg-background text-foreground shadow-xs font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
-                            >
-                                1-Click Meta Embedded Signup
-                            </button>
-                        </div>
-
-                        {connectMode === 'embedded' ? (
-                            <div className="space-y-4 py-4 text-center">
-                                <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480]">
-                                    <Sparkles className="size-6" />
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-sm font-bold text-foreground">
-                                        Meta Facebook Login for WhatsApp
-                                    </h4>
-                                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                                        Clicking the button opens official Meta dialog. Enter your phone number, receive OTP on your phone, and connect instantly.
-                                    </p>
-                                </div>
-                                <Button
-                                    onClick={() => {
-                                        alert('Meta Embedded Signup: To use this in production, Meta requires your verified Meta App ID and Facebook Config ID. Meanwhile, you can enter any number directly in the Direct API Credentials tab!');
-                                    }}
-                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5"
-                                >
-                                    <ExternalLink className="size-4" />
-                                    Launch Meta Embedded Signup Popup
-                                </Button>
-                            </div>
-                        ) : (
-                            <form onSubmit={handleFormSubmit} className="space-y-3.5 py-2">
-                                <div className="flex items-center justify-between pb-1">
-                                    <span className="text-[11px] text-muted-foreground">
-                                        Fill your Meta WhatsApp Phone details:
-                                    </span>
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            type="button"
-                                            onClick={clearForm}
-                                            className="text-[11px] text-red-500 hover:underline font-semibold"
-                                        >
-                                            Clear Form (Blank)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={prefillUserCredentials}
-                                            className="text-[11px] text-[#28804c] dark:text-[#52c480] hover:underline font-semibold"
-                                        >
-                                            Auto-fill DukanHisab
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-3 sm:grid-cols-2">
+                        <form onSubmit={handleFormSubmit} className="space-y-3.5 py-2">
+                            <div className="grid gap-3 sm:grid-cols-2">
                                     <div className="space-y-1">
                                         <label className="text-xs font-semibold text-foreground">
                                             Channel / Shop Name *
@@ -595,7 +505,6 @@ export default function WhatsAppConnect({
                                     </Button>
                                 </div>
                             </form>
-                        )}
                     </DialogContent>
                 </Dialog>
             </div>
