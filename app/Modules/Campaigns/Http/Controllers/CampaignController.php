@@ -31,8 +31,8 @@ class CampaignController extends Controller
 
     private function getMetaTemplates(?WhatsAppChannel $channel): array
     {
-        if (! $channel || empty($channel->access_token) || empty($channel->waba_id)) {
-            return $this->getFallbackTemplates();
+        if (! $channel || $channel->status !== 'connected' || empty($channel->access_token) || empty($channel->waba_id)) {
+            return [];
         }
 
         $cacheKey = "meta_templates_{$channel->waba_id}";
@@ -91,65 +91,11 @@ class CampaignController extends Controller
                     return $formatted;
                 }
             } catch (\Throwable $e) {
-                // Log and return fallback
+                // Return empty if API error
             }
 
-            return $this->getFallbackTemplates();
+            return [];
         });
-    }
-
-    private function getFallbackTemplates(): array
-    {
-        return [
-            [
-                'id' => '1',
-                'name' => 'due_reminder_en',
-                'category' => 'UTILITY',
-                'status' => 'APPROVED',
-                'language' => 'en_US',
-                'costEstimate' => '₹0.11 / msg',
-                'header' => null,
-                'body' => 'Dear *{{1}}*, This is a gentle payment reminder from *{{2}}* that your pending balance is *{{3}}*. Kindly clear the payment at the earliest. For any queries, please contact *{{4}}*. Thank you!',
-                'buttons' => ['Pay Now'],
-                'exampleParams' => ['Customer Name', 'Your Business', '₹1,500', '+91 9876543210'],
-            ],
-            [
-                'id' => '2',
-                'name' => 'sale_invoice_en',
-                'category' => 'UTILITY',
-                'status' => 'APPROVED',
-                'language' => 'en_US',
-                'costEstimate' => '₹0.11 / msg',
-                'header' => null,
-                'body' => 'Hello *{{1}}*, Your invoice *{{2}}* from *{{3}}* for *{{4}}* is ready. Current pending balance: *{{5}}*. Thank you for shopping with us! For any queries, contact: *{{6}}*.',
-                'buttons' => [],
-                'exampleParams' => ['Customer Name', 'INV-1001', 'Your Business', '₹3,200', '₹0', '+91 9876543210'],
-            ],
-            [
-                'id' => '3',
-                'name' => 'payment_received_en',
-                'category' => 'UTILITY',
-                'status' => 'APPROVED',
-                'language' => 'en_US',
-                'costEstimate' => '₹0.11 / msg',
-                'header' => null,
-                'body' => 'Dear *{{1}}*, We have received payment of *{{2}}* on *{{3}}* for *{{4}}*. Remaining balance: *{{5}}*. Thank you!',
-                'buttons' => [],
-                'exampleParams' => ['Customer Name', '₹2,500', 'Today', 'Your Business', '₹0'],
-            ],
-            [
-                'id' => '4',
-                'name' => 'due_reminder_gu',
-                'category' => 'UTILITY',
-                'status' => 'APPROVED',
-                'language' => 'gu',
-                'costEstimate' => '₹0.11 / msg',
-                'header' => null,
-                'body' => 'નમસ્તે *{{1}}*, *{{2}}* તરફથી વિનંતી કે આપણી પાસે *{{3}}* ની રકમ બાકી છે. કૃપા કરીને વહેલી તકે ચુકવણી કરવા નમ્ર વિનંતી. કોઈપણ પ્રશ્ન માટે સંપર્ક કરો: *{{4}}*. આભાર!',
-                'buttons' => [],
-                'exampleParams' => ['ગ્રાહકનું નામ', 'કંપનીનું નામ', '₹1,500', '+91 9876543210'],
-            ],
-        ];
     }
 
     public function index(Request $request): Response
@@ -157,8 +103,9 @@ class CampaignController extends Controller
         $org = $this->resolveOrg($request);
         TenantContext::set($org);
 
-        $channel = WhatsAppChannel::where('organization_id', $org->id)->first()
-            ?? WhatsAppChannel::where('status', 'connected')->first();
+        $channel = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->first();
 
         $templates = $this->getMetaTemplates($channel);
 

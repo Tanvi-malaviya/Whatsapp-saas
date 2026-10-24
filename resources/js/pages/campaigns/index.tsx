@@ -401,133 +401,174 @@ export default function CampaignsList({
                     </Card>
                 )}
 
-                {/* Templates Filter & Search Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
-                    <div className="flex flex-wrap items-center gap-2">
-                        {/* Language Filter */}
-                        <div className="flex items-center gap-1 text-xs">
-                            <span className="text-[11px] text-muted-foreground font-medium mr-1">Language:</span>
-                            {['all', 'en_US', 'gu', 'hi'].map((lang) => (
-                                <button
-                                    key={lang}
-                                    type="button"
-                                    onClick={() => setSelectedLanguage(lang)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                                        selectedLanguage === lang
-                                            ? 'bg-[#47b672] text-white shadow-2xs'
-                                            : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-                                    }`}
-                                >
-                                    {lang === 'all'
-                                        ? 'All'
-                                        : lang === 'en_US'
-                                        ? 'English'
-                                        : lang === 'gu'
-                                        ? 'Gujarati'
-                                        : 'Hindi'}
-                                </button>
-                            ))}
+                {/* Main Content Area */}
+                {!channel || channel.status !== 'connected' ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-4 my-4">
+                        <div className="size-16 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                            <Radio className="size-8" />
                         </div>
-
-                        {/* Category Filter */}
-                        <div className="flex items-center gap-1 text-xs ml-0 sm:ml-2">
-                            <span className="text-[11px] text-muted-foreground font-medium mr-1">Category:</span>
-                            {['all', 'UTILITY', 'MARKETING'].map((cat) => (
-                                <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                                        selectedCategory === cat
-                                            ? 'bg-foreground text-background shadow-2xs'
-                                            : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-                                    }`}
-                                >
-                                    {cat === 'all' ? 'All' : cat}
-                                </button>
-                            ))}
+                        <div className="max-w-md space-y-1">
+                            <h3 className="text-base font-bold text-foreground">
+                                WhatsApp Channel Not Connected
+                            </h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                This workspace does not have an active WhatsApp Business API channel connected yet. Connect your WhatsApp number to fetch approved Meta templates and launch broadcasts.
+                            </p>
                         </div>
-                    </div>
-
-                    <div className="relative w-full sm:w-64">
-                        <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
-                        <Input
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search templates..."
-                            className="pl-9 h-8 text-xs bg-background"
-                        />
-                    </div>
-                </div>
-
-                {/* Templates Grid */}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {filteredTemplates.map((tpl) => (
-                        <Card
-                            key={tpl.id}
-                            className="border-border flex flex-col justify-between hover:border-[#47b672]/50 transition-colors shadow-2xs"
+                        <Button
+                            asChild
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
                         >
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between gap-2">
-                                    <Badge variant="outline" className="text-[10px] font-mono uppercase">
-                                        {tpl.category}
-                                    </Badge>
-                                    <div className="flex items-center gap-1.5">
-                                        <Badge variant="secondary" className="text-[10px] uppercase font-mono">
-                                            {tpl.language}
-                                        </Badge>
-                                        <Badge className="bg-emerald-600 text-white text-[10px] hover:bg-emerald-600 font-semibold">
-                                            {tpl.status}
-                                        </Badge>
-                                    </div>
-                                </div>
-                                <CardTitle className="text-sm font-bold font-mono mt-2 truncate text-foreground">
-                                    {tpl.name}
-                                </CardTitle>
-                                <CardDescription className="text-xs">
-                                    Meta Cost Estimate:{' '}
-                                    <strong className="text-foreground">{tpl.costEstimate}</strong>
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed border border-border/50 min-h-24 max-h-36 overflow-y-auto whitespace-pre-wrap">
-                                    {tpl.body}
-                                </div>
-
-                                {tpl.buttons && tpl.buttons.length > 0 && (
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        {tpl.buttons.map((btn, idx) => (
-                                            <span
-                                                key={idx}
-                                                className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
-                                            >
-                                                🔘 {btn}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-
-                                <Button
-                                    onClick={() => openBroadcastModal(tpl)}
-                                    size="sm"
-                                    className="w-full text-xs h-8 bg-[#47b672] hover:bg-[#3da163] text-white font-semibold gap-1.5 shadow-2xs"
-                                >
-                                    <Send className="size-3.5" />
-                                    Broadcast This Template
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-
-                {filteredTemplates.length === 0 && (
-                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-xl border border-dashed border-border">
-                        <FileText className="size-8 text-muted-foreground mb-2" />
-                        <h3 className="text-sm font-semibold text-foreground">No templates matched</h3>
-                        <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                            Try adjusting your search query or language filter to discover available templates.
-                        </p>
+                            <Link href="/whatsapp/connect">
+                                Connect WhatsApp Number
+                            </Link>
+                        </Button>
                     </div>
+                ) : templates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
+                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                            <FileText className="size-7 opacity-60" />
+                        </div>
+                        <div className="max-w-md space-y-1">
+                            <h3 className="text-base font-bold text-foreground">
+                                No Templates Found on Meta
+                            </h3>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                No approved WhatsApp message templates were found in your Meta WABA account for this workspace. Please create or submit templates for approval in your Meta WhatsApp Business Manager.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Templates Filter & Search Controls */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
+                            <div className="flex flex-wrap items-center gap-2">
+                                {/* Language Filter */}
+                                <div className="flex items-center gap-1 text-xs">
+                                    <span className="text-[11px] text-muted-foreground font-medium mr-1">Language:</span>
+                                    {['all', 'en_US', 'gu', 'hi'].map((lang) => (
+                                        <button
+                                            key={lang}
+                                            type="button"
+                                            onClick={() => setSelectedLanguage(lang)}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                                                selectedLanguage === lang
+                                                    ? 'bg-[#47b672] text-white shadow-2xs'
+                                                    : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+                                            }`}
+                                        >
+                                            {lang === 'all'
+                                                ? 'All'
+                                                : lang === 'en_US'
+                                                ? 'English'
+                                                : lang === 'gu'
+                                                ? 'Gujarati'
+                                                : 'Hindi'}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Category Filter */}
+                                <div className="flex items-center gap-1 text-xs ml-0 sm:ml-2">
+                                    <span className="text-[11px] text-muted-foreground font-medium mr-1">Category:</span>
+                                    {['all', 'UTILITY', 'MARKETING'].map((cat) => (
+                                        <button
+                                            key={cat}
+                                            type="button"
+                                            onClick={() => setSelectedCategory(cat)}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                                                selectedCategory === cat
+                                                    ? 'bg-foreground text-background shadow-2xs'
+                                                    : 'bg-muted/60 text-muted-foreground hover:text-foreground'
+                                            }`}
+                                        >
+                                            {cat === 'all' ? 'All' : cat}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+                                <Input
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search templates..."
+                                    className="pl-9 h-8 text-xs bg-background"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Templates Grid */}
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {filteredTemplates.map((tpl) => (
+                                <Card
+                                    key={tpl.id}
+                                    className="border-border flex flex-col justify-between hover:border-[#47b672]/50 transition-colors shadow-2xs"
+                                >
+                                    <CardHeader className="pb-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <Badge variant="outline" className="text-[10px] font-mono uppercase">
+                                                {tpl.category}
+                                            </Badge>
+                                            <div className="flex items-center gap-1.5">
+                                                <Badge variant="secondary" className="text-[10px] uppercase font-mono">
+                                                    {tpl.language}
+                                                </Badge>
+                                                <Badge className="bg-emerald-600 text-white text-[10px] hover:bg-emerald-600 font-semibold">
+                                                    {tpl.status}
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                        <CardTitle className="text-sm font-bold font-mono mt-2 truncate text-foreground">
+                                            {tpl.name}
+                                        </CardTitle>
+                                        <CardDescription className="text-xs">
+                                            Meta Cost Estimate:{' '}
+                                            <strong className="text-foreground">{tpl.costEstimate}</strong>
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                        <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed border border-border/50 min-h-24 max-h-36 overflow-y-auto whitespace-pre-wrap">
+                                            {tpl.body}
+                                        </div>
+
+                                        {tpl.buttons && tpl.buttons.length > 0 && (
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {tpl.buttons.map((btn, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
+                                                    >
+                                                        🔘 {btn}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <Button
+                                            onClick={() => openBroadcastModal(tpl)}
+                                            size="sm"
+                                            className="w-full text-xs h-8 bg-[#47b672] hover:bg-[#3da163] text-white font-semibold gap-1.5 shadow-2xs"
+                                        >
+                                            <Send className="size-3.5" />
+                                            Broadcast This Template
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+
+                        {filteredTemplates.length === 0 && (
+                            <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-xl border border-dashed border-border">
+                                <FileText className="size-8 text-muted-foreground mb-2" />
+                                <h3 className="text-sm font-semibold text-foreground">No templates matched</h3>
+                                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                                    Try adjusting your search query or language filter to discover available templates.
+                                </p>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
