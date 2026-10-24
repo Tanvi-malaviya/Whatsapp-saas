@@ -53,9 +53,9 @@ const EMOJI_GROUPS = [
 ];
 
 const CANNED_RESPONSES = [
-    { title: '👋 Welcome Greeting', text: 'Hello! Thank you for contacting Acme Coaching Institute. How can we help you today? 😊' },
-    { title: '📄 Course Details', text: 'Here are the course details, curriculum, and batch timings you requested.' },
-    { title: '💳 Payment Details', text: 'You can make the enrollment payment via UPI or Net Banking. Please share the transaction receipt once done!' },
+    { title: '👋 Welcome Greeting', text: 'Hello! Thank you for connecting with us. How can we help you today? 😊' },
+    { title: '📄 Information Details', text: 'Here are the details and information you requested.' },
+    { title: '💳 Payment Details', text: 'You can make the payment via UPI or Net Banking. Please share the transaction receipt once done!' },
     { title: '✅ Query Solved', text: 'Thank you for connecting with us! Please let us know if you need any further assistance.' },
 ];
 
@@ -93,49 +93,9 @@ interface TeamInboxProps {
 }
 
 export default function TeamInbox({ initialThreads = [], channels = [] }: TeamInboxProps) {
-    const defaultMockThreads: ChatThread[] = [
-        {
-            id: 'mock-1',
-            contactName: 'Bhavesh Sathwara',
-            phone: '+91 79978 81665',
-            channel: 'DukanHisab',
-            lastMessage: 'Hello how are you',
-            time: '13d',
-            unread: 1,
-            windowRemaining: '23h 48m',
-            stage: 'New',
-            label: 'Prospect',
-            status: 'open',
-        },
-        {
-            id: 'mock-2',
-            contactName: 'Rahul Patel',
-            phone: '+91 98250 12345',
-            channel: 'DukanHisab',
-            lastMessage: 'Can you please share the syllabus for the Laravel course?',
-            time: '2m ago',
-            unread: 0,
-            windowRemaining: '23h 57m',
-            stage: 'Qualified',
-            label: 'Applicant',
-            status: 'open',
-        },
-    ];
+    const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
 
-    const allInitialThreads = initialThreads.length > 0 ? [...initialThreads, ...defaultMockThreads] : defaultMockThreads;
-    const [threads, setThreads] = useState<ChatThread[]>(allInitialThreads);
-
-    const initialMsgMap: Record<string, ChatMessage[]> = {
-        'mock-1': [
-            { id: 'm1', sender: 'contact', text: 'Hello how are you', time: '11:10 AM' },
-            { id: 'm2', sender: 'bot', text: 'Hello Bhavesh! Welcome to Sathwara InfoTech (DukanHisab). How can we assist you today?', time: '11:10 AM' },
-        ],
-        'mock-2': [
-            { id: 'm3', sender: 'contact', text: 'Can you please share the syllabus for the Laravel course?', time: '10:45 AM' },
-            { id: 'm4', sender: 'agent', text: 'Sure Rahul! Sharing the brochure and course curriculum right now.', time: '10:47 AM', status: 'sent' },
-        ],
-    };
-
+    const initialMsgMap: Record<string, ChatMessage[]> = {};
     if (initialThreads.length > 0) {
         initialThreads.forEach((t) => {
             if (t.messages && t.messages.length > 0) {
@@ -144,7 +104,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         });
     }
 
-    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(allInitialThreads[0] || null);
+    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(initialThreads[0] || null);
     const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
     const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
     const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
@@ -179,13 +139,6 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [saveNotice, setSaveNotice] = useState<string | null>(null);
     const [copiedPhone, setCopiedPhone] = useState(false);
 
-    // Inbound test simulation state
-    const [showSimDialog, setShowSimDialog] = useState(false);
-    const [simPhone, setSimPhone] = useState('919898696798');
-    const [simName, setSimName] = useState('Tanvi Malaviya');
-    const [simText, setSimText] = useState('Hi! I need software details for my business.');
-    const [isSimulating, setIsSimulating] = useState(false);
-
     // Start New Conversation state
     const [showNewChatDialog, setShowNewChatDialog] = useState(false);
     const [newChatPhone, setNewChatPhone] = useState('');
@@ -196,6 +149,27 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
 
+    // Sync state when initialThreads prop changes (e.g. on workspace switch)
+    useEffect(() => {
+        setThreads(initialThreads);
+        if (initialThreads.length > 0) {
+            setSelectedThread((prev) => {
+                if (!prev) return initialThreads[0];
+                const found = initialThreads.find((t) => t.id === prev.id);
+                return found || initialThreads[0];
+            });
+            const updatedMsgMap: Record<string, ChatMessage[]> = {};
+            initialThreads.forEach((t) => {
+                if (t.messages && t.messages.length > 0) {
+                    updatedMsgMap[t.id] = t.messages;
+                }
+            });
+            setMessages((prev) => ({ ...prev, ...updatedMsgMap }));
+        } else {
+            setSelectedThread(null);
+        }
+    }, [initialThreads]);
+
     // Live background polling every 4 seconds to sync incoming WhatsApp messages
     useEffect(() => {
         const interval = setInterval(async () => {
@@ -203,44 +177,21 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 const res = await fetch('/inbox/sync');
                 const data = await res.json();
                 if (data.success && Array.isArray(data.threads)) {
-                    setThreads((prevThreads) => {
-                        const updated = [...prevThreads];
-                        data.threads.forEach((remoteThread: ChatThread) => {
-                            const idx = updated.findIndex((t) => t.id === remoteThread.id);
-                            if (idx >= 0) {
-                                updated[idx] = {
-                                    ...updated[idx],
-                                    lastMessage: remoteThread.lastMessage,
-                                    time: remoteThread.time,
-                                    windowRemaining: remoteThread.windowRemaining,
-                                    status: remoteThread.status,
-                                    contactName: remoteThread.contactName,
-                                    stage: remoteThread.stage || 'New',
-                                    label: remoteThread.label || 'Prospect',
-                                };
-                            } else {
-                                updated.unshift(remoteThread);
-                            }
-                        });
-                        return updated;
+                    setThreads(data.threads);
+
+                    setSelectedThread((prev) => {
+                        if (!prev) return data.threads[0] || null;
+                        const match = data.threads.find((t: ChatThread) => t.id === prev.id);
+                        return match || (data.threads.length > 0 ? data.threads[0] : null);
                     });
 
                     // Update message map for threads that changed
                     data.threads.forEach((remoteThread: any) => {
                         if (remoteThread.messages) {
-                            setMessages((prevMsgs) => {
-                                const current = prevMsgs[remoteThread.id] || [];
-                                if (
-                                    current.length !== remoteThread.messages.length ||
-                                    JSON.stringify(current) !== JSON.stringify(remoteThread.messages)
-                                ) {
-                                    return {
-                                        ...prevMsgs,
-                                        [remoteThread.id]: remoteThread.messages,
-                                    };
-                                }
-                                return prevMsgs;
-                            });
+                            setMessages((prevMsgs) => ({
+                                ...prevMsgs,
+                                [remoteThread.id]: remoteThread.messages,
+                            }));
                         }
                     });
                 }
@@ -650,37 +601,6 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         }
     };
 
-    const handleSimulateInbound = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!simPhone.trim() || !simText.trim()) return;
-        setIsSimulating(true);
-
-        try {
-            const res = await fetch('/inbox/simulate-inbound', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                },
-                body: JSON.stringify({
-                    phone: simPhone,
-                    name: simName,
-                    message: simText,
-                }),
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                setShowSimDialog(false);
-                window.location.href = '/inbox';
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsSimulating(false);
-        }
-    };
-
     const filteredThreads = threads.filter((t) => {
         if (selectedChannelFilter !== 'All channels' && t.channel !== selectedChannelFilter) {
             return false;
@@ -725,15 +645,6 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     <Plus className="size-3.5" />
                                     <span>New Chat</span>
                                 </Button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSimDialog(true)}
-                                    className="flex items-center gap-1 rounded-full bg-muted hover:bg-muted/80 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-colors border border-border/70"
-                                    title="Simulate incoming WhatsApp message for localhost testing"
-                                >
-                                    <Sparkles className="size-3" />
-                                    <span>Test</span>
-                                </button>
                             </div>
                         </div>
 
@@ -807,7 +718,18 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
                     {/* Chat Item List */}
                     <div className="flex-1 overflow-y-auto divide-y divide-border/50">
-                        {filteredThreads.map((thread) => {
+                        {filteredThreads.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-64 p-6 text-center">
+                                <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3">
+                                    <MessageSquare className="size-6 opacity-60" />
+                                </div>
+                                <h4 className="text-xs font-semibold text-foreground">No conversations yet</h4>
+                                <p className="text-[11px] text-muted-foreground mt-1 max-w-[200px]">
+                                    {searchQuery ? 'No chats match your search query.' : 'Click "New Chat" above to start a conversation.'}
+                                </p>
+                            </div>
+                        ) : (
+                            filteredThreads.map((thread) => {
                             const isSelected = selectedThread?.id === thread.id;
                             const isResolved = thread.status === 'resolved';
                             return (
@@ -867,7 +789,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     </div>
                                 </div>
                             );
-                        })}
+                        }))}
                     </div>
 
                     {/* Bottom Status Bar */}
@@ -1411,94 +1333,6 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                     )}
                 </div>
             </div>
-
-            {/* Inbound WhatsApp Simulation Modal */}
-            {showSimDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
-                    <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-border pb-3">
-                            <div className="flex items-center gap-2">
-                                <div className="size-7 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
-                                    <Sparkles className="size-4" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-foreground">Simulate Inbound WhatsApp Test</h3>
-                                    <p className="text-[11px] text-muted-foreground">Test two-way live inbox on localhost</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowSimDialog(false)}
-                                className="text-muted-foreground hover:text-foreground text-xs p-1"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                            💡 <strong>Why Simulation?</strong> When you run on <code>localhost:8000</code>, Meta's internet servers cannot directly reach your laptop without a public tunnel. This tool sends the exact Meta Webhook payload into your backend, creating the chat thread and triggering Bot Auto-Responders!
-                        </div>
-
-                        <form onSubmit={handleSimulateInbound} className="space-y-3">
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Customer Mobile Number (with 91) *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={simPhone}
-                                    onChange={(e) => setSimPhone(e.target.value)}
-                                    placeholder="e.g. 919898696798"
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Customer Name *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={simName}
-                                    onChange={(e) => setSimName(e.target.value)}
-                                    placeholder="e.g. Tanvi Malaviya"
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Customer Message Content *</label>
-                                <textarea
-                                    required
-                                    rows={3}
-                                    value={simText}
-                                    onChange={(e) => setSimText(e.target.value)}
-                                    placeholder="Type what customer said on WhatsApp..."
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-                                />
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowSimDialog(false)}
-                                    className="text-xs"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    disabled={isSimulating}
-                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5"
-                                >
-                                    <Send className="size-3.5" />
-                                    {isSimulating ? 'Processing...' : '🚀 Simulate Inbound'}
-                                </Button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
 
             {/* Start New Conversation Modal */}
             {showNewChatDialog && (

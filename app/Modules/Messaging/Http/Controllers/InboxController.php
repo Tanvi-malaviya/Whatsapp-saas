@@ -46,7 +46,7 @@ class InboxController extends Controller
                 'id' => (string) $c->id,
                 'contactName' => $c->contact_name ?: $c->contact_phone,
                 'phone' => $c->contact_phone,
-                'channel' => $channelObj ? $channelObj->name : 'DukanHisab',
+                'channel' => $channelObj ? $channelObj->name : 'WhatsApp',
                 'lastMessage' => $lastMsg ? $lastMsg->content : 'No messages',
                 'time' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
                 'unread' => 0,
@@ -505,7 +505,7 @@ class InboxController extends Controller
 
         $defaultChannel = WhatsAppChannel::where('organization_id', $org->id)
             ->where('status', 'connected')
-            ->value('name') ?? 'DukanHisab WhatsApp';
+            ->value('name') ?? 'WhatsApp';
 
         $sessions = $conversations->map(function ($c) use ($defaultChannel) {
             $msgs = $c->messages;
@@ -557,7 +557,7 @@ class InboxController extends Controller
                 'id' => (string) $c->id,
                 'contactName' => $c->contact_name ?: $c->contact_phone,
                 'phone' => $c->contact_phone,
-                'dealValue' => 4999,
+                'dealValue' => 0,
                 'interest' => $c->label ?: 'WhatsApp Prospect',
                 'stage' => in_array($c->pipeline_stage, ['New', 'Qualified', 'Proposal', 'Won', 'Lost']) ? $c->pipeline_stage : 'New',
                 'daysInStage' => $daysInStage,
