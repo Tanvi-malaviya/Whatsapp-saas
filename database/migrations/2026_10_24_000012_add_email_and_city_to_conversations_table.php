@@ -18,6 +18,9 @@ return new class extends Migration
             if (! Schema::hasColumn('conversations', 'city')) {
                 $table->string('city', 100)->nullable()->after('email');
             }
+            if (! Schema::hasColumn('conversations', 'pipeline_stage')) {
+                $table->string('pipeline_stage', 50)->default('New')->after('status');
+            }
             if (! Schema::hasColumn('conversations', 'is_opted_in')) {
                 $table->boolean('is_opted_in')->default(true)->after('pipeline_stage');
             }
