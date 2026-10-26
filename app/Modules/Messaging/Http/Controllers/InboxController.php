@@ -395,7 +395,12 @@ class InboxController extends Controller
             'window_expires_at' => now()->addHours(24),
         ]);
 
-        $savedContent = $type === 'template' ? "[Template: {$templateName}]" : ($messageText ?: 'Hello!');
+        if ($type === 'template') {
+            $channelName = $channel?->name ?? 'DukanHisab';
+            $savedContent = "[Template: {$templateName}]\nDear *{$name}*,\n\nThis is a gentle payment reminder from *{$channelName}* that your pending balance is *Rs. 100*. Kindly clear the payment at the earliest.\n\nThank you!";
+        } else {
+            $savedContent = $messageText ?: 'Hello!';
+        }
 
         Message::create([
             'conversation_id' => $conversation->id,

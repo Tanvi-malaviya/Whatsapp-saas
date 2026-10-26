@@ -19,9 +19,12 @@ class Conversation extends Model
         'organization_id',
         'contact_phone',
         'contact_name',
+        'email',
+        'city',
         'channel_phone_number_id',
         'status',
         'pipeline_stage',
+        'is_opted_in',
         'label',
         'window_expires_at',
         'last_message_at',
@@ -29,6 +32,7 @@ class Conversation extends Model
     ];
 
     protected $casts = [
+        'is_opted_in' => 'boolean',
         'window_expires_at' => 'datetime',
         'last_message_at' => 'datetime',
         'created_at' => 'datetime',

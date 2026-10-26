@@ -29,7 +29,7 @@ class CampaignController extends Controller
         return Organization::find($orgId) ?? Organization::first();
     }
 
-    private function getMetaTemplates(?WhatsAppChannel $channel): array
+    public function getMetaTemplates(?WhatsAppChannel $channel): array
     {
         if (! $channel || $channel->status !== 'connected' || empty($channel->access_token) || empty($channel->waba_id)) {
             return [];
@@ -37,7 +37,7 @@ class CampaignController extends Controller
 
         $cacheKey = "meta_templates_{$channel->waba_id}";
 
-        return Cache::remember($cacheKey, 300, function () use ($channel) {
+        $templates = Cache::remember($cacheKey, 300, function () use ($channel) {
             try {
                 $resp = Http::withToken($channel->access_token)
                     ->timeout(10)
@@ -50,6 +50,7 @@ class CampaignController extends Controller
                     foreach ($rawTemplates as $tpl) {
                         $bodyText = '';
                         $headerText = null;
+                        $headerFormat = null;
                         $buttons = [];
                         $exampleParams = [];
 
@@ -60,8 +61,9 @@ class CampaignController extends Controller
                                     if (! empty($comp['example']['body_text'][0])) {
                                         $exampleParams = $comp['example']['body_text'][0];
                                     }
-                                } elseif ($comp['type'] === 'HEADER' && ! empty($comp['text'])) {
-                                    $headerText = $comp['text'];
+                                } elseif ($comp['type'] === 'HEADER') {
+                                    $headerText = $comp['text'] ?? null;
+                                    $headerFormat = $comp['format'] ?? null;
                                 } elseif ($comp['type'] === 'BUTTONS' && ! empty($comp['buttons'])) {
                                     foreach ($comp['buttons'] as $b) {
                                         $buttons[] = $b['text'] ?? 'Action';
@@ -82,6 +84,7 @@ class CampaignController extends Controller
                             'language' => $tpl['language'] ?? 'en_US',
                             'costEstimate' => $cost,
                             'header' => $headerText,
+                            'headerFormat' => $headerFormat,
                             'body' => $bodyText,
                             'buttons' => $buttons,
                             'exampleParams' => $exampleParams,
@@ -96,6 +99,13 @@ class CampaignController extends Controller
 
             return [];
         });
+
+        $hidden = $channel->metadata['hidden_templates'] ?? [];
+        if (! empty($hidden) && is_array($hidden)) {
+            $templates = array_values(array_filter($templates, fn ($t) => ! in_array($t['name'], $hidden)));
+        }
+
+        return $templates;
     }
 
     public function index(Request $request): Response
@@ -110,7 +120,49 @@ class CampaignController extends Controller
         $templates = $this->getMetaTemplates($channel);
 
         // Fetch existing CRM contacts for this workspace so the user can easily select recipients
-        $contacts = Conversation::where('organization_id', $org->id)
+        $contactsQuery = Conversation::where('organization_id', $org->id);
+
+        if ($request->filled('filter_type')) {
+            $fType = $request->query('filter_type');
+            $fVal = $request->query('filter_value');
+            if ($fType === 'opt_in') {
+                $contactsQuery->where('is_opted_in', true);
+            } elseif ($fType === 'opt_out') {
+                $contactsQuery->where('is_opted_in', false);
+            } elseif ($fType === 'stage' && $fVal) {
+                $contactsQuery->where('pipeline_stage', $fVal);
+            } elseif ($fType === 'city' && $fVal) {
+                $contactsQuery->where('city', $fVal);
+            } elseif ($fType === 'active_7d') {
+                $contactsQuery->where('last_message_at', '>=', now()->subDays(7));
+            } elseif ($fType === 'inactive_30d') {
+                $contactsQuery->where('last_message_at', '<', now()->subDays(30));
+            }
+        } elseif ($request->filled('segment_id')) {
+            $segId = $request->query('segment_id');
+            if ($segId === 'sys_opt_in') {
+                $contactsQuery->where('is_opted_in', true);
+            } elseif ($segId === 'sys_opt_out') {
+                $contactsQuery->where('is_opted_in', false);
+            } elseif ($segId === 'sys_won') {
+                $contactsQuery->where('pipeline_stage', 'Won');
+            } elseif ($segId === 'sys_new_leads') {
+                $contactsQuery->where('pipeline_stage', 'New');
+            } elseif ($segId === 'sys_interested') {
+                $contactsQuery->whereIn('pipeline_stage', ['Interested', 'Contacted']);
+            } elseif ($segId === 'sys_active_7d') {
+                $contactsQuery->where('last_message_at', '>=', now()->subDays(7));
+            } else {
+                $segment = \App\Modules\Crm\Models\ContactSegment::where('organization_id', $org->id)
+                    ->where('id', $segId)
+                    ->first();
+                if ($segment) {
+                    $contactsQuery = $segment->getMatchingQuery();
+                }
+            }
+        }
+
+        $contacts = $contactsQuery
             ->select('id', 'contact_name', 'contact_phone', 'label')
             ->orderBy('contact_name')
             ->get()
@@ -142,10 +194,17 @@ class CampaignController extends Controller
             ->values()
             ->all();
 
+        $activeSegmentName = $request->query('segment_name');
+        if (!$activeSegmentName && $request->filled('segment_id') && isset($segment)) {
+            $activeSegmentName = $segment->name;
+        }
+
         return Inertia::render('campaigns/index', [
             'templates' => $templates,
             'contacts' => $contacts,
             'recentCampaigns' => $recentCampaigns,
+            'activeSegmentName' => $activeSegmentName,
+            'autoOpenBroadcast' => $request->boolean('open_broadcast', false),
             'channel' => $channel ? [
                 'id' => $channel->id,
                 'name' => $channel->name,
@@ -190,6 +249,11 @@ class CampaignController extends Controller
         $failedCount = 0;
         $errors = [];
 
+        $allTemplates = $this->getMetaTemplates($channel);
+        $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+        $templateBodyTemplate = $matchedTemplate['body'] ?? '';
+        $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? null;
+
         foreach ($recipients as $recipient) {
             $rawPhone = $recipient['phone'] ?? '';
             $contactName = $recipient['name'] ?? null;
@@ -228,25 +292,46 @@ class CampaignController extends Controller
                 ],
             ];
 
-            if (! empty($contactSpecificParams)) {
-                $metaPayload['template']['components'] = [
-                    [
-                        'type' => 'body',
-                        'parameters' => $contactSpecificParams,
+            $components = [];
+
+            // 1. Add Header component if template requires DOCUMENT format
+            if ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'document',
+                            'document' => [
+                                'link' => 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                                'filename' => 'Invoice_' . date('Ymd') . '.pdf',
+                            ],
+                        ],
                     ],
                 ];
+            }
 
-                // Some pre-approved templates like due_reminder_en require a url button parameter
-                if (str_contains($templateName, 'due_reminder')) {
-                    $metaPayload['template']['components'][] = [
-                        'type' => 'button',
-                        'sub_type' => 'url',
-                        'index' => '0',
-                        'parameters' => [
-                            ['type' => 'text', 'text' => 'pay'],
-                        ],
-                    ];
-                }
+            // 2. Add Body component parameters
+            if (! empty($contactSpecificParams)) {
+                $components[] = [
+                    'type' => 'body',
+                    'parameters' => $contactSpecificParams,
+                ];
+            }
+
+            // 3. Dynamic URL Button parameters (for templates like due_reminder)
+            if (str_contains($templateName, 'due_reminder')) {
+                $components[] = [
+                    'type' => 'button',
+                    'sub_type' => 'url',
+                    'index' => '0',
+                    'parameters' => [
+                        ['type' => 'text', 'text' => 'pay'],
+                    ],
+                ];
+            }
+
+            if (! empty($components)) {
+                $metaPayload['template']['components'] = $components;
             }
 
             $isDelivered = false;
@@ -293,6 +378,17 @@ class CampaignController extends Controller
                 'window_expires_at' => now()->addHours(24),
             ]);
 
+            // Prepare rendered text for live inbox matching what was sent to customer's WhatsApp
+            $renderedContent = $templateBodyTemplate;
+            if (! empty($renderedContent)) {
+                foreach ($contactSpecificParams as $pIdx => $pItem) {
+                    $renderedContent = str_replace('{{' . ($pIdx + 1) . '}}', $pItem['text'], $renderedContent);
+                }
+                $savedMessageContent = "[Broadcast Campaign: {$campaignName}]\n" . $renderedContent;
+            } else {
+                $savedMessageContent = "[Broadcast Campaign: {$campaignName}] Template: {$templateName}";
+            }
+
             // Save outbound broadcast message in database
             Message::create([
                 'conversation_id' => $conv->id,
@@ -301,7 +397,7 @@ class CampaignController extends Controller
                 'sender_type' => 'agent',
                 'sender_id' => (string) ($request->user()?->id ?? 'agent'),
                 'type' => 'template',
-                'content' => "[Broadcast Campaign: {$campaignName}] Template: {$templateName}",
+                'content' => $savedMessageContent,
                 'status' => $isDelivered ? 'sent' : 'failed',
                 'meta_cost_paise' => 0,
             ]);

@@ -238,12 +238,12 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         setSelectedThread((prev) =>
             prev
                 ? {
-                      ...prev,
-                      contactName: newName,
-                      status: editContactStatus,
-                      stage: editContactStage,
-                      label: editContactLabel,
-                  }
+                    ...prev,
+                    contactName: newName,
+                    status: editContactStatus,
+                    stage: editContactStage,
+                    label: editContactLabel,
+                }
                 : null
         );
 
@@ -251,12 +251,12 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
             prev.map((t) =>
                 t.id === selectedThread.id
                     ? {
-                          ...t,
-                          contactName: newName,
-                          status: editContactStatus,
-                          stage: editContactStage,
-                          label: editContactLabel,
-                      }
+                        ...t,
+                        contactName: newName,
+                        status: editContactStatus,
+                        stage: editContactStage,
+                        label: editContactLabel,
+                    }
                     : t
             )
         );
@@ -529,6 +529,79 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
+    const parseTemplateFromMessage = (rawText: string, contactName?: string) => {
+        if (!rawText || typeof rawText !== 'string') return null;
+        const trimmed = rawText.trim();
+
+        const isBroadcast = trimmed.startsWith('[Broadcast Campaign:');
+        const isTemplate = trimmed.startsWith('[Template:');
+
+        if (!isBroadcast && !isTemplate) return null;
+
+        let campaignName = '';
+        let templateName = '';
+        let body = '';
+
+        if (isBroadcast) {
+            const lines = trimmed.split(/\r?\n/);
+            const firstLine = lines[0] || '';
+            const campaignMatch = firstLine.match(/\[Broadcast Campaign:\s*([^\]]+)\](?:\s*Template:\s*([a-zA-Z0-9_-]+))?/i);
+            if (campaignMatch) {
+                campaignName = (campaignMatch[1] || '').trim();
+                templateName = (campaignMatch[2] || '').trim();
+            }
+
+            if (lines.length > 1) {
+                body = lines.slice(1).join('\n').trim();
+            }
+        } else if (isTemplate) {
+            const lines = trimmed.split(/\r?\n/);
+            const firstLine = lines[0] || '';
+            const tplMatch = firstLine.match(/\[Template:\s*([^\]]+)\]/i);
+            if (tplMatch) {
+                templateName = (tplMatch[1] || '').trim();
+            }
+            if (lines.length > 1) {
+                body = lines.slice(1).join('\n').trim();
+            }
+        }
+
+        // If body is empty, populate from approved template dictionary
+        if (!body && templateName) {
+            const tplKey = templateName.toLowerCase();
+            const cName = contactName || 'Customer';
+            if (tplKey.includes('supplier_payment_hi')) {
+                body = `नमस्ते *${cName}*,\n\n*DukanHisab* द्वारा आपको दिनांक *24-10-2026* को *₹500* का भुगतान कर दिया गया है। शेष बकाया: *₹0*।\n\nधन्यवाद!`;
+            } else if (tplKey.includes('supplier_payment_gu')) {
+                body = `નમસ્તે *${cName}*,\n\n*DukanHisab* તરફથી આપને તારીખ *24-10-2026* ના રોજ *₹500* ની ચુકવણી કરવામાં આવેલ છે. બાકી રકમ: *₹0*.\n\nઆભાર!`;
+            } else if (tplKey.includes('supplier_payment_en')) {
+                body = `Dear *${cName}*,\n\n*DukanHisab* has made a payment of *₹500* to you on *24-10-2026*. Remaining balance: *₹0*.\n\nThank you!`;
+            } else if (tplKey.includes('due_reminder_hi')) {
+                body = `नमस्ते *${cName}*,\n\n*DukanHisab* की तरफ से विनम्र अनुस्मारक कि आपकी कुल बकाया राशि *₹500* है। कृपया जल्द से जल्द भुगतान करने की कृपा करें।\n\nधन्यवाद!`;
+            } else if (tplKey.includes('due_reminder_gu')) {
+                body = `નમસ્તે *${cName}*,\n\n*DukanHisab* તરફથી વિનંતી કે આપણી પાસે *₹500* ની રકમ બાકી છે. કૃપા કરીને વહેલી તકે ચુકવણી કરવા નમ્ર વિનંતી.\n\nઆભાર!`;
+            } else if (tplKey.includes('due_reminder')) {
+                body = `Dear *${cName}*,\n\nThis is a gentle payment reminder from *DukanHisab* that your pending balance is *₹500*. Kindly clear the payment at the earliest.\n\nThank you!`;
+            } else if (tplKey.includes('sale_invoice')) {
+                body = `Hello *${cName}*,\n\nYour invoice from *DukanHisab* is ready. Current pending balance: *₹500*.\n\nThank you for shopping with us!`;
+            } else {
+                body = `Approved WhatsApp template: *${templateName}* sent to *${cName}*.`;
+            }
+        }
+
+        const displayName = templateName
+            ? templateName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+            : (campaignName || 'Official Template');
+
+        return {
+            isTemplate: true,
+            campaignName,
+            templateName,
+            displayName,
+            body,
+        };
+    };
+
     const handleSendReply = async (e: React.FormEvent) => {
         e.preventDefault();
         if ((!replyText.trim() && !attachedFile) || !selectedThread) return;
@@ -677,33 +750,30 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                             <button
                                 type="button"
                                 onClick={() => setSelectedStatusFilter('all')}
-                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                                    selectedStatusFilter === 'all'
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${selectedStatusFilter === 'all'
                                         ? 'bg-card text-foreground shadow-2xs'
                                         : 'text-muted-foreground hover:text-foreground'
-                                }`}
+                                    }`}
                             >
                                 All ({threads.length})
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setSelectedStatusFilter('open')}
-                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                                    selectedStatusFilter === 'open'
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${selectedStatusFilter === 'open'
                                         ? 'bg-card text-[#28804c] dark:text-[#52c480] shadow-2xs'
                                         : 'text-muted-foreground hover:text-foreground'
-                                }`}
+                                    }`}
                             >
                                 Open ({threads.filter((t) => t.status !== 'resolved').length})
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setSelectedStatusFilter('resolved')}
-                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                                    selectedStatusFilter === 'resolved'
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${selectedStatusFilter === 'resolved'
                                         ? 'bg-card text-muted-foreground shadow-2xs'
                                         : 'text-muted-foreground hover:text-foreground'
-                                }`}
+                                    }`}
                             >
                                 Resolved ({threads.filter((t) => t.status === 'resolved').length})
                             </button>
@@ -743,66 +813,74 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                             </div>
                         ) : (
                             filteredThreads.map((thread) => {
-                            const isSelected = selectedThread?.id === thread.id;
-                            const isResolved = thread.status === 'resolved';
-                            return (
-                                <div
-                                    key={thread.id}
-                                    onClick={() => setSelectedThread(thread)}
-                                    className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors relative ${
-                                        isSelected
-                                            ? 'bg-[#47b672]/10 border-l-4 border-l-[#47b672]'
-                                            : 'hover:bg-muted/40'
-                                    }`}
-                                >
-                                    {/* Avatar with Initials */}
-                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/20">
-                                        {thread.contactName.slice(0, 2).toUpperCase()}
-                                    </div>
+                                const isSelected = selectedThread?.id === thread.id;
+                                const isResolved = thread.status === 'resolved';
+                                return (
+                                    <div
+                                        key={thread.id}
+                                        onClick={() => setSelectedThread(thread)}
+                                        className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors relative ${isSelected
+                                                ? 'bg-[#47b672]/10 border-l-4 border-l-[#47b672]'
+                                                : 'hover:bg-muted/40'
+                                            }`}
+                                    >
+                                        {/* Avatar with Initials */}
+                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/20">
+                                            {thread.contactName.slice(0, 2).toUpperCase()}
+                                        </div>
 
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-1">
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                <span className="text-xs font-bold text-foreground truncate">
-                                                    {thread.contactName}
-                                                </span>
-                                                {isResolved && (
-                                                    <span className="rounded bg-muted px-1.5 py-0.2 text-[9px] font-semibold text-muted-foreground shrink-0 border border-border/70">
-                                                        Resolved
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between gap-1">
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <span className="text-xs font-bold text-foreground truncate">
+                                                        {thread.contactName}
                                                     </span>
-                                                )}
+                                                    {isResolved && (
+                                                        <span className="rounded bg-muted px-1.5 py-0.2 text-[9px] font-semibold text-muted-foreground shrink-0 border border-border/70">
+                                                            Resolved
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
+                                                    {thread.time}
+                                                </span>
                                             </div>
-                                            <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
-                                                {thread.time}
-                                            </span>
-                                        </div>
 
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground font-semibold truncate max-w-[120px]">
-                                                {thread.channel}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
-                                                {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
-                                                    <>
-                                                        <FileText className="size-3 text-red-500 shrink-0 inline" />
-                                                        <span className="truncate">{thread.lastMessage.replace(/^📎\s*/, '')}</span>
-                                                    </>
-                                                ) : (
-                                                    thread.lastMessage
-                                                )}
-                                            </span>
-                                        </div>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground font-semibold truncate max-w-[120px]">
+                                                    {thread.channel}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
+                                                    {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
+                                                        <>
+                                                            <FileText className="size-3 text-red-500 shrink-0 inline" />
+                                                            <span className="truncate">{thread.lastMessage.replace(/^📎\s*/, '')}</span>
+                                                        </>
+                                                    ) : thread.lastMessage.startsWith('[Broadcast') || thread.lastMessage.startsWith('[Template') ? (
+                                                        <>
+                                                            <Sparkles className="size-3 text-emerald-600 dark:text-emerald-400 shrink-0 inline" />
+                                                            <span className="truncate text-foreground/90 font-medium">
+                                                                {thread.lastMessage.includes('\n')
+                                                                    ? thread.lastMessage.split('\n')[1].replace(/\*/g, '')
+                                                                    : thread.lastMessage.replace(/^\[[^\]]+\]\s*/, '')}
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        thread.lastMessage
+                                                    )}
+                                                </span>
+                                            </div>
 
-                                        <div className="flex items-center gap-2 mt-1.5">
-                                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                                                <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                                                24h Window: {thread.windowRemaining}
-                                            </span>
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                                    <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                                    24h Window: {thread.windowRemaining}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        }))}
+                                );
+                            }))}
                     </div>
 
                     {/* Bottom Status Bar */}
@@ -849,18 +927,16 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             <span className="rounded bg-[#47b672]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[#28804c] dark:text-[#52c480] whitespace-nowrap shrink-0">
                                                 {selectedThread.channel}
                                             </span>
-                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${
-                                                selectedThread.status === 'resolved'
+                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${selectedThread.status === 'resolved'
                                                     ? 'bg-muted text-muted-foreground border-border/70'
                                                     : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
-                                            }`}>
+                                                }`}>
                                                 <span className={`size-1.5 rounded-full ${selectedThread.status === 'resolved' ? 'bg-muted-foreground' : 'bg-emerald-500'}`} />
                                                 {selectedThread.status === 'resolved' ? 'Resolved' : 'Open'}
                                             </span>
                                             {selectedThread.stage && (
-                                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border whitespace-nowrap shrink-0 ${
-                                                    STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
-                                                }`}>
+                                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border whitespace-nowrap shrink-0 ${STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
+                                                    }`}>
                                                     {STAGE_CONFIG[selectedThread.stage]?.icon || '🎯'} {selectedThread.stage}
                                                 </span>
                                             )}
@@ -924,22 +1000,20 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                 {(messages[selectedThread.id] || []).map((msg) => (
                                     <div
                                         key={msg.id}
-                                        className={`flex flex-col max-w-[70%] ${
-                                            msg.sender === 'agent'
+                                        className={`flex flex-col max-w-[70%] ${msg.sender === 'agent'
                                                 ? 'ml-auto items-end'
                                                 : msg.sender === 'bot'
-                                                ? 'mr-auto items-start'
-                                                : 'mr-auto items-start'
-                                        }`}
+                                                    ? 'mr-auto items-start'
+                                                    : 'mr-auto items-start'
+                                            }`}
                                     >
                                         <div
-                                            className={`rounded-2xl px-4 py-2.5 text-xs shadow-xs leading-relaxed ${
-                                                msg.sender === 'agent'
+                                            className={`rounded-2xl px-4 py-2.5 text-xs shadow-xs leading-relaxed ${msg.sender === 'agent'
                                                     ? 'bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef] rounded-tr-xs'
                                                     : msg.sender === 'bot'
-                                                    ? 'bg-card text-foreground border border-purple-500/30 rounded-tl-xs'
-                                                    : 'bg-card text-foreground border border-border rounded-tl-xs'
-                                            }`}
+                                                        ? 'bg-card text-foreground border border-purple-500/30 rounded-tl-xs'
+                                                        : 'bg-card text-foreground border border-border rounded-tl-xs'
+                                                }`}
                                         >
                                             {msg.sender === 'bot' && (
                                                 <div className="flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold mb-1">
@@ -967,28 +1041,26 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                             ) : (
                                                                 <div
                                                                     onClick={() => handleDownloadAttachment(parsedAttachment.fileName, parsedAttachment.url)}
-                                                                    className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl cursor-pointer transition-all ${
-                                                                        msg.sender === 'agent'
+                                                                    className={`group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl cursor-pointer transition-all ${msg.sender === 'agent'
                                                                             ? 'bg-[#128c7e]/10 dark:bg-black/25 hover:bg-[#128c7e]/15 border border-[#128c7e]/20'
                                                                             : 'bg-muted/70 hover:bg-muted border border-border/80'
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                                                         {/* Format Badge */}
                                                                         <div
-                                                                            className={`size-10 sm:size-11 rounded-lg flex flex-col items-center justify-center shrink-0 font-bold shadow-xs border ${
-                                                                                parsedAttachment.fileType === 'pdf'
+                                                                            className={`size-10 sm:size-11 rounded-lg flex flex-col items-center justify-center shrink-0 font-bold shadow-xs border ${parsedAttachment.fileType === 'pdf'
                                                                                     ? 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
                                                                                     : parsedAttachment.fileType === 'doc'
-                                                                                    ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                                                                                    : parsedAttachment.fileType === 'sheet'
-                                                                                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                                                                                    : parsedAttachment.fileType === 'archive'
-                                                                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                                                                    : parsedAttachment.fileType === 'image'
-                                                                                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30'
-                                                                                    : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
-                                                                            }`}
+                                                                                        ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                                                                        : parsedAttachment.fileType === 'sheet'
+                                                                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                                                                            : parsedAttachment.fileType === 'archive'
+                                                                                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                                                                                : parsedAttachment.fileType === 'image'
+                                                                                                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/30'
+                                                                                                    : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                                                                                }`}
                                                                         >
                                                                             {parsedAttachment.fileType === 'image' ? (
                                                                                 <ImageIcon className="size-4 sm:size-4.5" />
@@ -1038,6 +1110,49 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                     );
                                                 }
 
+                                                const parsedTemplate = parseTemplateFromMessage(msg.text, selectedThread?.contactName);
+                                                if (parsedTemplate) {
+                                                    const renderFormattedText = (text: string) => {
+                                                        const parts = text.split(/(\*[^*]+\*)/g);
+                                                        return parts.map((part, i) => {
+                                                            if (part.startsWith('*') && part.endsWith('*')) {
+                                                                return <strong key={i} className="font-bold">{part.slice(1, -1)}</strong>;
+                                                            }
+                                                            return part;
+                                                        });
+                                                    };
+
+                                                    return (
+                                                        <div className="space-y-2 min-w-[220px] max-w-[340px] sm:max-w-[420px] pt-0.5">
+                                                            {/* Official WhatsApp Template Badge Header */}
+                                                            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-black/10 dark:border-white/10 text-[10px]">
+                                                                <div className="flex items-center gap-1.5 font-bold text-[#1e6e3c] dark:text-[#52c480]">
+                                                                    <Sparkles className="size-3 text-[#28804c] dark:text-[#52c480]" />
+                                                                    <span>WhatsApp Template</span>
+                                                                </div>
+                                                                {parsedTemplate.displayName && (
+                                                                    <span className="px-2 py-0.5 rounded-full bg-[#47b672]/20 text-[#1e6e3c] dark:text-[#52c480] font-semibold text-[9px] truncate max-w-[150px]">
+                                                                        {parsedTemplate.displayName}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Rendered Template Body (Hindi / Gujarati / English) */}
+                                                            <div className="text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef] select-text">
+                                                                {renderFormattedText(parsedTemplate.body)}
+                                                            </div>
+
+                                                            {/* Broadcast Campaign Meta Footer */}
+                                                            {parsedTemplate.campaignName && (
+                                                                <div className="text-[10px] text-muted-foreground/80 pt-1 border-t border-black/5 dark:border-white/5 flex items-center gap-1">
+                                                                    <Tag className="size-2.5 text-muted-foreground" />
+                                                                    <span className="truncate">Campaign: {parsedTemplate.campaignName}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                }
+
                                                 return msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>;
                                             })()}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
@@ -1049,10 +1164,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                             msg.status === 'read'
                                                                 ? 'Read'
                                                                 : msg.status === 'delivered'
-                                                                ? 'Delivered'
-                                                                : msg.status === 'failed'
-                                                                ? 'Failed to send'
-                                                                : 'Sent'
+                                                                    ? 'Delivered'
+                                                                    : msg.status === 'failed'
+                                                                        ? 'Failed to send'
+                                                                        : 'Sent'
                                                         }
                                                     >
                                                         {msg.status === 'read' ? (
@@ -1142,11 +1257,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                     key={grp.name}
                                                     type="button"
                                                     onClick={() => setSelectedEmojiGroup(idx)}
-                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${
-                                                        selectedEmojiGroup === idx
+                                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors ${selectedEmojiGroup === idx
                                                             ? 'bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480]'
                                                             : 'text-muted-foreground hover:text-foreground'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {grp.name}
                                                 </button>
@@ -1258,11 +1372,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             setShowEmojiPicker(!showEmojiPicker);
                                             setShowAttachmentMenu(false);
                                         }}
-                                        className={`size-8 p-0 transition-colors ${
-                                            showEmojiPicker
+                                        className={`size-8 p-0 transition-colors ${showEmojiPicker
                                                 ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
                                                 : 'text-muted-foreground hover:text-foreground'
-                                        }`}
+                                            }`}
                                         title="Insert emoji"
                                     >
                                         <Smile className="size-4" />
@@ -1276,11 +1389,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             setShowAttachmentMenu(!showAttachmentMenu);
                                             setShowEmojiPicker(false);
                                         }}
-                                        className={`size-8 p-0 transition-colors ${
-                                            showAttachmentMenu
+                                        className={`size-8 p-0 transition-colors ${showAttachmentMenu
                                                 ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
                                                 : 'text-muted-foreground hover:text-foreground'
-                                        }`}
+                                            }`}
                                         title="Attach document, photo, or quick response"
                                     >
                                         <Paperclip className="size-4" />
@@ -1370,11 +1482,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                         </div>
 
                         {newChatStatus && (
-                            <div className={`p-2.5 rounded-lg text-xs ${
-                                newChatStatus.success
+                            <div className={`p-2.5 rounded-lg text-xs ${newChatStatus.success
                                     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
                                     : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
-                            }`}>
+                                }`}>
                                 {newChatStatus.message}
                             </div>
                         )}
@@ -1414,11 +1525,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     <button
                                         type="button"
                                         onClick={() => setNewChatMsgType('template')}
-                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
-                                            newChatMsgType === 'template'
+                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${newChatMsgType === 'template'
                                                 ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
                                                 : 'border-border bg-background hover:bg-muted/40'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="font-semibold text-foreground">⚡ Approved Template</div>
                                         <p className="text-[10px] text-muted-foreground mt-0.5">Delivers anytime to any number</p>
@@ -1427,11 +1537,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                     <button
                                         type="button"
                                         onClick={() => setNewChatMsgType('text')}
-                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${
-                                            newChatMsgType === 'text'
+                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${newChatMsgType === 'text'
                                                 ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
                                                 : 'border-border bg-background hover:bg-muted/40'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="font-semibold text-foreground">💬 Custom Text</div>
                                         <p className="text-[10px] text-muted-foreground mt-0.5">If customer messaged in last 24h</p>
@@ -1524,11 +1633,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                         {/* Modal Scrollable Body */}
                         <div className="flex-1 overflow-y-auto p-5 space-y-4">
                             {saveNotice && (
-                                <div className={`p-2.5 rounded-lg text-xs font-medium ${
-                                    saveNotice.includes('successfully') || saveNotice.includes('Updated')
+                                <div className={`p-2.5 rounded-lg text-xs font-medium ${saveNotice.includes('successfully') || saveNotice.includes('Updated')
                                         ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
                                         : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
-                                }`}>
+                                    }`}>
                                     {saveNotice}
                                 </div>
                             )}
@@ -1588,11 +1696,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                         <button
                                             type="button"
                                             onClick={() => setEditContactStatus('open')}
-                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
-                                                editContactStatus === 'open'
+                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${editContactStatus === 'open'
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/20'
                                                     : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="font-bold flex items-center gap-1.5">
                                                 <span className="size-2 rounded-full bg-emerald-500"></span>
@@ -1603,11 +1710,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                         <button
                                             type="button"
                                             onClick={() => setEditContactStatus('resolved')}
-                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
-                                                editContactStatus === 'resolved'
+                                            className={`p-2.5 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${editContactStatus === 'resolved'
                                                     ? 'border-muted-foreground bg-muted text-foreground ring-2 ring-muted-foreground/20'
                                                     : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="font-bold flex items-center gap-1.5">
                                                 <span className="size-2 rounded-full bg-muted-foreground"></span>
@@ -1632,11 +1738,10 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                     key={stage}
                                                     type="button"
                                                     onClick={() => setEditContactStage(stage)}
-                                                    className={`p-2 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${
-                                                        isSelected
+                                                    className={`p-2 rounded-xl border text-left transition-all text-xs flex flex-col gap-0.5 ${isSelected
                                                             ? 'border-[#47b672] bg-[#47b672]/10 text-foreground ring-2 ring-[#47b672]/20 font-bold'
                                                             : 'border-border bg-card hover:bg-muted/40 text-muted-foreground'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     <span className="flex items-center gap-1 text-[11px]">
                                                         <span>{cfg.icon}</span>

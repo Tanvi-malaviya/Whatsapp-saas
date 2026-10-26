@@ -61,12 +61,17 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
+    const [editCity, setEditCity] = useState('');
+    const [editEmail, setEditEmail] = useState('');
     const [editStage, setEditStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
+    const [editOptIn, setEditOptIn] = useState(true);
 
     // Delete Confirmation Modal State
     const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
+    const [isAdding, setIsAdding] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
 
     const showToast = (msg: string) => {
@@ -147,13 +152,18 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
             }
         }
 
+        setIsAdding(true);
         router.post('/contacts', {
             name: name.trim(),
             phone: cleaned,
+            email: email.trim(),
+            city: city.trim(),
             stage,
+            opt_in: optIn,
         }, {
             preserveScroll: true,
             onSuccess: () => {
+                setIsAdding(false);
                 setIsAddOpen(false);
                 setName('');
                 setPhone('');
@@ -163,6 +173,12 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                 setOptIn(true);
                 showToast(`Contact "${name.trim()}" saved successfully!`);
             },
+            onError: () => {
+                setIsAdding(false);
+            },
+            onFinish: () => {
+                setIsAdding(false);
+            },
         });
     };
 
@@ -170,7 +186,10 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
         setEditingContact(contact);
         setEditName(contact.name);
         setEditPhone(contact.phone);
+        setEditCity(contact.city === '—' ? '' : contact.city);
+        setEditEmail(contact.email === '—' ? '' : contact.email);
         setEditStage(contact.stage);
+        setEditOptIn(contact.consent === 'opted_in');
     };
 
     const handleUpdateContact = (e: React.FormEvent) => {
@@ -188,18 +207,53 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
             }
         }
 
+        const targetId = editingContact.id;
+        const newName = editName.trim();
+        const newCity = editCity.trim() || '—';
+        const newEmail = editEmail.trim() || '—';
+        const newStage = editStage;
+        const newConsent: 'opted_in' | 'opted_out' = editOptIn ? 'opted_in' : 'opted_out';
+
+        // Immediate state update for instant UI response in table
+        setContacts((prev) =>
+            prev.map((c) =>
+                c.id === targetId
+                    ? {
+                          ...c,
+                          name: newName,
+                          phone: cleaned,
+                          city: newCity,
+                          email: newEmail,
+                          stage: newStage,
+                          consent: newConsent,
+                      }
+                    : c
+            )
+        );
+
+        setIsUpdating(true);
         router.put(
-            `/contacts/${editingContact.id}`,
+            `/contacts/${targetId}`,
             {
-                name: editName.trim(),
+                name: newName,
                 phone: cleaned,
-                stage: editStage,
+                city: editCity.trim(),
+                email: editEmail.trim(),
+                stage: newStage,
+                opt_in: editOptIn,
             },
             {
                 preserveScroll: true,
                 onSuccess: () => {
+                    setIsUpdating(false);
                     setEditingContact(null);
-                    showToast(`Contact "${editName.trim()}" updated successfully!`);
+                    showToast(`Contact "${newName}" updated successfully!`);
+                },
+                onError: () => {
+                    setIsUpdating(false);
+                },
+                onFinish: () => {
+                    setIsUpdating(false);
                 },
             }
         );
@@ -208,10 +262,15 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const handleConfirmDelete = () => {
         if (!deletingContact) return;
         setIsDeleting(true);
-        router.delete(`/contacts/${deletingContact.id}`, {
+        const targetId = deletingContact.id;
+        const deletedName = deletingContact.name;
+
+        // Immediate removal from table
+        setContacts((prev) => prev.filter((c) => c.id !== targetId));
+
+        router.delete(`/contacts/${targetId}`, {
             preserveScroll: true,
             onSuccess: () => {
-                const deletedName = deletingContact.name;
                 setDeletingContact(null);
                 setIsDeleting(false);
                 showToast(`Contact "${deletedName}" deleted successfully.`);
@@ -492,6 +551,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                disabled={isAdding}
                                 onClick={() => setIsAddOpen(false)}
                             >
                                 Cancel
@@ -499,9 +559,17 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             <Button
                                 type="submit"
                                 size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={isAdding}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[125px]"
                             >
-                                Save Contact
+                                {isAdding ? (
+                                    <>
+                                        <span className="size-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>Saving...</span>
+                                    </>
+                                ) : (
+                                    <span>Save Contact</span>
+                                )}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -575,6 +643,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             <input
                                 type="text"
                                 required
+                                placeholder="e.g. Rahul Patel"
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
                                 className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -586,24 +655,62 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             <input
                                 type="text"
                                 required
+                                placeholder="e.g. 9825012345 or +919825012345"
                                 value={editPhone}
                                 onChange={(e) => setEditPhone(e.target.value)}
                                 className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             />
+                            <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">City (optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Ahmedabad"
+                                    value={editCity}
+                                    onChange={(e) => setEditCity(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Lead Stage</label>
+                                <select
+                                    value={editStage}
+                                    onChange={(e) => setEditStage(e.target.value as any)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                >
+                                    <option value="New">New</option>
+                                    <option value="Contacted">Contacted</option>
+                                    <option value="Interested">Interested</option>
+                                    <option value="Won">Won</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="space-y-1">
-                            <label className="text-xs font-semibold">Lead Stage</label>
-                            <select
-                                value={editStage}
-                                onChange={(e) => setEditStage(e.target.value as any)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            >
-                                <option value="New">New</option>
-                                <option value="Contacted">Contacted</option>
-                                <option value="Interested">Interested</option>
-                                <option value="Won">Won</option>
-                            </select>
+                            <label className="text-xs font-semibold">Email (optional)</label>
+                            <input
+                                type="email"
+                                placeholder="e.g. rahul@example.com"
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                            />
+                        </div>
+
+                        <div className="flex items-start gap-2 pt-1">
+                            <input
+                                type="checkbox"
+                                id="edit-optin"
+                                checked={editOptIn}
+                                onChange={(e) => setEditOptIn(e.target.checked)}
+                                className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
+                            />
+                            <label htmlFor="edit-optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
+                                <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
+                            </label>
                         </div>
 
                         <DialogFooter className="pt-3">
@@ -611,6 +718,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                disabled={isUpdating}
                                 onClick={() => setEditingContact(null)}
                             >
                                 Cancel
@@ -618,9 +726,17 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             <Button
                                 type="submit"
                                 size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                disabled={isUpdating}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[135px]"
                             >
-                                Update Contact
+                                {isUpdating ? (
+                                    <>
+                                        <span className="size-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>Updating...</span>
+                                    </>
+                                ) : (
+                                    <span>Update Contact</span>
+                                )}
                             </Button>
                         </DialogFooter>
                     </form>

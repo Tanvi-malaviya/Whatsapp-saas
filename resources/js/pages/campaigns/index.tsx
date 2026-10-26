@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Send,
@@ -71,6 +71,8 @@ interface CampaignsPageProps {
     templates?: TemplateItem[];
     contacts?: ContactItem[];
     recentCampaigns?: CampaignHistoryItem[];
+    activeSegmentName?: string | null;
+    autoOpenBroadcast?: boolean;
     channel?: {
         id: string;
         name: string;
@@ -83,6 +85,8 @@ export default function CampaignsList({
     templates = [],
     contacts = [],
     recentCampaigns = [],
+    activeSegmentName,
+    autoOpenBroadcast,
     channel,
 }: CampaignsPageProps) {
     const { tenant } = usePage().props as any;
@@ -96,7 +100,7 @@ export default function CampaignsList({
     // Broadcast Modal State
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
-    const [campaignName, setCampaignName] = useState('');
+    const [campaignName, setCampaignName] = useState(activeSegmentName ? `${activeSegmentName} Broadcast` : '');
     const [audienceMode, setAudienceMode] = useState<'contacts' | 'manual'>('contacts');
     const [selectedContactIds, setSelectedContactIds] = useState<string[]>(
         contacts.map((c) => c.id)
@@ -135,7 +139,9 @@ export default function CampaignsList({
         setSelectedTemplate(target);
         if (target) {
             setCampaignName(
-                `${target.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Broadcast`
+                activeSegmentName
+                    ? `${activeSegmentName} - ${target.name.replace(/_/g, ' ')}`
+                    : `${target.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Broadcast`
             );
             // Count variables in body
             const matches = target.body.match(/\{\{(\d+)\}\}/g) || [];
@@ -145,7 +151,7 @@ export default function CampaignsList({
                 : Array.from({ length: count }, (_, i) => `Value ${i + 1}`);
             setTemplateParams(initialParams);
         } else {
-            setCampaignName('WhatsApp Broadcast Campaign');
+            setCampaignName(activeSegmentName ? `${activeSegmentName} Broadcast` : 'WhatsApp Broadcast Campaign');
             setTemplateParams([]);
         }
         setSelectedContactIds(contacts.map((c) => c.id));
@@ -336,6 +342,40 @@ export default function CampaignsList({
                     </div>
                 </div>
 
+                {/* Active Segment Audience Filter Banner */}
+                {activeSegmentName && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4 text-xs shadow-2xs">
+                        <div className="flex items-center gap-3">
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                                <Users className="size-4" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-foreground text-sm">
+                                        Audience Filter: {activeSegmentName}
+                                    </span>
+                                    <Badge variant="outline" className="text-[10px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border-emerald-500/40">
+                                        {contacts.length} Contact{contacts.length === 1 ? '' : 's'} Selected
+                                    </Badge>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Broadcast campaigns dispatched now will only be sent to contacts matching this segment.
+                                </p>
+                            </div>
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="h-8 text-xs shrink-0 bg-background/80 hover:bg-background border-border"
+                        >
+                            <Link href="/campaigns">
+                                Clear Segment Filter (Target All Contacts)
+                            </Link>
+                        </Button>
+                    </div>
+                )}
 
                 {/* Recent Broadcast Campaigns History */}
                 {recentCampaigns.length > 0 && (

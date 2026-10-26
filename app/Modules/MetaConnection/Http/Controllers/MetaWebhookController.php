@@ -172,7 +172,19 @@ class MetaWebhookController extends Controller
 
             // Extend 24h customer service window & update last activity
             $conversation->extendWindow();
-            $conversation->update(['last_message_at' => now()]);
+            
+            // Check for WhatsApp standard Opt-In / Opt-Out keywords
+            $cleanText = strtoupper(trim($textBody));
+            $optOutKeywords = ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'CANCEL', 'STOPALL'];
+            $optInKeywords = ['START', 'UNSTOP', 'YES'];
+
+            if (in_array($cleanText, $optOutKeywords)) {
+                $conversation->update(['is_opted_in' => false, 'last_message_at' => now()]);
+            } elseif (in_array($cleanText, $optInKeywords)) {
+                $conversation->update(['is_opted_in' => true, 'last_message_at' => now()]);
+            } else {
+                $conversation->update(['last_message_at' => now()]);
+            }
 
             // Store inbound message
             Message::create([
@@ -189,7 +201,7 @@ class MetaWebhookController extends Controller
             ]);
 
             // Match Bot Rules for auto-reply
-            $replyText = $this->matchBotReply($org, $textBody);
+            $replyText = $this->matchBotReply($org, $textBody, $conversation);
 
             if ($replyText) {
                 // Store outbound bot reply
@@ -212,8 +224,16 @@ class MetaWebhookController extends Controller
         TenantContext::clear();
     }
 
-    private function matchBotReply(Organization $org, string $inboundText): ?string
+    private function matchBotReply(Organization $org, string $inboundText, ?Conversation $conversation = null): ?string
     {
+        $cleanText = strtoupper(trim($inboundText));
+        if (in_array($cleanText, ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'CANCEL', 'STOPALL'])) {
+            return "You have been unsubscribed from our WhatsApp notifications. You will no longer receive promotional updates. Reply START anytime to re-subscribe.";
+        }
+        if (in_array($cleanText, ['START', 'UNSTOP'])) {
+            return "Thank you! You have successfully re-subscribed to our WhatsApp updates.";
+        }
+
         $rules = BotRule::where('organization_id', $org->id)
             ->where('is_enabled', true)
             ->orderBy('priority', 'asc')
@@ -225,13 +245,72 @@ class MetaWebhookController extends Controller
             }
         }
 
+        // 2. Check Bot Flows
+        $flows = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)
+            ->where('status', 'active')
+            ->get();
+
+        $cleanedInbound = strtolower(trim($inboundText));
+
+        // 2a. Check if this inbound message is an answer to a previous follow-up question!
+        if ($conversation) {
+            $lastOutbound = Message::where('conversation_id', $conversation->id)
+                ->where('direction', 'outbound')
+                ->latest()
+                ->first();
+
+            if ($lastOutbound && str_contains($lastOutbound->content, '❓')) {
+                foreach ($flows as $flow) {
+                    if (! empty($flow->options) && is_array($flow->options)) {
+                        foreach ($flow->options as $opt) {
+                            if (! empty($opt['followup_question']) && str_contains($lastOutbound->content, $opt['followup_question'])) {
+                                return ! empty($opt['followup_reply'])
+                                    ? $opt['followup_reply']
+                                    : "✅ Thank you! We have received your response. Our team will review it and contact you shortly.\n\nReply MENU anytime to see options again.";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2b. If user replied with a numeric option (1, 2, 3...)
+        if (is_numeric($cleanedInbound) && (int) $cleanedInbound >= 1 && (int) $cleanedInbound <= 10) {
+            foreach ($flows as $flow) {
+                if (! empty($flow->options) && is_array($flow->options)) {
+                    foreach ($flow->options as $opt) {
+                        if (($opt['id'] ?? '') === $cleanedInbound) {
+                            $flow->increment('execution_count');
+                            $reply = $opt['reply_text'] ?? '';
+                            if (($opt['action_type'] ?? '') === 'followup' && ! empty($opt['followup_question'])) {
+                                $reply .= "\n\n❓ " . $opt['followup_question'];
+                            }
+                            return $reply;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2c. If user inbound message matches flow trigger keywords
+        foreach ($flows as $flow) {
+            $keywords = array_map('trim', explode(',', strtolower($flow->trigger_keywords ?? '')));
+            foreach ($keywords as $kw) {
+                if (! empty($kw) && (str_contains($cleanedInbound, $kw) || $cleanedInbound === $kw)) {
+                    $flow->increment('execution_count');
+                    return $flow->greeting_message;
+                }
+            }
+        }
+
         return null;
     }
 
     private function dispatchMetaReply(?string $phoneNumberId, string $toPhone, string $message): void
     {
-        $token = env('META_WHATSAPP_TOKEN');
-        $phoneId = $phoneNumberId ?? env('META_PHONE_NUMBER_ID');
+        $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first() ?? WhatsAppChannel::first();
+        $token = env('META_WHATSAPP_TOKEN') ?: $channel?->access_token;
+        $phoneId = $phoneNumberId ?? $channel?->phone_number_id ?? env('META_PHONE_NUMBER_ID');
 
         if (! $token || ! $phoneId) {
             return;
