@@ -20,10 +20,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useSidebar } from '@/components/ui/sidebar';
 import type { TenantOrganization } from '@/types/tenant';
 
 export function WorkspaceSwitcher() {
     const { tenant } = usePage().props;
+    const { state, isMobile } = useSidebar();
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newOrgName, setNewOrgName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,10 +84,11 @@ export function WorkspaceSwitcher() {
                 <DropdownMenuTrigger asChild>
                     <button
                         type="button"
-                        className="flex w-full items-center justify-between rounded-xl border border-border bg-background p-2 group-data-[collapsible=icon]:p-1 shadow-2xs hover:bg-muted/60 transition-colors text-left"
+                        title={currentOrg.name}
+                        className="flex w-full items-center justify-between rounded-xl border border-border bg-background p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none group-data-[collapsible=icon]:justify-center shadow-2xs hover:bg-muted/60 transition-colors text-left"
                     >
-                        <div className="flex items-center gap-2.5 truncate">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-sm shadow-xs">
+                        <div className="flex items-center gap-2.5 truncate group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0">
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm shadow-xs">
                                 {currentOrg.name.slice(0, 1).toUpperCase()}
                             </div>
                             <div className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
@@ -100,7 +103,12 @@ export function WorkspaceSwitcher() {
                         <ChevronsUpDown className="size-3.5 text-muted-foreground opacity-70 group-data-[collapsible=icon]:hidden shrink-0 ml-1" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="start">
+                <DropdownMenuContent
+                    className="w-64"
+                    align={state === 'collapsed' ? 'center' : 'start'}
+                    side={isMobile ? 'bottom' : state === 'collapsed' ? 'right' : 'bottom'}
+                    sideOffset={8}
+                >
                     <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5">
                         Your Workspaces
                     </DropdownMenuLabel>
@@ -116,7 +124,7 @@ export function WorkspaceSwitcher() {
                                 <div className="flex items-center gap-2.5">
                                     <div
                                         className={`flex size-7 items-center justify-center rounded-lg text-xs font-bold ${
-                                            isSelected ? 'bg-emerald-600 text-white' : 'bg-muted text-muted-foreground'
+                                            isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                                         }`}
                                     >
                                         {org.name.slice(0, 1).toUpperCase()}
@@ -197,7 +205,7 @@ export function WorkspaceSwitcher() {
                                 type="submit"
                                 size="sm"
                                 disabled={isSubmitting || !newOrgName.trim()}
-                                className="bg-[#47b672] hover:bg-[#3ea164] text-white text-xs gap-1.5"
+                                className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs gap-1.5"
                             >
                                 {isSubmitting && <Loader2 className="size-3.5 animate-spin" />}
                                 Create Workspace

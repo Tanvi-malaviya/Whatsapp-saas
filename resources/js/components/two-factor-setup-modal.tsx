@@ -1,6 +1,6 @@
 import { Form } from '@inertiajs/react';
 import { REGEXP_ONLY_DIGITS } from 'input-otp';
-import { Check, Copy, ScanLine } from 'lucide-react';
+import { Check, Copy, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import InputError from '@/components/input-error';
@@ -18,33 +18,14 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
-import { useAppearance } from '@/hooks/use-appearance';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { confirm } from '@/routes/two-factor';
 
-function GridScanIcon() {
+function ShieldBadgeIcon() {
     return (
-        <div className="mb-3 rounded-full border border-border bg-card p-0.5 shadow-sm">
-            <div className="relative overflow-hidden rounded-full border border-border bg-muted p-2.5">
-                <div className="absolute inset-0 grid grid-cols-5 opacity-50">
-                    {Array.from({ length: 5 }, (_, i) => (
-                        <div
-                            key={`col-${i + 1}`}
-                            className="border-r border-border last:border-r-0"
-                        />
-                    ))}
-                </div>
-                <div className="absolute inset-0 grid grid-rows-5 opacity-50">
-                    {Array.from({ length: 5 }, (_, i) => (
-                        <div
-                            key={`row-${i + 1}`}
-                            className="border-b border-border last:border-b-0"
-                        />
-                    ))}
-                </div>
-                <ScanLine className="relative z-20 size-6 text-foreground" />
-            </div>
+        <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-4 ring-emerald-50/50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-950/20">
+            <ShieldCheck className="size-5 text-[#1da851]" />
         </div>
     );
 }
@@ -62,30 +43,25 @@ function TwoFactorSetupStep({
     onNextStep: () => void;
     errors: string[];
 }) {
-    const { resolvedAppearance } = useAppearance();
     const [copiedText, copy] = useClipboard();
-    const IconComponent = copiedText === manualSetupKey ? Check : Copy;
+    const isCopied = copiedText === manualSetupKey;
+    const IconComponent = isCopied ? Check : Copy;
 
     return (
         <>
             {errors?.length ? (
                 <AlertError errors={errors} />
             ) : (
-                <>
-                    <div className="mx-auto flex max-w-md overflow-hidden">
-                        <div className="mx-auto aspect-square w-64 rounded-lg border border-border">
-                            <div className="z-10 flex h-full w-full items-center justify-center p-5">
+                <div className="flex w-full flex-col items-center space-y-2.5">
+                    {/* QR Code Container */}
+                    <div className="flex flex-col items-center">
+                        <div className="relative aspect-square w-36 rounded-xl border border-border/80 bg-white p-2 shadow-xs">
+                            <div className="flex h-full w-full items-center justify-center">
                                 {qrCodeSvg ? (
                                     <div
-                                        className="aspect-square w-full rounded-lg bg-white p-2 [&_svg]:size-full"
+                                        className="size-full [&_svg]:size-full"
                                         dangerouslySetInnerHTML={{
                                             __html: qrCodeSvg,
-                                        }}
-                                        style={{
-                                            filter:
-                                                resolvedAppearance === 'dark'
-                                                    ? 'invert(1) brightness(1.5)'
-                                                    : undefined,
                                         }}
                                     />
                                 ) : (
@@ -93,46 +69,54 @@ function TwoFactorSetupStep({
                                 )}
                             </div>
                         </div>
+                        <p className="mt-1 text-[11px] text-muted-foreground text-center">
+                            Scan with Google Authenticator or Authy
+                        </p>
                     </div>
 
-                    <div className="flex w-full space-x-5">
-                        <Button className="w-full" onClick={onNextStep}>
-                            {buttonText}
-                        </Button>
-                    </div>
-
-                    <div className="relative flex w-full items-center justify-center">
-                        <div className="absolute inset-0 top-1/2 h-px w-full bg-border" />
-                        <span className="relative bg-card px-2 py-1">
-                            or, enter the code manually
+                    {/* Divider */}
+                    <div className="relative flex w-full items-center justify-center my-0">
+                        <div className="absolute inset-0 top-1/2 h-px w-full bg-border/60" />
+                        <span className="relative bg-background px-2.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            or enter key manually
                         </span>
                     </div>
 
-                    <div className="flex w-full space-x-2">
-                        <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
-                            {!manualSetupKey ? (
-                                <div className="flex h-full w-full items-center justify-center bg-muted p-3">
-                                    <Spinner />
-                                </div>
-                            ) : (
-                                <>
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value={manualSetupKey}
-                                        className="h-full w-full bg-background p-3 text-foreground outline-none"
-                                    />
-                                    <button
-                                        onClick={() => copy(manualSetupKey)}
-                                        className="border-l border-border px-3 hover:bg-muted"
-                                    >
-                                        <IconComponent className="w-4" />
-                                    </button>
-                                </>
-                            )}
-                        </div>
+                    {/* Manual Key Box */}
+                    <div className="w-full">
+                        {!manualSetupKey ? (
+                            <div className="flex w-full items-center justify-center rounded-lg border border-border bg-muted/30 p-2">
+                                <Spinner />
+                            </div>
+                        ) : (
+                            <div className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 transition-colors hover:bg-muted/50">
+                                <code className="select-all font-mono text-xs font-semibold tracking-wider text-foreground">
+                                    {manualSetupKey}
+                                </code>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => copy(manualSetupKey)}
+                                    className="h-6 px-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground shrink-0 gap-1"
+                                >
+                                    <IconComponent className={`size-3 ${isCopied ? 'text-emerald-600' : ''}`} />
+                                    <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                                </Button>
+                            </div>
+                        )}
                     </div>
-                </>
+
+                    {/* Continue Button */}
+                    <div className="w-full pt-0.5">
+                        <Button
+                            className="w-full bg-[#1da851] hover:bg-[#168a42] text-white shadow-xs font-medium h-9 text-xs sm:text-sm"
+                            onClick={onNextStep}
+                        >
+                            {buttonText}
+                        </Button>
+                    </div>
+                </div>
             )}
         </>
     );
@@ -151,7 +135,7 @@ function TwoFactorVerificationStep({
     useEffect(() => {
         setTimeout(() => {
             pinInputContainerRef.current?.querySelector('input')?.focus();
-        }, 0);
+        }, 50);
     }, []);
 
     return (
@@ -168,62 +152,61 @@ function TwoFactorVerificationStep({
                 processing: boolean;
                 errors?: { confirmTwoFactorAuthentication?: { code?: string } };
             }) => (
-                <>
-                    <div
-                        ref={pinInputContainerRef}
-                        className="relative w-full space-y-3"
-                    >
-                        <div className="flex w-full flex-col items-center space-y-3 py-2">
-                            <InputOTP
-                                id="otp"
-                                name="code"
-                                maxLength={OTP_MAX_LENGTH}
-                                onChange={setCode}
-                                disabled={processing}
-                                pattern={REGEXP_ONLY_DIGITS}
-                                autoFocus
-                            >
-                                <InputOTPGroup>
-                                    {Array.from(
-                                        { length: OTP_MAX_LENGTH },
-                                        (_, index) => (
-                                            <InputOTPSlot
-                                                key={index}
-                                                index={index}
-                                            />
-                                        ),
-                                    )}
-                                </InputOTPGroup>
-                            </InputOTP>
-                            <InputError
-                                message={
-                                    errors?.confirmTwoFactorAuthentication?.code
-                                }
-                            />
-                        </div>
-
-                        <div className="flex w-full space-x-5">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="flex-1"
-                                onClick={onBack}
-                                disabled={processing}
-                            >
-                                Back
-                            </Button>
-                            <Button
-                                type="submit"
-                                className="flex-1"
-                                disabled={
-                                    processing || code.length < OTP_MAX_LENGTH
-                                }
-                            >
-                                Confirm
-                            </Button>
-                        </div>
+                <div
+                    ref={pinInputContainerRef}
+                    className="flex w-full flex-col items-center space-y-3 pt-0.5"
+                >
+                    <div className="flex w-full flex-col items-center space-y-1.5 py-1">
+                        <InputOTP
+                            id="otp"
+                            name="code"
+                            maxLength={OTP_MAX_LENGTH}
+                            onChange={setCode}
+                            disabled={processing}
+                            pattern={REGEXP_ONLY_DIGITS}
+                            autoFocus
+                        >
+                            <InputOTPGroup className="gap-1.5">
+                                {Array.from(
+                                    { length: OTP_MAX_LENGTH },
+                                    (_, index) => (
+                                        <InputOTPSlot
+                                            key={index}
+                                            index={index}
+                                            className="size-10 text-sm font-semibold border-border rounded-md shadow-2xs"
+                                        />
+                                    ),
+                                )}
+                            </InputOTPGroup>
+                        </InputOTP>
+                        <InputError
+                            message={
+                                errors?.confirmTwoFactorAuthentication?.code
+                            }
+                        />
                     </div>
-                </>
+
+                    <div className="flex w-full gap-2.5 pt-1">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="flex-1 h-9 text-xs"
+                            onClick={onBack}
+                            disabled={processing}
+                        >
+                            Back
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="flex-1 h-9 text-xs bg-[#1da851] hover:bg-[#168a42] text-white"
+                            disabled={
+                                processing || code.length < OTP_MAX_LENGTH
+                            }
+                        >
+                            {processing ? 'Confirming...' : 'Confirm'}
+                        </Button>
+                    </div>
+                </div>
             )}
         </Form>
     );
@@ -262,16 +245,16 @@ export default function TwoFactorSetupModal({
     }>(() => {
         if (twoFactorEnabled) {
             return {
-                title: 'Two-factor authentication enabled',
+                title: 'Two-factor enabled',
                 description:
-                    'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
+                    'Scan the QR code or enter the key into your authenticator app.',
                 buttonText: 'Close',
             };
         }
 
         if (showVerificationStep) {
             return {
-                title: 'Verify authentication code',
+                title: 'Verify code',
                 description:
                     'Enter the 6-digit code from your authenticator app',
                 buttonText: 'Continue',
@@ -281,7 +264,7 @@ export default function TwoFactorSetupModal({
         return {
             title: 'Enable two-factor authentication',
             description:
-                'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
+                'Scan the QR code or enter the setup key into your authenticator app',
             buttonText: 'Continue',
         };
     }, [twoFactorEnabled, showVerificationStep]);
@@ -324,16 +307,18 @@ export default function TwoFactorSetupModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader className="flex items-center justify-center">
-                    <GridScanIcon />
-                    <DialogTitle>{modalConfig.title}</DialogTitle>
-                    <DialogDescription className="text-center">
+            <DialogContent className="sm:max-w-[390px] p-5 gap-3">
+                <DialogHeader className="flex flex-col items-center justify-center text-center space-y-1 pb-0.5">
+                    <ShieldBadgeIcon />
+                    <DialogTitle className="text-base font-semibold tracking-tight">
+                        {modalConfig.title}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground max-w-[300px] text-center">
                         {modalConfig.description}
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-col items-center space-y-5">
+                <div className="flex flex-col items-center pt-0">
                     {showVerificationStep ? (
                         <TwoFactorVerificationStep
                             onClose={handleClose}

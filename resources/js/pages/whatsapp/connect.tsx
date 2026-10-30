@@ -19,6 +19,7 @@ import {
     Sliders,
     Radio,
     Sparkles,
+    ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -170,11 +171,13 @@ export default function WhatsAppConnect({
 
                     {channels.length > 0 && (
                         <Button
-                            onClick={openNewChannelModal}
+                            asChild
                             className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
                         >
-                            <Plus className="size-4" />
-                            Connect New WhatsApp Number
+                            <Link href="/whatsapp/connect/setup">
+                                <Plus className="size-4" />
+                                Connect New WhatsApp Number
+                            </Link>
                         </Button>
                     )}
                 </div>
@@ -223,25 +226,32 @@ export default function WhatsAppConnect({
                                 Link your first WhatsApp Business number to {currentOrg?.name || 'this workspace'} to enable automated replies and bulk broadcasts.
                             </p>
                             <Button
-                                onClick={handleOpenNewModal}
+                                asChild
                                 className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 shadow-sm shadow-[#47b672]/30"
                             >
-                                <Plus className="size-4" />
-                                Connect WhatsApp Number
+                                <Link href="/whatsapp/connect/setup">
+                                    <Plus className="size-4" />
+                                    Connect WhatsApp Number
+                                </Link>
                             </Button>
                         </Card>
                     ) : (
                         channels.map((ch) => (
-                            <Card key={ch.id} className="border-border/80 bg-card overflow-hidden shadow-xs hover:border-[#47b672]/40 transition-colors">
+                            <Card
+                                key={ch.id}
+                                onClick={() => router.visit(`/channels/${ch.id}`)}
+                                className="border-border/80 bg-card overflow-hidden shadow-xs hover:border-[#47b672] hover:shadow-md transition-all cursor-pointer group"
+                            >
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between p-5 gap-4">
                                     <div className="flex items-start gap-3.5">
-                                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold">
+                                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold group-hover:scale-105 transition-transform">
                                             <Smartphone className="size-5" />
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <h3 className="text-base font-bold text-foreground">
+                                                <h3 className="text-base font-bold text-foreground group-hover:text-[#47b672] transition-colors flex items-center gap-1.5">
                                                     {ch.name}
+                                                    <ChevronRight className="size-4 text-muted-foreground/60 group-hover:text-[#47b672] group-hover:translate-x-0.5 transition-all" />
                                                 </h3>
                                                 {ch.is_default && (
                                                     <Badge className="bg-[#47b672] text-white text-[10px] font-semibold">
@@ -265,7 +275,10 @@ export default function WhatsAppConnect({
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => handleEditChannel(ch)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEditChannel(ch);
+                                            }}
                                             className="h-8 text-xs border-border gap-1 text-foreground hover:bg-muted"
                                         >
                                             <Sliders className="size-3 text-[#47b672]" />
@@ -275,7 +288,10 @@ export default function WhatsAppConnect({
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            onClick={() => handleTestPing(ch.id)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleTestPing(ch.id);
+                                            }}
                                             disabled={isTesting === ch.id}
                                             className="h-8 text-xs border-border gap-1"
                                         >
@@ -286,7 +302,10 @@ export default function WhatsAppConnect({
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => handleDelete(ch.id, ch.name)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDelete(ch.id, ch.name);
+                                            }}
                                             className="h-8 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
                                         >
                                             <Trash2 className="size-3.5" />

@@ -64,6 +64,7 @@ class CampaignController extends Controller
                                 } elseif ($comp['type'] === 'HEADER') {
                                     $headerText = $comp['text'] ?? null;
                                     $headerFormat = $comp['format'] ?? null;
+                                    $headerUrl = $comp['example']['header_handle'][0] ?? $comp['example']['header_url'][0] ?? null;
                                 } elseif ($comp['type'] === 'BUTTONS' && ! empty($comp['buttons'])) {
                                     foreach ($comp['buttons'] as $b) {
                                         $buttons[] = $b['text'] ?? 'Action';
@@ -85,6 +86,7 @@ class CampaignController extends Controller
                             'costEstimate' => $cost,
                             'header' => $headerText,
                             'headerFormat' => $headerFormat,
+                            'headerUrl' => $headerUrl,
                             'body' => $bodyText,
                             'buttons' => $buttons,
                             'exampleParams' => $exampleParams,
@@ -224,6 +226,7 @@ class CampaignController extends Controller
             'recipients.*.phone' => 'required|string',
             'recipients.*.name' => 'nullable|string',
             'parameters' => 'nullable|array',
+            'header_url' => 'nullable|string',
         ]);
 
         $org = $this->resolveOrg($request);
@@ -253,6 +256,7 @@ class CampaignController extends Controller
         $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
         $templateBodyTemplate = $matchedTemplate['body'] ?? '';
         $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? null;
+        $matchedHeaderUrl = $validated['header_url'] ?? ($matchedTemplate['headerUrl'] ?? null);
 
         foreach ($recipients as $recipient) {
             $rawPhone = $recipient['phone'] ?? '';
@@ -293,16 +297,44 @@ class CampaignController extends Controller
             ];
 
             $components = [];
+            $mediaHeaderUrl = null;
 
-            // 1. Add Header component if template requires DOCUMENT format
-            if ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+            // 1. Add Header component if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
+            if ($matchedHeaderFormat === 'VIDEO' || str_contains($templateName, 'launch') || str_contains($templateName, 'video')) {
+                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'video',
+                            'video' => [
+                                'link' => $mediaHeaderUrl,
+                            ],
+                        ],
+                    ],
+                ];
+            } elseif ($matchedHeaderFormat === 'IMAGE') {
+                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'image',
+                            'image' => [
+                                'link' => $mediaHeaderUrl,
+                            ],
+                        ],
+                    ],
+                ];
+            } elseif ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
                 $components[] = [
                     'type' => 'header',
                     'parameters' => [
                         [
                             'type' => 'document',
                             'document' => [
-                                'link' => 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                                'link' => $mediaHeaderUrl,
                                 'filename' => 'Invoice_' . date('Ymd') . '.pdf',
                             ],
                         ],
@@ -347,7 +379,12 @@ class CampaignController extends Controller
                         $successCount++;
                     } else {
                         $failedCount++;
-                        $errors[] = $apiResp->json('error.message') ?? 'Meta API error';
+                        $errorMsg = $apiResp->json('error.message') ?? 'Meta API error';
+                        $errors[] = $errorMsg;
+                        \Illuminate\Support\Facades\Log::error("Meta WhatsApp Broadcast Error ({$templateName}): " . $errorMsg, [
+                            'payload' => $metaPayload,
+                            'response' => $apiResp->json(),
+                        ]);
                     }
                 } catch (\Throwable $e) {
                     $failedCount++;
@@ -380,13 +417,15 @@ class CampaignController extends Controller
 
             // Prepare rendered text for live inbox matching what was sent to customer's WhatsApp
             $renderedContent = $templateBodyTemplate;
+            $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
+
             if (! empty($renderedContent)) {
                 foreach ($contactSpecificParams as $pIdx => $pItem) {
                     $renderedContent = str_replace('{{' . ($pIdx + 1) . '}}', $pItem['text'], $renderedContent);
                 }
-                $savedMessageContent = "[Broadcast Campaign: {$campaignName}]\n" . $renderedContent;
+                $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix . $renderedContent;
             } else {
-                $savedMessageContent = "[Broadcast Campaign: {$campaignName}] Template: {$templateName}";
+                $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix;
             }
 
             // Save outbound broadcast message in database

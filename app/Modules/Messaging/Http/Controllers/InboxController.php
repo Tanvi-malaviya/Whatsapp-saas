@@ -70,10 +70,13 @@ class InboxController extends Controller
         $org = $this->resolveOrg($request);
         $realThreads = $this->getRealThreads($org);
         $channels = WhatsAppChannel::where('organization_id', $org->id)->get();
+        $channel = $channels->where('is_default', true)->first() ?? $channels->first();
+        $metaTemplates = $channel ? app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel) : [];
 
         return Inertia::render('inbox/index', [
             'initialThreads' => $realThreads,
             'channels' => $channels,
+            'metaTemplates' => $metaTemplates,
         ]);
     }
 
@@ -92,6 +95,9 @@ class InboxController extends Controller
     {
         $validated = $request->validate([
             'conversation_id' => 'required|string',
+            'type' => 'nullable|string|in:text,template,image,document',
+            'template_name' => 'nullable|string',
+            'template_language' => 'nullable|string',
             'message' => 'nullable|string',
             'attachment' => 'nullable|file|max:51200', // Up to 50MB
             'attachment_name' => 'nullable|string',
@@ -107,6 +113,7 @@ class InboxController extends Controller
             return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
         }
 
+        $isTemplate = ($request->input('type') === 'template') || $request->filled('template_name');
         $hasAttachment = $request->hasFile('attachment');
         $uploadedFile = $hasAttachment ? $request->file('attachment') : null;
         $messageText = trim($request->input('message') ?? '');
@@ -118,11 +125,63 @@ class InboxController extends Controller
             $storedPath = $uploadedFile->store('attachments', 'public');
         }
 
+        // Channel resolution
+        $channel = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->orderBy('is_default', 'desc')
+            ->first();
+
         // Determine message type and database content
         $msgType = 'text';
         $finalContent = $messageText;
+        $templatePayload = null;
 
-        if ($hasAttachment && $attachmentName) {
+        if ($isTemplate) {
+            $msgType = 'template';
+            $templateName = $request->input('template_name', 'dukanhisab_app_launch');
+            $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
+            $allTemplates = $channel ? $campaignCtrl->getMetaTemplates($channel) : [];
+            $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+
+            if (! $matchedTemplate && ! empty($allTemplates)) {
+                $matchedTemplate = $allTemplates[0];
+                $templateName = $matchedTemplate['name'];
+            }
+
+            $templateLanguage = $matchedTemplate['language'] ?? $request->input('template_language', 'gu');
+            $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? $matchedTemplate['header_format'] ?? null;
+            $templateBodyTemplate = $matchedTemplate['body'] ?? '';
+            $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? null;
+            $contactName = $conversation->contact_name ?: 'Valued Customer';
+            $orgName = $org->name ?? 'DukanHisab Store';
+
+            $tplData = $this->buildTemplateComponentsAndContent(
+                $templateName,
+                $contactName,
+                $orgName,
+                $matchedHeaderFormat,
+                $matchedHeaderUrl,
+                $templateBodyTemplate
+            );
+
+            $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
+            $templatePayload = [
+                'messaging_product' => 'whatsapp',
+                'recipient_type' => 'individual',
+                'to' => $cleanPhone,
+                'type' => 'template',
+                'template' => [
+                    'name' => $templateName,
+                    'language' => ['code' => $templateLanguage],
+                ],
+            ];
+
+            if (! empty($tplData['components'])) {
+                $templatePayload['template']['components'] = $tplData['components'];
+            }
+
+            $finalContent = $tplData['finalContent'];
+        } elseif ($hasAttachment && $attachmentName) {
             $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
             $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
             $msgType = $isImage ? 'image' : 'document';
@@ -145,15 +204,13 @@ class InboxController extends Controller
         $conversation->update(['last_message_at' => now()]);
 
         // Attempt live dispatch to Meta Cloud API if channel connected
-        $channel = WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected')
-            ->orderBy('is_default', 'desc')
-            ->first();
-
         if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
             $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
             try {
-                if ($hasAttachment && $uploadedFile) {
+                if ($isTemplate && $templatePayload) {
+                    $resp = Http::withToken($channel->access_token)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $templatePayload);
+                } elseif ($hasAttachment && $uploadedFile) {
                     $mime = $uploadedFile->getMimeType() ?: 'application/octet-stream';
                     $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
                     $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
@@ -222,21 +279,26 @@ class InboxController extends Controller
                         $msg->update(['wamid' => $wamid, 'status' => 'sent']);
                     }
                 } else {
+                    $errBody = isset($resp) ? $resp->body() : 'No response from Meta';
+                    \Illuminate\Support\Facades\Log::error("Meta API error in reply(): {$errBody}");
                     $msg->update(['status' => 'failed']);
                 }
             } catch (\Throwable $e) {
-                // Log and continue
+                \Illuminate\Support\Facades\Log::error("Meta API exception in reply(): " . $e->getMessage());
+                $msg->update(['status' => 'failed']);
             }
         }
+
+        $freshMsg = $msg->fresh();
 
         return response()->json([
             'success' => true,
             'message' => [
-                'id' => (string) $msg->id,
+                'id' => (string) $freshMsg->id,
                 'sender' => 'agent',
-                'text' => $msg->content,
+                'text' => $freshMsg->content,
                 'time' => now('Asia/Kolkata')->format('h:i A'),
-                'status' => $msg->status ?? 'sent',
+                'status' => $freshMsg->status ?? 'sent',
             ],
         ]);
     }
@@ -320,34 +382,46 @@ class InboxController extends Controller
             $digitsPhone = preg_replace('/\D/', '', $cleanPhone);
             try {
                 if ($type === 'template') {
+                    $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
+                    $allTemplates = $campaignCtrl->getMetaTemplates($channel);
+                    $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+                    
+                    if (!$matchedTemplate && !empty($allTemplates)) {
+                        $matchedTemplate = $allTemplates[0];
+                        $templateName = $matchedTemplate['name'];
+                    }
+
+                    $templateLanguage = $matchedTemplate['language'] ?? 'en_US';
+                    $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? $matchedTemplate['header_format'] ?? null;
+                    $templateBodyTemplate = $matchedTemplate['body'] ?? '';
+                    $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? null;
+                    $orgName = $org->name ?? 'DukanHisab Store';
+
+                    $tplData = $this->buildTemplateComponentsAndContent(
+                        $templateName,
+                        $name ?: 'Customer',
+                        $orgName,
+                        $matchedHeaderFormat,
+                        $matchedHeaderUrl,
+                        $templateBodyTemplate
+                    );
+
                     $payload = [
                         'messaging_product' => 'whatsapp',
+                        'recipient_type' => 'individual',
                         'to' => $digitsPhone,
                         'type' => 'template',
                         'template' => [
                             'name' => $templateName,
-                            'language' => ['code' => 'en_US'],
-                            'components' => [
-                                [
-                                    'type' => 'body',
-                                    'parameters' => [
-                                        ['type' => 'text', 'text' => $name],
-                                        ['type' => 'text', 'text' => $channel->name],
-                                        ['type' => 'text', 'text' => 'Rs. 100'],
-                                        ['type' => 'text', 'text' => $channel->phone_number],
-                                    ],
-                                ],
-                                [
-                                    'type' => 'button',
-                                    'sub_type' => 'url',
-                                    'index' => '0',
-                                    'parameters' => [
-                                        ['type' => 'text', 'text' => 'test-123'],
-                                    ],
-                                ],
-                            ],
+                            'language' => ['code' => $templateLanguage],
                         ],
                     ];
+
+                    if (! empty($tplData['components'])) {
+                        $payload['template']['components'] = $tplData['components'];
+                    }
+
+                    $savedContent = $tplData['finalContent'];
                 } else {
                     $payload = [
                         'messaging_product' => 'whatsapp',
@@ -359,6 +433,7 @@ class InboxController extends Controller
                             'body' => $messageText ?: 'Hello from Sathwara WhatsApp SaaS!',
                         ],
                     ];
+                    $savedContent = $messageText ?: 'Hello!';
                 }
 
                 $resp = Http::withToken($channel->access_token)
@@ -395,13 +470,6 @@ class InboxController extends Controller
             'window_expires_at' => now()->addHours(24),
         ]);
 
-        if ($type === 'template') {
-            $channelName = $channel?->name ?? 'DukanHisab';
-            $savedContent = "[Template: {$templateName}]\nDear *{$name}*,\n\nThis is a gentle payment reminder from *{$channelName}* that your pending balance is *Rs. 100*. Kindly clear the payment at the earliest.\n\nThank you!";
-        } else {
-            $savedContent = $messageText ?: 'Hello!';
-        }
-
         Message::create([
             'conversation_id' => $conversation->id,
             'organization_id' => $org->id,
@@ -409,7 +477,7 @@ class InboxController extends Controller
             'sender_type' => 'agent',
             'sender_id' => (string) ($request->user()?->id ?? 'agent'),
             'type' => $type,
-            'content' => $savedContent,
+            'content' => $savedContent ?? ($messageText ?: 'Hello!'),
             'status' => $metaDelivered ? 'sent' : ($metaError ? 'failed' : 'sent'),
             'meta_cost_paise' => 0,
         ]);
@@ -596,5 +664,112 @@ class InboxController extends Controller
         $conversation->update(['pipeline_stage' => $validated['stage']]);
 
         return response()->json(['success' => true, 'message' => 'Stage updated successfully']);
+    }
+
+    protected function buildTemplateComponentsAndContent(
+        string $templateName,
+        string $contactName,
+        string $orgName,
+        ?string $matchedHeaderFormat,
+        ?string $matchedHeaderUrl,
+        string $templateBodyTemplate
+    ): array {
+        $components = [];
+        $mediaHeaderUrl = null;
+
+        // 1. Add Header component if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
+        if ($matchedHeaderFormat === 'VIDEO' || str_contains($templateName, 'launch') || str_contains($templateName, 'video')) {
+            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'video',
+                        'video' => [
+                            'link' => $mediaHeaderUrl,
+                        ],
+                    ],
+                ],
+            ];
+        } elseif ($matchedHeaderFormat === 'IMAGE') {
+            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'image',
+                        'image' => [
+                            'link' => $mediaHeaderUrl,
+                        ],
+                    ],
+                ],
+            ];
+        } elseif ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'document',
+                        'document' => [
+                            'link' => $mediaHeaderUrl,
+                            'filename' => 'Document_' . date('Ymd') . '.pdf',
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        // 2. Add Body component parameters ONLY if template contains variable placeholders {{1}}, {{2}}...
+        preg_match_all('/\{\{(\d+)\}\}/', $templateBodyTemplate, $matches);
+        $variableIndices = array_unique($matches[1] ?? []);
+        sort($variableIndices);
+
+        $renderedText = $templateBodyTemplate;
+
+        if (! empty($variableIndices)) {
+            $bodyParams = [];
+            foreach ($variableIndices as $idx) {
+                $val = match ((int) $idx) {
+                    1 => $contactName ?: 'Customer',
+                    2 => $orgName ?: 'DukanHisab Store',
+                    3 => '₹500.00',
+                    4 => date('d/m/Y'),
+                    5 => '₹0.00',
+                    6 => 'INV-' . date('Ymd') . '-01',
+                    default => 'Detail',
+                };
+                $bodyParams[] = ['type' => 'text', 'text' => (string) $val];
+                $renderedText = str_replace('{{' . $idx . '}}', (string) $val, $renderedText);
+            }
+
+            $components[] = [
+                'type' => 'body',
+                'parameters' => $bodyParams,
+            ];
+        }
+
+        // 3. Dynamic URL Button parameters (for templates like due_reminder)
+        if (str_contains($templateName, 'due_reminder')) {
+            $components[] = [
+                'type' => 'button',
+                'sub_type' => 'url',
+                'index' => '0',
+                'parameters' => [
+                    ['type' => 'text', 'text' => 'pay'],
+                ],
+            ];
+        }
+
+        $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
+        $finalContent = ! empty($renderedText)
+            ? "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . $renderedText
+            : "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . "Template dispatched to {$contactName}.";
+
+        return [
+            'components' => $components,
+            'mediaHeaderUrl' => $mediaHeaderUrl,
+            'finalContent' => $finalContent,
+        ];
     }
 }

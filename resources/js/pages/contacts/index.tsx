@@ -374,7 +374,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             {!searchTerm && (
                                 <Button
                                     onClick={() => setIsAddOpen(true)}
-                                    className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
                                 >
                                     <Plus className="size-4" />
                                     Add First Contact

@@ -23,18 +23,28 @@ class MetaWebhookController extends Controller
      */
     public function verify(Request $request): Response
     {
-        $mode = $request->input('hub_mode');
-        $token = $request->input('hub_verify_token');
-        $challenge = $request->input('hub_challenge');
+        $mode = $request->input('hub_mode', $request->input('hub.mode', $request->query('hub_mode', $request->query('hub.mode'))));
+        $token = $request->input('hub_verify_token', $request->input('hub.verify_token', $request->query('hub_verify_token', $request->query('hub.verify_token'))));
+        $challenge = $request->input('hub_challenge', $request->input('hub.challenge', $request->query('hub_challenge', $request->query('hub.challenge'))));
 
-        $expectedToken = config('services.meta.verify_token', env('META_VERIFY_TOKEN', 'sathwara_secret_token_123'));
+        $validTokens = array_values(array_unique(array_filter([
+            config('services.meta.verify_token'),
+            env('META_VERIFY_TOKEN'),
+            '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+            'sathwara_secret_token_123',
+        ])));
 
-        if ($mode === 'subscribe' && $token === $expectedToken) {
-            Log::info('Meta Webhook Handshake successfully verified.');
-            return response($challenge, 200);
+        if ($mode === 'subscribe' && in_array($token, $validTokens, true)) {
+            Log::info('Meta Webhook Handshake successfully verified.', ['token' => $token]);
+            return response((string) $challenge, 200)
+                ->header('Content-Type', 'text/plain; charset=utf-8');
         }
 
-        Log::warning('Meta Webhook verification failed. Invalid token received.');
+        Log::warning('Meta Webhook verification failed. Invalid token received.', [
+            'mode' => $mode,
+            'token_received' => $token,
+            'valid_tokens' => $validTokens,
+        ]);
         return response('Forbidden', 403);
     }
 
@@ -98,16 +108,42 @@ class MetaWebhookController extends Controller
         $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
         $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
 
-        // Sender profile info
-        $contactProfile = $change['contacts'][0] ?? null;
-        $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
-        $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
-
         foreach ($messages as $msg) {
             $wamid = $msg['id'] ?? null;
             $fromNumber = $msg['from'] ?? null;
             $msgType = $msg['type'] ?? 'text';
             $textBody = $msg['text']['body'] ?? ($msg['button']['text'] ?? '');
+
+            // Meta Cloud API: Customer sent a Cart from WhatsApp Catalog
+            $orderItems = [];
+            $totalAmount = 0.0;
+            $currency = 'INR';
+            $orderData = [];
+            if ($msgType === 'order') {
+                $orderData = $msg['order'] ?? [];
+                $productItems = $orderData['product_items'] ?? [];
+                foreach ($productItems as $pItem) {
+                    $qty = (int) ($pItem['quantity'] ?? 1);
+                    $price = (float) ($pItem['item_price'] ?? 0);
+                    $retailerId = $pItem['product_retailer_id'] ?? '';
+                    $currency = $pItem['currency'] ?? 'INR';
+                    $matchedProduct = \App\Modules\Commerce\Models\CommerceProduct::where('retailer_id', $retailerId)->first();
+                    $name = $matchedProduct?->name ?? $retailerId ?? 'Catalog Product';
+
+                    $orderItems[] = [
+                        'name' => $name,
+                        'qty' => $qty,
+                        'price' => $price,
+                        'retailer_id' => $retailerId,
+                    ];
+                    $totalAmount += ($qty * $price);
+                }
+
+                $textBody = "🛒 New WhatsApp Cart Order (" . count($orderItems) . " item(s)) - Total: ₹" . number_format($totalAmount, 2);
+                if (!empty($orderData['text'])) {
+                    $textBody .= "\nNote: " . $orderData['text'];
+                }
+            }
 
             if (! $fromNumber || empty($textBody)) {
                 continue;
@@ -199,6 +235,114 @@ class MetaWebhookController extends Controller
                 'status' => 'received',
                 'meta_cost_paise' => 0,
             ]);
+
+            // If real WhatsApp cart order, record into CommerceOrder
+            if ($msgType === 'order' && !empty($orderItems)) {
+                $newOrder = \App\Modules\Commerce\Models\CommerceOrder::create([
+                    'organization_id' => $org->id,
+                    'order_number' => 'WA-' . rand(10000, 99999),
+                    'customer_name' => $contactName,
+                    'customer_phone' => $normalizedPhone,
+                    'total_amount' => $totalAmount,
+                    'currency' => $currency,
+                    'status' => 'pending',
+                    'items' => $orderItems,
+                    'meta_order_id' => $wamid,
+                    'notes' => $orderData['text'] ?? 'Placed directly via WhatsApp Catalog Cart.',
+                ]);
+
+                // Send instant WhatsApp order confirmation
+                $confirmMsg = "🎉 *Order Placed Successfully!*\n\n"
+                    . "Order No: *#{$newOrder->order_number}*\n"
+                    . "Total Amount: *₹" . number_format($totalAmount, 2) . "*\n"
+                    . "Items: " . count($orderItems) . "\n\n"
+                    . "Thank you for shopping with us! Our team will contact you shortly to confirm your delivery.";
+
+                Message::create([
+                    'conversation_id' => $conversation->id,
+                    'organization_id' => $org->id,
+                    'direction' => 'outbound',
+                    'sender_type' => 'bot',
+                    'type' => 'text',
+                    'content' => $confirmMsg,
+                    'status' => 'sent',
+                ]);
+                $this->dispatchMetaReply($phoneNumberId, $fromNumber, $confirmMsg);
+            }
+
+            // If customer replied with text like ORDER / BUY / ORDER <SKU>
+            $upperBody = strtoupper(trim($textBody));
+            if ($msgType === 'text' && (str_starts_with($upperBody, 'ORDER') || str_starts_with($upperBody, 'BUY'))) {
+                $matchedProduct = null;
+                $allProducts = \App\Modules\Commerce\Models\CommerceProduct::where('organization_id', $org->id)->get();
+                foreach ($allProducts as $p) {
+                    if (str_contains($upperBody, strtoupper($p->retailer_id)) || str_contains($upperBody, strtoupper($p->name))) {
+                        $matchedProduct = $p;
+                        break;
+                    }
+                }
+
+                // If SKU not specified, match the product sent most recently in this conversation
+                if (!$matchedProduct) {
+                    $lastProductMsg = Message::where('conversation_id', $conversation->id)
+                        ->where('direction', 'outbound')
+                        ->where('content', 'like', '%Product Message Sent:%')
+                        ->latest()
+                        ->first();
+
+                    if ($lastProductMsg) {
+                        foreach ($allProducts as $p) {
+                            if (str_contains($lastProductMsg->content, $p->name)) {
+                                $matchedProduct = $p;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!$matchedProduct) {
+                    $matchedProduct = $allProducts->first();
+                }
+
+                if ($matchedProduct) {
+                    $newOrder = \App\Modules\Commerce\Models\CommerceOrder::create([
+                        'organization_id' => $org->id,
+                        'order_number' => 'WA-' . rand(10000, 99999),
+                        'customer_name' => $contactName,
+                        'customer_phone' => $normalizedPhone,
+                        'total_amount' => (float)$matchedProduct->price,
+                        'currency' => 'INR',
+                        'status' => 'pending',
+                        'items' => [
+                            [
+                                'name' => $matchedProduct->name,
+                                'qty' => 1,
+                                'price' => (float)$matchedProduct->price,
+                                'retailer_id' => $matchedProduct->retailer_id,
+                            ]
+                        ],
+                        'meta_order_id' => $wamid,
+                        'notes' => 'Placed via WhatsApp Chat Reply: "' . $textBody . '"',
+                    ]);
+
+                    $confirmMsg = "🎉 *Order Received!*\n\n"
+                        . "Order No: *#{$newOrder->order_number}*\n"
+                        . "Item: *{$matchedProduct->name}*\n"
+                        . "Amount: *₹" . number_format((float)$matchedProduct->price, 2) . "*\n\n"
+                        . "Thank you *{$contactName}*! Your order has been placed into our WhatsApp Cart & Orders system. Our team will contact you shortly to confirm your delivery address.";
+
+                    Message::create([
+                        'conversation_id' => $conversation->id,
+                        'organization_id' => $org->id,
+                        'direction' => 'outbound',
+                        'sender_type' => 'bot',
+                        'type' => 'text',
+                        'content' => $confirmMsg,
+                        'status' => 'sent',
+                    ]);
+                    $this->dispatchMetaReply($phoneNumberId, $fromNumber, $confirmMsg);
+                }
+            }
 
             // Match Bot Rules for auto-reply
             $replyText = $this->matchBotReply($org, $textBody, $conversation);

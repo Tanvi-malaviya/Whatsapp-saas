@@ -9,14 +9,19 @@ Route::get('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaW
 Route::post('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class, 'receive']);
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
     
     // WhatsApp Channels & Number Connection (Like Xobito Channels)
     Route::get('whatsapp/connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'index'])->name('whatsapp.connect');
+    Route::get('whatsapp/connect/setup', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'wizard'])->name('whatsapp.connect.wizard');
+    Route::get('channels/connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'wizard'])->name('channels.connect');
     Route::get('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'index'])->name('channels.index');
     Route::post('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'store'])->name('channels.store');
+    Route::post('channels/quick-connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'quickConnect'])->name('channels.quick-connect');
     Route::delete('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'destroy'])->name('channels.destroy');
     Route::post('channels/{id}/test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'testConnection'])->name('channels.test');
+    Route::get('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('channels.show');
+    Route::get('whatsapp/channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('whatsapp.channels.show');
 
     // Developers Hub
     Route::get('developers', function (\Illuminate\Http\Request $request) {
@@ -845,7 +850,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return back()->with('success', $msg);
     })->name('templates.destroy');
 
-    Route::inertia('reports', 'reports/index')->name('reports.index');
+    // WhatsApp Analytics & Meta Template Costs
+    Route::get('reports', [\App\Modules\Analytics\Http\Controllers\MetaCostAnalyticsController::class, 'index'])->name('reports.index');
+    Route::get('analytics/meta-costs', [\App\Modules\Analytics\Http\Controllers\MetaCostAnalyticsController::class, 'index'])->name('analytics.meta-costs');
+
+    // WhatsApp Commerce & Meta Catalog
+    Route::get('commerce', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'index'])->name('commerce.index');
+    Route::post('commerce/products', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'storeProduct'])->name('commerce.products.store');
+    Route::put('commerce/products/{id}', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateProduct'])->name('commerce.products.update');
+    Route::delete('commerce/products/{id}', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'deleteProduct'])->name('commerce.products.destroy');
+    Route::patch('commerce/orders/{id}/status', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateOrderStatus'])->name('commerce.orders.status');
+    Route::post('commerce/sync', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'syncCatalog'])->name('commerce.sync');
+    Route::post('commerce/send-catalog', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'sendCatalogMessage'])->name('commerce.send.catalog');
+    Route::post('commerce/send-product', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'sendProductMessage'])->name('commerce.send.product');
+    Route::post('commerce/simulate-order', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'simulateOrder'])->name('commerce.simulate.order');
 
     Route::post('/workspace/switch/{organization}', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'switch'])->name('workspace.switch');
     Route::post('/workspace/store', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'store'])->name('workspace.store');

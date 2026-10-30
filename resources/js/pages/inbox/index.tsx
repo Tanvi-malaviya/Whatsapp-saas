@@ -33,6 +33,9 @@ import {
     X,
     Zap,
     Download,
+    ShoppingBag,
+    Store,
+    Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,9 +93,10 @@ type ChatThread = {
 interface TeamInboxProps {
     initialThreads?: any[];
     channels?: any[];
+    metaTemplates?: any[];
 }
 
-export default function TeamInbox({ initialThreads = [], channels = [] }: TeamInboxProps) {
+export default function TeamInbox({ initialThreads = [], channels = [], metaTemplates = [] }: TeamInboxProps) {
     const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
 
     const initialMsgMap: Record<string, ChatMessage[]> = {};
@@ -144,10 +148,19 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
     const [newChatPhone, setNewChatPhone] = useState('');
     const [newChatName, setNewChatName] = useState('');
     const [newChatMsgType, setNewChatMsgType] = useState<'template' | 'text'>('template');
-    const [newChatTemplate, setNewChatTemplate] = useState('due_reminder_en');
+    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || 'sale_invoice_en');
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+    // Direct Template Send state for Active Chat
+    const [showDirectTemplateModal, setShowDirectTemplateModal] = useState(false);
+    const [selectedDirectTemplate, setSelectedDirectTemplate] = useState<any>(
+        metaTemplates.find((t: any) => t.name === 'dukanhisab_app_launch') || metaTemplates[0] || null
+    );
+    const [directTemplateCustomName, setDirectTemplateCustomName] = useState('');
+    const [isSendingDirectTemplate, setIsSendingDirectTemplate] = useState(false);
+    const [directTemplateStatus, setDirectTemplateStatus] = useState<{ success: boolean; message: string } | null>(null);
 
     // Prevent outer main window scrollbar on the inbox screen
     useEffect(() => {
@@ -367,6 +380,91 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         }
     };
 
+    const handleSendDirectTemplate = async () => {
+        if (!selectedThread || !selectedDirectTemplate) return;
+        setIsSendingDirectTemplate(true);
+        setDirectTemplateStatus(null);
+
+        const templateName = selectedDirectTemplate.name;
+        const recipientName = directTemplateCustomName.trim() || selectedThread.contactName || 'Valued Customer';
+        const mediaUrl = selectedDirectTemplate.headerUrl || (
+            selectedDirectTemplate.headerFormat === 'VIDEO' || templateName.includes('launch')
+                ? 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C'
+                : undefined
+        );
+
+        const mediaPrefix = mediaUrl ? `[Media: ${mediaUrl}]\n` : '';
+        const bodyContent = selectedDirectTemplate.body 
+            ? selectedDirectTemplate.body.replace('{{1}}', recipientName)
+            : `Official template ${templateName} dispatched to ${recipientName}.`;
+        const optimisticContent = `[Broadcast Campaign: ${templateName} Template: ${templateName}]\n${mediaPrefix}${bodyContent}`;
+
+        const optimisticMsg: ChatMessage = {
+            id: 'temp-tpl-' + Date.now(),
+            sender: 'agent',
+            text: optimisticContent,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: 'sent',
+        };
+
+        setMessages((prev) => ({
+            ...prev,
+            [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
+        }));
+
+        setThreads((prev) =>
+            prev.map((t) => (t.id === selectedThread.id ? { ...t, lastMessage: optimisticContent, time: 'Just now' } : t))
+        );
+
+        try {
+            const csrf = (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '';
+            const res = await fetch('/inbox/reply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                },
+                body: JSON.stringify({
+                    conversation_id: selectedThread.id,
+                    type: 'template',
+                    template_name: templateName,
+                    template_language: selectedDirectTemplate.language || 'gu',
+                }),
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                if (data.message) {
+                    setMessages((prev) => ({
+                        ...prev,
+                        [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
+                            m.id === optimisticMsg.id
+                                ? { ...m, id: data.message.id, status: data.message.status || 'sent', text: data.message.text || m.text }
+                                : m
+                        ),
+                    }));
+                }
+                setDirectTemplateStatus({ success: true, message: `WhatsApp Template "${templateName}" dispatched to ${recipientName}!` });
+                setTimeout(() => {
+                    setShowDirectTemplateModal(false);
+                    setDirectTemplateStatus(null);
+                }, 900);
+            } else {
+                setMessages((prev) => ({
+                    ...prev,
+                    [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
+                        m.id === optimisticMsg.id ? { ...m, status: 'failed' } : m
+                    ),
+                }));
+                setDirectTemplateStatus({ success: false, message: data.message || 'Failed to dispatch template' });
+            }
+        } catch (err: any) {
+            setDirectTemplateStatus({ success: false, message: err.message || 'Network error' });
+        } finally {
+            setIsSendingDirectTemplate(false);
+        }
+    };
+
     const handleInsertEmoji = (emoji: string) => {
         setReplyText((prev) => prev + emoji);
         replyInputRef.current?.focus();
@@ -529,6 +627,70 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
+    const parseCommerceMessage = (rawText: string) => {
+        if (!rawText || typeof rawText !== 'string') return null;
+        const trimmed = rawText.trim();
+
+        const isProduct = trimmed.includes('Product Message Sent:') || trimmed.includes('🛍️ Product');
+        const isCatalog = trimmed.includes('Catalog Message Sent:') || trimmed.includes('🛍️ Catalog');
+
+        if (!isProduct && !isCatalog) return null;
+
+        if (isProduct) {
+            const nameMatch = trimmed.match(/Product Message Sent:\s*([^(]+)(?:\((?:₹|Rs\.?)?\s*([0-9.,]+)\))?/i);
+            const title = nameMatch ? nameMatch[1].trim() : 'Featured Product';
+            const price = nameMatch && nameMatch[2] ? nameMatch[2].trim() : '799.00';
+
+            const imgMatch = trimmed.match(/\[Image:\s*([^\]]+)\]/i);
+            let imageUrl = imgMatch ? imgMatch[1].trim() : '';
+
+            const skuMatch = trimmed.match(/\[SKU:\s*([^\]]+)\]/i);
+            let sku = skuMatch ? skuMatch[1].trim() : '';
+
+            if (!imageUrl) {
+                const lower = title.toLowerCase();
+                if (lower.includes('polo') || lower.includes('shirt') || lower.includes('cotton')) {
+                    imageUrl = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=400&q=80';
+                    sku = sku || 'TSHIRT-POLO-BLK';
+                } else if (lower.includes('watch') || lower.includes('fitness')) {
+                    imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80';
+                    sku = sku || 'WATCH-PRO-01';
+                } else if (lower.includes('earbud')) {
+                    imageUrl = 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&q=80';
+                    sku = sku || 'EARBUDS-TWS-02';
+                } else if (lower.includes('wallet')) {
+                    imageUrl = 'https://images.unsplash.com/photo-1627123424574-724758594e93?w=400&q=80';
+                    sku = sku || 'WALLET-LTHR-BRN';
+                } else {
+                    imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80';
+                    sku = sku || 'PROD-01';
+                }
+            }
+
+            return {
+                type: 'product' as const,
+                title,
+                price,
+                sku: sku || 'ITEM-01',
+                imageUrl,
+            };
+        }
+
+        if (isCatalog) {
+            const lines = trimmed.split(/\r?\n/);
+            const firstLine = lines[0] || '';
+            const noteMatch = firstLine.match(/Catalog Message Sent:\s*(.*)/i);
+            const note = noteMatch && noteMatch[1].trim() ? noteMatch[1].trim() : 'Browse our store catalog and tap to order directly:';
+            return {
+                type: 'catalog' as const,
+                title: 'WhatsApp Catalog Showcase',
+                note,
+            };
+        }
+
+        return null;
+    };
+
     const parseTemplateFromMessage = (rawText: string, contactName?: string) => {
         if (!rawText || typeof rawText !== 'string') return null;
         const trimmed = rawText.trim();
@@ -540,10 +702,19 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
 
         let campaignName = '';
         let templateName = '';
+        let mediaUrl: string | null = null;
         let body = '';
 
+        // Extract [Media: URL] if present
+        const mediaMatch = trimmed.match(/\[Media:\s*([^\]]+)\]/i);
+        if (mediaMatch) {
+            mediaUrl = (mediaMatch[1] || '').trim();
+        }
+
+        const cleanTrimmed = trimmed.replace(/\[Media:\s*[^\]]+\]\r?\n?/i, '');
+
         if (isBroadcast) {
-            const lines = trimmed.split(/\r?\n/);
+            const lines = cleanTrimmed.split(/\r?\n/);
             const firstLine = lines[0] || '';
             const campaignMatch = firstLine.match(/\[Broadcast Campaign:\s*([^\]]+)\](?:\s*Template:\s*([a-zA-Z0-9_-]+))?/i);
             if (campaignMatch) {
@@ -555,7 +726,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 body = lines.slice(1).join('\n').trim();
             }
         } else if (isTemplate) {
-            const lines = trimmed.split(/\r?\n/);
+            const lines = cleanTrimmed.split(/\r?\n/);
             const firstLine = lines[0] || '';
             const tplMatch = firstLine.match(/\[Template:\s*([^\]]+)\]/i);
             if (tplMatch) {
@@ -565,6 +736,24 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                 body = lines.slice(1).join('\n').trim();
             }
         }
+
+        // Detect DukanHisab App Launch video template
+        const isDukanHisabLaunch =
+            (campaignName && campaignName.toLowerCase().includes('dukanhisab') && campaignName.toLowerCase().includes('launch')) ||
+            (templateName && templateName.toLowerCase().includes('dukanhisab_app_launch')) ||
+            (body && (body.includes('DukanHisab') || body.includes('દુકાનનો હિસાબ') || body.includes('અમારો વિડિયો જુઓ')));
+
+        if (isDukanHisabLaunch) {
+            if (!templateName) templateName = 'dukanhisab_app_launch';
+            if (!mediaUrl) {
+                mediaUrl = 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
+            }
+        }
+
+        const isVideo = Boolean(
+            (mediaUrl && (mediaUrl.includes('.mp4') || mediaUrl.includes('scontent.whatsapp.net'))) ||
+            isDukanHisabLaunch
+        );
 
         // If body is empty, populate from approved template dictionary
         if (!body && templateName) {
@@ -598,6 +787,9 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
             campaignName,
             templateName,
             displayName,
+            mediaUrl,
+            isVideo,
+            isDukanHisabLaunch,
             body,
         };
     };
@@ -1123,7 +1315,7 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                     };
 
                                                     return (
-                                                        <div className="space-y-2 min-w-[220px] max-w-[340px] sm:max-w-[420px] pt-0.5">
+                                                        <div className="space-y-2 min-w-[240px] max-w-[340px] sm:max-w-[420px] pt-0.5">
                                                             {/* Official WhatsApp Template Badge Header */}
                                                             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-black/10 dark:border-white/10 text-[10px]">
                                                                 <div className="flex items-center gap-1.5 font-bold text-[#1e6e3c] dark:text-[#52c480]">
@@ -1137,10 +1329,44 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                                 )}
                                                             </div>
 
+                                                            {/* Video / Media Header */}
+                                                            {parsedTemplate.mediaUrl && (
+                                                                <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10 bg-black/5 dark:bg-black/40 shadow-xs">
+                                                                    {parsedTemplate.isVideo ? (
+                                                                        <video
+                                                                            controls
+                                                                            playsInline
+                                                                            preload="metadata"
+                                                                            src={parsedTemplate.mediaUrl}
+                                                                            className="w-full max-h-56 rounded-lg bg-black object-contain"
+                                                                        />
+                                                                    ) : (
+                                                                        <img
+                                                                            src={parsedTemplate.mediaUrl}
+                                                                            alt="Template Media"
+                                                                            className="w-full max-h-56 rounded-lg object-cover"
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                            )}
+
                                                             {/* Rendered Template Body (Hindi / Gujarati / English) */}
                                                             <div className="text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef] select-text">
                                                                 {renderFormattedText(parsedTemplate.body)}
                                                             </div>
+
+                                                            {/* Action Button: Download Now for DukanHisab App */}
+                                                            {parsedTemplate.isDukanHisabLaunch && (
+                                                                <a
+                                                                    href="https://play.google.com/store/apps/details?id=com.app.dukanhisab"
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-slate-900 font-bold text-xs transition shadow-xs"
+                                                                >
+                                                                    <Download className="size-3.5 text-slate-900" />
+                                                                    <span>Download Now</span>
+                                                                </a>
+                                                            )}
 
                                                             {/* Broadcast Campaign Meta Footer */}
                                                             {parsedTemplate.campaignName && (
@@ -1151,6 +1377,74 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                                             )}
                                                         </div>
                                                     );
+                                                }
+
+                                                const parsedCommerce = parseCommerceMessage(msg.text);
+                                                if (parsedCommerce) {
+                                                    if (parsedCommerce.type === 'product') {
+                                                        return (
+                                                            <div className="w-[230px] sm:w-[250px] rounded-xl overflow-hidden bg-card/95 border border-black/10 dark:border-white/10 shadow-xs text-left">
+                                                                {parsedCommerce.imageUrl ? (
+                                                                    <div className="relative h-28 w-full overflow-hidden bg-muted">
+                                                                        <img
+                                                                            src={parsedCommerce.imageUrl}
+                                                                            alt={parsedCommerce.title}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-xs text-white text-[9px] font-bold flex items-center gap-1">
+                                                                            <ShoppingBag className="size-2.5 text-[#47b672]" />
+                                                                            <span>WhatsApp Product</span>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="h-20 w-full bg-[#47b672]/10 flex items-center justify-center text-[#47b672]">
+                                                                        <ShoppingBag className="size-6" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="p-2.5 space-y-1.5">
+                                                                    <div className="flex items-start justify-between gap-1.5">
+                                                                        <h4 className="font-bold text-xs text-foreground line-clamp-1">{parsedCommerce.title}</h4>
+                                                                        <span className="font-extrabold text-xs text-[#28804c] dark:text-[#52c480] shrink-0">
+                                                                            ₹{parsedCommerce.price}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/50">
+                                                                        <span className="font-mono text-[9px]">SKU: {parsedCommerce.sku}</span>
+                                                                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5 text-[10px]">
+                                                                            <Check className="size-3" /> In Catalog
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="pt-1">
+                                                                        <div className="w-full py-1 px-2.5 rounded-lg bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] text-center font-bold text-[10px] flex items-center justify-center gap-1.5">
+                                                                            <Eye className="size-3" />
+                                                                            <span>View on WhatsApp</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (parsedCommerce.type === 'catalog') {
+                                                        return (
+                                                            <div className="w-[230px] sm:w-[250px] rounded-xl overflow-hidden bg-card/95 border border-black/10 dark:border-white/10 shadow-xs p-2.5 space-y-2 text-left">
+                                                                <div className="flex items-center gap-2 pb-1.5 border-b border-border/60">
+                                                                    <div className="size-7 rounded-lg bg-[#47b672]/15 text-[#47b672] flex items-center justify-center shrink-0">
+                                                                        <Store className="size-3.5" />
+                                                                    </div>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <h4 className="font-bold text-xs text-foreground truncate">{parsedCommerce.title}</h4>
+                                                                        <p className="text-[9px] text-muted-foreground">Interactive Meta Catalog</p>
+                                                                    </div>
+                                                                </div>
+                                                                <p className="text-[11px] text-foreground/90 leading-relaxed">{parsedCommerce.note}</p>
+                                                                <div className="w-full py-1 px-2.5 rounded-lg bg-[#47b672] text-white text-center font-bold text-[10px] flex items-center justify-center gap-1.5 shadow-2xs">
+                                                                    <ShoppingBag className="size-3" />
+                                                                    <span>View Catalog on WhatsApp</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
                                                 }
 
                                                 return msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>;
@@ -1327,6 +1621,28 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                             </div>
                                         </button>
 
+                                        {/* Option: Official WhatsApp Template */}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setDirectTemplateCustomName(selectedThread?.contactName || '');
+                                                setShowDirectTemplateModal(true);
+                                                setShowAttachmentMenu(false);
+                                            }}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-emerald-500/10 text-left transition-colors border border-emerald-500/25 bg-emerald-500/5"
+                                        >
+                                            <div className="size-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                                <Sparkles className="size-4" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                                    WhatsApp Template
+                                                    <span className="text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-semibold">Official</span>
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground">App Launch, Invoice, Reminder, Payment</p>
+                                            </div>
+                                        </button>
+
                                         {/* Option: Canned Quick Responses */}
                                         <button
                                             type="button"
@@ -1396,6 +1712,23 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                         title="Attach document, photo, or quick response"
                                     >
                                         <Paperclip className="size-4" />
+                                    </Button>
+
+                                    {/* Direct Send Template Button */}
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            setDirectTemplateCustomName(selectedThread?.contactName || '');
+                                            setShowDirectTemplateModal(true);
+                                            setShowAttachmentMenu(false);
+                                            setShowEmojiPicker(false);
+                                        }}
+                                        className="size-8 p-0 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 transition-colors"
+                                        title="Send Approved WhatsApp Template directly"
+                                    >
+                                        <Sparkles className="size-4" />
                                     </Button>
 
                                     <input
@@ -1558,10 +1891,20 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                                         onChange={(e) => setNewChatTemplate(e.target.value)}
                                         className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                     >
-                                        <option value="due_reminder_en">due_reminder_en (Payment Due Reminder)</option>
-                                        <option value="sale_invoice_en">sale_invoice_en (Sale Invoice Notification)</option>
-                                        <option value="payment_received_en">payment_received_en (Payment Received Confirmation)</option>
-                                        <option value="appointment_cancelled">appointment_cancelled (Alert Notification)</option>
+                                        {metaTemplates.length > 0 ? (
+                                            metaTemplates.map((tpl: any) => (
+                                                <option key={tpl.name + tpl.language} value={tpl.name}>
+                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) - {tpl.status || 'APPROVED'}
+                                                </option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="sale_invoice_en">sale_invoice_en (Sale Invoice Notification)</option>
+                                                <option value="dukanhisab_app_launch">dukanhisab_app_launch (App Launch)</option>
+                                                <option value="purchase_record_en">purchase_record_en (Purchase Record)</option>
+                                                <option value="supplier_payment_en">supplier_payment_en (Supplier Payment)</option>
+                                            </>
+                                        )}
                                     </select>
                                     <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
                                         Pre-approved templates land directly on the user's phone to start the conversation.
@@ -1790,6 +2133,247 @@ export default function TeamInbox({ initialThreads = [], channels = [] }: TeamIn
                             >
                                 <CheckCircle2 className="size-3.5" />
                                 {isSavingContact ? 'Saving Changes...' : 'Save Changes'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Direct Send WhatsApp Template Modal */}
+            {showDirectTemplateModal && selectedThread && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in-50">
+                    <div className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b border-border/80 px-5 py-3.5 bg-card shrink-0">
+                            <div className="flex items-center gap-2.5">
+                                <div className="size-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                                    <Sparkles className="size-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                        Send Official WhatsApp Template
+                                        <span className="text-[10px] bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-full">
+                                            Meta Approved
+                                        </span>
+                                    </h3>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Directly send pre-approved broadcast or utility template to <strong className="text-foreground">{selectedThread.contactName}</strong> ({selectedThread.phone})
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowDirectTemplateModal(false)}
+                                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted text-sm transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {directTemplateStatus && (
+                                <div
+                                    className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                                        directTemplateStatus.success
+                                            ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25'
+                                            : 'bg-red-500/10 text-red-800 dark:text-red-300 border border-red-500/25'
+                                    }`}
+                                >
+                                    {directTemplateStatus.success ? (
+                                        <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                                    ) : (
+                                        <AlertCircle className="size-4 shrink-0 text-red-500" />
+                                    )}
+                                    <span>{directTemplateStatus.message}</span>
+                                </div>
+                            )}
+
+                            {/* Informational Guidance */}
+                            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 text-xs flex items-start gap-2.5">
+                                <span className="text-base leading-none">⚡</span>
+                                <div className="space-y-0.5 text-[11px] text-muted-foreground">
+                                    <p className="font-bold text-foreground">
+                                        Direct WhatsApp Template Delivery:
+                                    </p>
+                                    <p>
+                                        Pre-approved Meta templates bypass the 24-hour customer window and deliver directly to the customer's phone with rich media (videos, headers) and interactive buttons.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Left Column: Selection & Configuration */}
+                                <div className="space-y-3.5">
+                                    {/* Template Selection */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                            <span>Select Template</span>
+                                            <span className="text-[10px] text-muted-foreground font-normal">
+                                                {metaTemplates.length} available
+                                            </span>
+                                        </label>
+                                        <select
+                                            value={(selectedDirectTemplate?.name || '') + '__' + (selectedDirectTemplate?.language || '')}
+                                            onChange={(e) => {
+                                                const [tplName, tplLang] = e.target.value.split('__');
+                                                const match = metaTemplates.find((t: any) => t.name === tplName && (t.language || '') === tplLang);
+                                                if (match) setSelectedDirectTemplate(match);
+                                            }}
+                                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
+                                        >
+                                            {metaTemplates.length > 0 ? (
+                                                metaTemplates.map((tpl: any) => (
+                                                    <option key={tpl.name + '__' + tpl.language} value={tpl.name + '__' + tpl.language}>
+                                                        {tpl.name} ({tpl.language?.toUpperCase() || 'GU'}) - {tpl.category || 'MARKETING'}
+                                                    </option>
+                                                ))
+                                            ) : (
+                                                <>
+                                                    <option value="dukanhisab_app_launch__gu">dukanhisab_app_launch (App Launch Video - GU)</option>
+                                                    <option value="sale_invoice_en__en_US">sale_invoice_en (Sale Invoice - EN)</option>
+                                                    <option value="supplier_payment_hi__hi">supplier_payment_hi (Supplier Payment - HI)</option>
+                                                    <option value="due_reminder_hi__hi">due_reminder_hi (Due Reminder - HI)</option>
+                                                </>
+                                            )}
+                                        </select>
+                                    </div>
+
+                                    {/* Template Meta Badges */}
+                                    {selectedDirectTemplate && (
+                                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                                            <span className="px-2 py-0.5 rounded-md bg-muted text-foreground font-semibold border border-border/60">
+                                                Language: {selectedDirectTemplate.language?.toUpperCase() || 'GU'}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 font-semibold border border-blue-500/20">
+                                                Category: {selectedDirectTemplate.category || 'MARKETING'}
+                                            </span>
+                                            {(selectedDirectTemplate.headerFormat === 'VIDEO' || selectedDirectTemplate.name?.includes('launch')) && (
+                                                <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/20">
+                                                    🎬 Video Header
+                                                </span>
+                                            )}
+                                            {selectedDirectTemplate.headerFormat === 'DOCUMENT' && (
+                                                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold border border-amber-500/20">
+                                                    📄 PDF Header
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Personalized Variable (Contact Name) */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-semibold text-foreground">
+                                            Recipient Name Variable {'{{1}}'}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={directTemplateCustomName}
+                                            onChange={(e) => setDirectTemplateCustomName(e.target.value)}
+                                            placeholder={selectedThread.contactName || 'Customer Name'}
+                                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
+                                        />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Replaces {'{{1}}'} in greeting text (e.g. "નમસ્તે {directTemplateCustomName || selectedThread.contactName}").
+                                        </p>
+                                    </div>
+
+                                    {/* Recipient Details */}
+                                    <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-xs space-y-1">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-muted-foreground">Recipient:</span>
+                                            <span className="font-bold text-foreground">{selectedThread.contactName}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-muted-foreground">Mobile:</span>
+                                            <span className="font-mono text-foreground font-semibold">{selectedThread.phone}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-muted-foreground">Status:</span>
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Active Ready</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Column: WhatsApp Live Message Preview */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                        <span>Live WhatsApp Preview</span>
+                                        <span className="text-[10px] text-muted-foreground font-normal">(as seen on phone)</span>
+                                    </label>
+                                    <div className="rounded-2xl border border-[#47b672]/30 bg-[#e7f8ee] dark:bg-[#0b2416] p-3 text-xs shadow-inner space-y-2">
+                                        {/* Media Header Preview */}
+                                        {(selectedDirectTemplate?.headerFormat === 'VIDEO' || selectedDirectTemplate?.name?.includes('launch')) ? (
+                                            <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-black/80">
+                                                <video
+                                                    src="https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C"
+                                                    controls
+                                                    className="w-full max-h-40 object-cover"
+                                                />
+                                            </div>
+                                        ) : selectedDirectTemplate?.headerFormat === 'DOCUMENT' || selectedDirectTemplate?.name?.includes('invoice') ? (
+                                            <div className="rounded-xl p-2.5 bg-card/80 border border-border flex items-center gap-2">
+                                                <FileText className="size-6 text-red-500 shrink-0" />
+                                                <div className="truncate text-xs">
+                                                    <p className="font-bold text-foreground">Document.pdf</p>
+                                                    <p className="text-[10px] text-muted-foreground">PDF Attachment</p>
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        {/* Body text */}
+                                        <div className="text-foreground leading-relaxed whitespace-pre-line text-xs font-sans bg-card/70 dark:bg-card/40 p-2.5 rounded-xl border border-border/50">
+                                            {selectedDirectTemplate?.body ? (
+                                                selectedDirectTemplate.body.replace(
+                                                    '{{1}}',
+                                                    directTemplateCustomName || selectedThread.contactName || 'Customer'
+                                                )
+                                            ) : selectedDirectTemplate?.name?.includes('launch') ? (
+                                                `નમસ્તે ${directTemplateCustomName || selectedThread.contactName}!\n\nદુકાનહિસાબ એપ લોન્ચ થઈ ગઈ છે! તમારા વ્યવસાયના હિસાબ-કિતાબ, ઉધાર-જમા, ગ્રાહક લેવડદેવડ અને ઇનવોઇસ હવે બનાવો સરળ.\n\nહમણાં જ એપ ડાઉનલોડ કરો:\nhttps://play.google.com/store/apps/details?id=com.app.dukanhisab\n\nવેબસાઇટ: https://dukanhisab.in\nસંપર્ક કરો: +91 63527 09531\n\nDukanHisab - તમારા વ્યવસાયને બનાવો સરળ!`
+                                            ) : (
+                                                `Hello ${directTemplateCustomName || selectedThread.contactName},\n\nOfficial WhatsApp message from DukanHisab.`
+                                            )}
+                                        </div>
+
+                                        {/* Button Preview */}
+                                        {(selectedDirectTemplate?.name?.includes('launch') || selectedDirectTemplate?.buttons?.length > 0) && (
+                                            <div className="pt-1 border-t border-emerald-500/20">
+                                                <div className="w-full py-1.5 px-3 rounded-lg bg-[#25d366] text-white text-xs font-bold text-center shadow-xs flex items-center justify-center gap-1.5">
+                                                    <Download className="size-3.5" />
+                                                    <span>Download Now</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
+                                            <span>Template: {selectedDirectTemplate?.name}</span>
+                                            <span>Just now ✓</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border/80 bg-muted/40 shrink-0">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowDirectTemplateModal(false)}
+                                className="text-xs h-8 px-4"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={isSendingDirectTemplate}
+                                onClick={handleSendDirectTemplate}
+                                className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-5 h-8 shadow-xs"
+                            >
+                                <Sparkles className="size-3.5" />
+                                {isSendingDirectTemplate ? 'Dispatching to WhatsApp...' : '🚀 Send Template Directly'}
                             </Button>
                         </div>
                     </div>
