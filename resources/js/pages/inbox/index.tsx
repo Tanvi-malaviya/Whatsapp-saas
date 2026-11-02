@@ -387,9 +387,13 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
         const templateName = selectedDirectTemplate.name;
         const recipientName = directTemplateCustomName.trim() || selectedThread.contactName || 'Valued Customer';
+        const isVideoHeader = selectedDirectTemplate.headerFormat === 'VIDEO';
+        const isDocHeader = selectedDirectTemplate.headerFormat === 'DOCUMENT';
         const mediaUrl = selectedDirectTemplate.headerUrl || (
-            selectedDirectTemplate.headerFormat === 'VIDEO' || templateName.includes('launch')
+            isVideoHeader
                 ? 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C'
+                : isDocHeader
+                ? 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
                 : undefined
         );
 
@@ -2248,7 +2252,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-300 font-semibold border border-blue-500/20">
                                                 Category: {selectedDirectTemplate.category || 'MARKETING'}
                                             </span>
-                                            {(selectedDirectTemplate.headerFormat === 'VIDEO' || selectedDirectTemplate.name?.includes('launch')) && (
+                                            {selectedDirectTemplate.headerFormat === 'VIDEO' && (
                                                 <span className="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/20">
                                                     🎬 Video Header
                                                 </span>
@@ -2262,21 +2266,28 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     )}
 
                                     {/* Personalized Variable (Contact Name) */}
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-semibold text-foreground">
-                                            Recipient Name Variable {'{{1}}'}
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={directTemplateCustomName}
-                                            onChange={(e) => setDirectTemplateCustomName(e.target.value)}
-                                            placeholder={selectedThread.contactName || 'Customer Name'}
-                                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
-                                        />
-                                        <p className="text-[10px] text-muted-foreground">
-                                            Replaces {'{{1}}'} in greeting text (e.g. "નમસ્તે {directTemplateCustomName || selectedThread.contactName}").
-                                        </p>
-                                    </div>
+                                    {selectedDirectTemplate?.body?.includes('{{1}}') ? (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-semibold text-foreground">
+                                                Recipient Name Variable {'{{1}}'}
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={directTemplateCustomName}
+                                                onChange={(e) => setDirectTemplateCustomName(e.target.value)}
+                                                placeholder={selectedThread.contactName || 'Customer Name'}
+                                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
+                                            />
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Replaces {'{{1}}'} in greeting text (e.g. "નમસ્તે {directTemplateCustomName || selectedThread.contactName}").
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
+                                            <span className="text-emerald-600 font-bold">✓</span>
+                                            <span>This template has fixed Meta-approved text with 0 dynamic variables.</span>
+                                        </div>
+                                    )}
 
                                     {/* Recipient Details */}
                                     <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-xs space-y-1">
@@ -2303,15 +2314,15 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </label>
                                     <div className="rounded-2xl border border-[#47b672]/30 bg-[#e7f8ee] dark:bg-[#0b2416] p-3 text-xs shadow-inner space-y-2">
                                         {/* Media Header Preview */}
-                                        {(selectedDirectTemplate?.headerFormat === 'VIDEO' || selectedDirectTemplate?.name?.includes('launch')) ? (
+                                        {selectedDirectTemplate?.headerFormat === 'VIDEO' ? (
                                             <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-black/80">
                                                 <video
-                                                    src="https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C"
+                                                    src={selectedDirectTemplate.headerUrl || "https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C"}
                                                     controls
                                                     className="w-full max-h-40 object-cover"
                                                 />
                                             </div>
-                                        ) : selectedDirectTemplate?.headerFormat === 'DOCUMENT' || selectedDirectTemplate?.name?.includes('invoice') ? (
+                                        ) : selectedDirectTemplate?.headerFormat === 'DOCUMENT' ? (
                                             <div className="rounded-xl p-2.5 bg-card/80 border border-border flex items-center gap-2">
                                                 <FileText className="size-6 text-red-500 shrink-0" />
                                                 <div className="truncate text-xs">
@@ -2336,12 +2347,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         </div>
 
                                         {/* Button Preview */}
-                                        {(selectedDirectTemplate?.name?.includes('launch') || selectedDirectTemplate?.buttons?.length > 0) && (
-                                            <div className="pt-1 border-t border-emerald-500/20">
-                                                <div className="w-full py-1.5 px-3 rounded-lg bg-[#25d366] text-white text-xs font-bold text-center shadow-xs flex items-center justify-center gap-1.5">
-                                                    <Download className="size-3.5" />
-                                                    <span>Download Now</span>
-                                                </div>
+                                        {selectedDirectTemplate?.buttons?.length > 0 && (
+                                            <div className="pt-1 border-t border-emerald-500/20 space-y-1">
+                                                {selectedDirectTemplate.buttons.map((btnText: string, i: number) => (
+                                                    <div key={i} className="w-full py-1.5 px-3 rounded-lg bg-[#25d366] text-white text-xs font-bold text-center shadow-xs flex items-center justify-center gap-1.5">
+                                                        <Download className="size-3.5" />
+                                                        <span>{btnText}</span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
 

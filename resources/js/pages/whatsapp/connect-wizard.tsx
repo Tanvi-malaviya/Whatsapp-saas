@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     ArrowLeft,
@@ -11,6 +11,7 @@ import {
     MessageSquare,
     ArrowRightLeft,
     ChevronRight,
+    ChevronLeft,
     Sparkles,
     ShieldCheck,
     Check,
@@ -18,6 +19,13 @@ import {
     Sliders,
     Zap,
     Lock,
+    Globe,
+    HelpCircle,
+    Info,
+    Building2,
+    Phone,
+    Shield,
+    CheckCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -44,24 +52,151 @@ type Props = {
     metaConfigId?: string;
 };
 
-type SetupMethod = 'new' | 'personal' | 'coexistence' | 'transfer';
+type SetupMethod = 'coexistence' | 'new' | 'personal' | 'transfer';
+
+const COEXISTENCE_STEPS = [
+    {
+        step: 1,
+        title: 'Sign in to Facebook',
+        subtitle: 'Log in with the Facebook account that manages your WhatsApp Business app. This lets Sathwara InfoTech request the permissions needed to connect your number.',
+        bullets: [
+            'Your login happens securely inside Facebook. Sathwara InfoTech never sees your password.',
+            'Make sure this account has admin access to the Meta Business portfolio you want to use.',
+            'After signing in, you will pick the business linked to your WhatsApp Business app.',
+        ],
+        previewType: 'fb_login',
+    },
+    {
+        step: 2,
+        title: 'Get Started with WhatsApp Business',
+        subtitle: 'Review how your WhatsApp account will be connected between your phone app and Cloud API.',
+        bullets: [
+            'Both your phone app and this dashboard stay connected in Coexistence mode.',
+            'You retain full ownership of your phone number and existing customer conversations.',
+            "Click 'Get Started' in the popup to proceed to business selection.",
+        ],
+        previewType: 'get_started',
+    },
+    {
+        step: 3,
+        title: 'Select Your Meta Business Portfolio',
+        subtitle: 'Choose your verified Meta Business Portfolio (e.g. Sathwara InfoTech) from the list.',
+        bullets: [
+            'Select the business portfolio that owns your WhatsApp Business Account.',
+            'Your verified portfolio unlocks high-volume messaging limits automatically.',
+            "Click 'Continue' to move to profile setup.",
+        ],
+        previewType: 'portfolio',
+    },
+    {
+        step: 4,
+        title: 'Create or Select WhatsApp Business Profile',
+        subtitle: 'Set up the public business profile details that customers will see when messaging you on WhatsApp.',
+        bullets: [
+            'Set your official Business Display Name (e.g. Sathwara InfoTech).',
+            'Choose your business category (e.g. IT & Software Services, Retail).',
+            'Optionally add your business website, email, and description.',
+        ],
+        previewType: 'profile',
+    },
+    {
+        step: 5,
+        title: 'Choose WhatsApp Business App (Coexistence)',
+        subtitle: 'Select the Coexistence option to keep using your phone app while managing chats on the web.',
+        bullets: [
+            "Select 'Keep using WhatsApp Business App' so your mobile chat history stays untouched.",
+            'No need to delete or migrate your account away from your phone.',
+            'Both channels will sync incoming and outgoing chats simultaneously.',
+        ],
+        previewType: 'coexistence',
+    },
+    {
+        step: 6,
+        title: 'Enter WhatsApp Phone Number',
+        subtitle: 'Enter your 10-digit mobile number with country code (+91 for India).',
+        bullets: [
+            'Select country code and enter your mobile number.',
+            'Choose verification method: Text Message (SMS) or Phone Call.',
+            "Click 'Send Code' to receive the 6-digit verification code from WhatsApp.",
+        ],
+        previewType: 'phone_input',
+    },
+    {
+        step: 7,
+        title: 'Verify Your Phone Number (OTP)',
+        subtitle: 'Enter the 6-digit verification code sent directly to your phone by Meta.',
+        bullets: [
+            'Meta will send a 6-digit code via SMS or voice call within a few seconds.',
+            'Enter the 6-digit code into the Meta popup window.',
+            "Click 'Verify' to confirm ownership of the phone number.",
+        ],
+        previewType: 'otp',
+    },
+    {
+        step: 8,
+        title: 'Grant Messaging Permissions',
+        subtitle: 'Confirm permissions to allow Sathwara InfoTech to send broadcasts and manage chats.',
+        bullets: [
+            'Grants whatsapp_business_messaging permissions securely via OAuth 2.0.',
+            'No sensitive passwords or private credentials are ever shared or stored.',
+            "Click 'Continue' to finalize the access grant.",
+        ],
+        previewType: 'permissions',
+    },
+    {
+        step: 9,
+        title: 'Meta Cloud API Provisioning',
+        subtitle: 'Meta automatically registers your Phone Number ID and assigns Cloud API credentials.',
+        bullets: [
+            'Official Phone Number ID and WABA ID are automatically created by Meta.',
+            'Webhooks are subscribed with 100% end-to-end encryption.',
+            'Zero manual copy-pasting of API keys or IDs required.',
+        ],
+        previewType: 'provisioning',
+    },
+    {
+        step: 10,
+        title: 'Automatic Handshake & Token Sync',
+        subtitle: 'The Meta popup communicates back to your Sathwara InfoTech dashboard.',
+        bullets: [
+            'The popup securely hands over authorization codes directly to the platform.',
+            'Your dashboard stores and validates your Meta Cloud API connection in real time.',
+            'The popup window automatically closes once the connection is verified.',
+        ],
+        previewType: 'handshake',
+    },
+    {
+        step: 11,
+        title: 'Congratulations! Your Number is Live',
+        subtitle: 'Your WhatsApp number is connected, verified with High Quality Rating, and ready to send!',
+        bullets: [
+            'Live status badge turns GREEN instantly with Tier 1K messaging limits.',
+            'Start sending promotional campaigns and automated bot flows.',
+            'Collaborate with your entire team in the Unified Chat Inbox.',
+        ],
+        previewType: 'live',
+    },
+];
 
 export default function WhatsAppConnectWizard({
     existingChannel,
-    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
-    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
-    metaAppId = '1324567864076715',
-    metaConfigId = '',
+    defaultWebhookUrl = 'https://whatsapp.sathwarainfotech.cloud/webhooks/meta',
+    defaultVerifyToken = 'sathwara_secret_token_123',
+    metaAppId = '1079349601748656',
+    metaConfigId = '1857245935612505',
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current || { name: 'Sathwara InfoTech', slug: 'sathwara-infotech' };
 
-    const [step, setStep] = useState<1 | 2 | 3>(1);
-    const [setupMethod, setSetupMethod] = useState<SetupMethod>('new');
+    const [step, setStep] = useState<1 | 2 | 3>(2);
+    const [setupMethod, setSetupMethod] = useState<SetupMethod>('coexistence');
+    const [guideStep, setGuideStep] = useState(1);
+    const [showDirectForm, setShowDirectForm] = useState(false);
+
     const [countryCode, setCountryCode] = useState('+91');
-    const [phoneDigits, setPhoneDigits] = useState('');
+    const [phoneDigits, setPhoneDigits] = useState('9104081291');
     const [channelName, setChannelName] = useState(
-        currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'DukanHisab WhatsApp'
+        currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'Sathwara InfoTech WhatsApp'
     );
     const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -72,37 +207,81 @@ export default function WhatsAppConnectWizard({
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [successNotice, setSuccessNotice] = useState<string | null>(null);
     const [connectedChannel, setConnectedChannel] = useState<Channel | null>(null);
 
-    const fullPhoneNumber = `${countryCode} ${phoneDigits.trim()}`;
+    const [configIdInput, setConfigIdInput] = useState(metaConfigId || '1857245935612505');
+    const [showConfigModal, setShowConfigModal] = useState(false);
 
-    // Handle Quick Connect Submission
-    const handleConnectSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        setErrorMsg(null);
+    // 1. Dynamically load Meta Facebook JavaScript SDK for Embedded Signup
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            (window as any).fbAsyncInit = function () {
+                (window as any).FB.init({
+                    appId: metaAppId || '1079349601748656',
+                    cookie: true,
+                    xfbml: true,
+                    version: 'v22.0',
+                });
+            };
 
-        const cleanDigits = phoneDigits.replace(/\D/g, '');
-        if (cleanDigits.length < 10) {
-            setErrorMsg('Please enter a valid 10-digit mobile number.');
-            return;
+            if (!document.getElementById('facebook-jssdk')) {
+                const js = document.createElement('script');
+                js.id = 'facebook-jssdk';
+                js.src = 'https://connect.facebook.net/en_US/sdk.js';
+                js.async = true;
+                js.defer = true;
+                document.body.appendChild(js);
+            }
         }
+    }, [metaAppId]);
 
+    // 2. Listen to Meta Embedded Signup session message events
+    useEffect(() => {
+        const handleMetaMessage = (event: MessageEvent) => {
+            if (
+                event.origin !== 'https://www.facebook.com' &&
+                event.origin !== 'https://web.facebook.com'
+            ) {
+                return;
+            }
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                if (data.type === 'WA_EMBEDDED_SIGNUP') {
+                    if (data.event === 'FINISH') {
+                        const { phone_number_id, waba_id } = data.data || {};
+                        setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
+                        handleDirectAutoConnect(phone_number_id, waba_id);
+                    }
+                }
+            } catch (e) {
+                // Ignore parsing errors for other message events
+            }
+        };
+
+        window.addEventListener('message', handleMetaMessage);
+        return () => window.removeEventListener('message', handleMetaMessage);
+    }, []);
+
+    // Automatic connection handler when Meta popup finishes
+    const handleDirectAutoConnect = async (customPhoneId?: string, customWabaId?: string) => {
         setIsSubmitting(true);
+        setErrorMsg(null);
         try {
             const resp = await fetch('/channels/quick-connect', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
+                    Accept: 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                 },
                 body: JSON.stringify({
                     name: channelName || `${currentOrg.name} WhatsApp`,
-                    phone_number: `${countryCode}${cleanDigits}`,
-                    phone_number_id: phoneId || (existingChannel?.phone_number_id ? '1324' + cleanDigits.slice(-8) : '1324' + cleanDigits.slice(-8)),
-                    waba_id: wabaId || existingChannel?.waba_id || '934553439246885',
-                    access_token: accessToken || existingChannel?.access_token || 'EAAB...default',
-                    setup_method: setupMethod,
+                    phone_number: `${countryCode}${phoneDigits.replace(/\D/g, '')}`,
+                    phone_number_id: customPhoneId || phoneId || '',
+                    waba_id: customWabaId || wabaId || '934553439246885',
+                    access_token: accessToken || existingChannel?.access_token || '',
+                    setup_method: 'coexistence',
                 }),
             });
 
@@ -111,43 +290,71 @@ export default function WhatsAppConnectWizard({
                 setConnectedChannel(data.channel);
                 setStep(3);
             } else {
-                setErrorMsg(data.message || 'Failed to connect number. Please try again.');
+                setErrorMsg(data.message || 'Failed to auto-connect. Please enter phone number manually below.');
+                setShowDirectForm(true);
             }
         } catch (err: any) {
             setErrorMsg('Network error: ' + err.message);
+            setShowDirectForm(true);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Trigger Meta Embedded Signup Popup (FB.login) if config_id or SDK is loaded
+    // 3. Trigger Official Meta WhatsApp Onboarding Popup - Exactly like Xobito
     const launchMetaEmbeddedSignup = () => {
-        if (typeof (window as any).FB !== 'undefined' && metaConfigId) {
-            (window as any).FB.login(
-                function (response: any) {
-                    if (response.authResponse) {
-                        const code = response.authResponse.code;
-                        handleConnectSubmit();
-                    }
-                },
-                {
-                    config_id: metaConfigId,
-                    response_type: 'code',
-                    override_default_response_type: true,
-                }
-            );
-        } else {
-            // Smoothly auto-connect directly
-            handleConnectSubmit();
+        setErrorMsg(null);
+        const activeConfigId = configIdInput.trim() || metaConfigId || '1835889181059188';
+        const appId = metaAppId || '1079349601748656';
+
+        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=https%3A%2F%2Fwhatsapp.sathwarainfotech.cloud%2Fwhatsapp%2Fconnect`;
+
+        const w = 650;
+        const h = 750;
+        const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
+        const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
+
+        const popup = window.open(
+            onboardUrl,
+            'MetaWhatsAppOnboarding',
+            `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`
+        );
+
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+            window.open(onboardUrl, '_blank');
         }
+
+        // Auto-detect when popup is completed/closed
+        const timer = setInterval(() => {
+            if (popup && popup.closed) {
+                clearInterval(timer);
+                setSuccessNotice('Popup completed! Syncing and connecting WhatsApp number...');
+                handleDirectAutoConnect();
+            }
+        }, 1500);
     };
+
+    const handleConnectSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        setErrorMsg(null);
+
+        const cleanDigits = phoneDigits.replace(/\D/g, '');
+        if (cleanDigits.length < 10 && !phoneId) {
+            setErrorMsg('Please enter a valid 10-digit WhatsApp phone number.');
+            return;
+        }
+
+        handleDirectAutoConnect();
+    };
+
+    const currentStepData = COEXISTENCE_STEPS.find((s) => s.step === guideStep) || COEXISTENCE_STEPS[0];
 
     return (
         <>
-            <Head title={`Connect WhatsApp - Step ${step} of 3 | WhatsApp SaaS`} />
+            <Head title="Connect WhatsApp | Coexistence Guide | Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-5 p-4 md:p-8 max-w-6xl mx-auto w-full font-sans text-foreground">
-                {/* Top Nav Bar / Breadcrumbs */}
+                {/* Top Nav Bar / Breadcrumbs (Exact Xobito style) */}
                 <div className="flex items-center justify-between border-b border-border/70 pb-3">
                     <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Link href="/whatsapp/connect" className="hover:text-foreground transition-colors">
@@ -158,7 +365,11 @@ export default function WhatsAppConnectWizard({
                             WhatsApp
                         </Link>
                         <ChevronRight className="size-3 text-muted-foreground/50" />
-                        <span className="font-semibold text-foreground">Connect</span>
+                        <span className="hover:text-foreground transition-colors">Connect</span>
+                        <ChevronRight className="size-3 text-muted-foreground/50" />
+                        <span className="hover:text-foreground transition-colors">Coexistence</span>
+                        <ChevronRight className="size-3 text-muted-foreground/50" />
+                        <span className="font-semibold text-foreground">Guide</span>
                     </nav>
 
                     <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
@@ -186,8 +397,8 @@ export default function WhatsAppConnectWizard({
                 </div>
 
                 <div className="space-y-6">
-                    {/* Header Action & Title */}
-                    <div className="space-y-2">
+                    {/* Header Action & Title (Exact Xobito Step 3 of 3) */}
+                    <div className="space-y-1.5">
                         <Button
                             variant="ghost"
                             size="sm"
@@ -196,7 +407,7 @@ export default function WhatsAppConnectWizard({
                         >
                             <Link href="/whatsapp/connect">
                                 <ArrowLeft className="size-3.5" />
-                                Channels
+                                Back
                             </Link>
                         </Button>
 
@@ -205,380 +416,476 @@ export default function WhatsAppConnectWizard({
                                 Connect WhatsApp
                             </h1>
                             <Badge className="bg-muted text-foreground/80 hover:bg-muted font-normal text-xs px-2 py-0.5 border border-border">
-                                Step {step} of 3
+                                Step 3 of 3
                             </Badge>
                         </div>
                         <p className="text-xs md:text-sm text-muted-foreground">
-                            Connect your phone number to the WhatsApp Business API through Meta.
+                            Follow the steps in the Facebook window to complete your Meta setup.
                         </p>
                     </div>
 
-                    {/* ================= STEP 1: SELECT METHOD (Matching Image 3) ================= */}
-                    {step === 1 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-2">
-                            {/* Left Column: WhatsApp <-> Meta Brand Info */}
-                            <div className="lg:col-span-5 space-y-6">
-                                {/* Floating Brand Logos: WhatsApp <-> Meta */}
-                                <div className="flex items-center gap-3">
-                                    {/* WhatsApp Green Icon */}
-                                    <div className="flex size-12 items-center justify-center rounded-2xl bg-[#25D366] text-white shadow-md shadow-[#25D366]/20">
-                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                                            <path d="M12.031 2c-5.516 0-9.99 4.474-9.99 9.99 0 1.763.459 3.484 1.332 5.006l-1.416 5.174 5.305-1.391c1.47.802 3.125 1.226 4.769 1.226 5.516 0 9.99-4.474 9.99-9.99 0-5.516-4.474-9.989-9.99-9.989zm5.836 14.156c-.244.686-1.42 1.319-1.956 1.398-.517.076-1.19.109-3.488-.842-2.937-1.216-4.834-4.212-4.981-4.407-.146-.196-1.189-1.583-1.189-3.02 0-1.437.753-2.146 1.021-2.439.268-.293.585-.366.78-.366.195 0 .39.002.56.01.182.008.427-.069.668.51.244.585.83 2.025.903 2.172.073.146.122.317.024.512-.098.195-.147.317-.293.488-.146.171-.307.382-.439.512-.146.146-.299.305-.128.598.171.293.759 1.253 1.63 2.029 1.121.999 2.066 1.309 2.359 1.455.293.146.464.122.635-.073.171-.195.732-.854.927-1.147.195-.293.39-.244.659-.146.268.098 1.708.805 2.001.952.293.146.488.219.56.341.073.122.073.708-.171 1.394z"/>
-                                        </svg>
-                                    </div>
-
-                                    {/* Transfer / Sync Arrow */}
-                                    <div className="text-muted-foreground/60 text-sm">
-                                        <ArrowRightLeft className="size-4" />
-                                    </div>
-
-                                    {/* Meta Infinity Logo */}
-                                    <div className="flex size-12 items-center justify-center rounded-2xl bg-[#0081FB]/10 text-[#0081FB] border border-[#0081FB]/20 shadow-xs">
-                                        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
-                                            <path d="M12 10.15c-1.39-1.85-3.06-2.9-4.83-2.9-3.21 0-5.67 2.65-5.67 6.13 0 3.51 2.46 6.12 5.67 6.12 1.83 0 3.51-1.07 4.83-2.9 1.32 1.83 3 2.9 4.83 2.9 3.21 0 5.67-2.61 5.67-6.12 0-3.48-2.46-6.13-5.67-6.13-1.77 0-3.44 1.05-4.83 2.9zm-4.83 7.55c-2.22 0-3.87-1.85-3.87-4.32 0-2.44 1.65-4.33 3.87-4.33 1.5 0 2.91 1.05 4.08 2.87-1.17 1.85-2.58 2.88-4.08 2.88zm9.66 0c-1.5 0-2.91-1.03-4.08-2.88 1.17-1.82 2.58-2.87 4.08-2.87 2.22 0 3.87 1.89 3.87 4.33 0 2.47-1.65 4.32-3.87 4.32z"/>
-                                        </svg>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <h2 className="text-lg md:text-xl font-bold tracking-tight text-foreground">
-                                        Connect your phone number to WhatsApp Business API
-                                    </h2>
-                                    <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-                                        Set up Meta&apos;s official API to message customers and manage replies in one shared inbox.
-                                    </p>
-                                </div>
-
-                                <div className="space-y-3 pt-2">
-                                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                                        What you get
-                                    </h3>
-                                    <ul className="space-y-2.5 text-xs text-foreground/90">
-                                        <li className="flex items-start gap-2.5">
-                                            <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] mt-0.5">
-                                                <Check className="size-3 font-bold" />
-                                            </div>
-                                            <span>Message customers under your verified business name</span>
-                                        </li>
-                                        <li className="flex items-start gap-2.5">
-                                            <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] mt-0.5">
-                                                <Check className="size-3 font-bold" />
-                                            </div>
-                                            <span>Reply to customer-started conversations without limits</span>
-                                        </li>
-                                        <li className="flex items-start gap-2.5">
-                                            <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] mt-0.5">
-                                                <Check className="size-3 font-bold" />
-                                            </div>
-                                            <span>Manage every WhatsApp chat in one shared team inbox</span>
-                                        </li>
-                                    </ul>
-                                </div>
+                    {/* Notification Alerts */}
+                    {errorMsg && (
+                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium flex items-start justify-between gap-3 animate-in fade-in">
+                            <div className="space-y-1">
+                                <p className="font-semibold">Notice:</p>
+                                <p>{errorMsg}</p>
                             </div>
-
-                            {/* Right Column: 4 Selection Options (Image 3 exact) */}
-                            <div className="lg:col-span-7 space-y-3.5">
-                                {/* Option 1: New WhatsApp setup */}
-                                <div
-                                    onClick={() => setSetupMethod('new')}
-                                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                                        setupMethod === 'new'
-                                            ? 'border-[#47b672] bg-[#47b672]/5 shadow-xs ring-1 ring-[#47b672]/20'
-                                            : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-3.5">
-                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-[#47b672] border border-border/60">
-                                            <div className="relative">
-                                                <Smartphone className="size-5" />
-                                                <Plus className="size-2.5 absolute -top-1 -right-1 font-bold" />
-                                            </div>
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <h4 className="text-sm font-bold text-foreground">
-                                                New WhatsApp setup
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground">
-                                                Use a phone number that isn&apos;t connected to WhatsApp, then link it through Meta.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="pl-3">
-                                        <div
-                                            className={`size-4 rounded-full border flex items-center justify-center transition-colors ${
-                                                setupMethod === 'new'
-                                                    ? 'border-[#47b672] bg-[#47b672]'
-                                                    : 'border-muted-foreground/40'
-                                            }`}
-                                        >
-                                            {setupMethod === 'new' && <div className="size-1.5 rounded-full bg-white" />}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Option 2: Personal WhatsApp number */}
-                                <div
-                                    onClick={() => setSetupMethod('personal')}
-                                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                                        setupMethod === 'personal'
-                                            ? 'border-[#47b672] bg-[#47b672]/5 shadow-xs ring-1 ring-[#47b672]/20'
-                                            : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-3.5">
-                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground border border-border/60">
-                                            <User className="size-5" />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <h4 className="text-sm font-bold text-foreground">
-                                                Personal WhatsApp number
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground">
-                                                For phone numbers currently used with WhatsApp Messenger. We&apos;ll help you move it here.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="pl-3">
-                                        <div
-                                            className={`size-4 rounded-full border flex items-center justify-center transition-colors ${
-                                                setupMethod === 'personal'
-                                                    ? 'border-[#47b672] bg-[#47b672]'
-                                                    : 'border-muted-foreground/40'
-                                            }`}
-                                        >
-                                            {setupMethod === 'personal' && <div className="size-1.5 rounded-full bg-white" />}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Option 3: WhatsApp Business App [Coexistence] BETA */}
-                                <div
-                                    onClick={() => setSetupMethod('coexistence')}
-                                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                                        setupMethod === 'coexistence'
-                                            ? 'border-[#47b672] bg-[#47b672]/5 shadow-xs ring-1 ring-[#47b672]/20'
-                                            : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-3.5">
-                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground border border-border/60">
-                                            <MessageSquare className="size-5" />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <h4 className="text-sm font-bold text-foreground">
-                                                    WhatsApp Business App [Coexistence]
-                                                </h4>
-                                                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-1.5 py-0 border-0 uppercase">
-                                                    BETA
-                                                </Badge>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground">
-                                                Keep using the Business App while managing the same phone number here.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="pl-3">
-                                        <div
-                                            className={`size-4 rounded-full border flex items-center justify-center transition-colors ${
-                                                setupMethod === 'coexistence'
-                                                    ? 'border-[#47b672] bg-[#47b672]'
-                                                    : 'border-muted-foreground/40'
-                                            }`}
-                                        >
-                                            {setupMethod === 'coexistence' && <div className="size-1.5 rounded-full bg-white" />}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Option 4: Transfer existing API number */}
-                                <div
-                                    onClick={() => setSetupMethod('transfer')}
-                                    className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
-                                        setupMethod === 'transfer'
-                                            ? 'border-[#47b672] bg-[#47b672]/5 shadow-xs ring-1 ring-[#47b672]/20'
-                                            : 'border-border/80 bg-card hover:border-border hover:bg-muted/30'
-                                    }`}
-                                >
-                                    <div className="flex items-start gap-3.5">
-                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground border border-border/60">
-                                            <ArrowRightLeft className="size-5" />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <h4 className="text-sm font-bold text-foreground">
-                                                Transfer existing API number
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground">
-                                                Bring your WhatsApp Business API phone number from another provider to your portal.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="pl-3">
-                                        <div
-                                            className={`size-4 rounded-full border flex items-center justify-center transition-colors ${
-                                                setupMethod === 'transfer'
-                                                    ? 'border-[#47b672] bg-[#47b672]'
-                                                    : 'border-muted-foreground/40'
-                                            }`}
-                                        >
-                                            {setupMethod === 'transfer' && <div className="size-1.5 rounded-full bg-white" />}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Continue Button */}
-                                <div className="pt-2">
-                                    <Button
-                                        onClick={() => setStep(2)}
-                                        className="w-full bg-[#47b672] text-white hover:bg-[#3ba363] h-11 text-sm font-bold tracking-wide shadow-md shadow-[#47b672]/25 rounded-xl transition-all"
-                                    >
-                                        Continue
-                                    </Button>
-                                </div>
-                            </div>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setShowDirectForm(true)}
+                                className="h-7 text-xs border-red-300 dark:border-red-800 text-red-700 dark:text-red-300"
+                            >
+                                Enter Number Manually
+                            </Button>
                         </div>
                     )}
 
-                    {/* ================= STEP 2: ENTER NUMBER & DIRECT CONNECT ================= */}
+                    {successNotice && (
+                        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                            <RefreshCw className="size-4 animate-spin text-emerald-600 shrink-0" />
+                            <span>{successNotice}</span>
+                        </div>
+                    )}
+
+                    {/* ================= STEP 2: XOBITO COEXISTENCE INTERACTIVE GUIDE ================= */}
                     {step === 2 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start pt-2">
-                            {/* Left Side: Summary info */}
-                            <div className="lg:col-span-5 space-y-4">
-                                <Card className="border-border/80 bg-card p-5 rounded-xl shadow-xs">
-                                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                        <Sparkles className="size-4 text-[#47b672]" />
-                                        Setup Method
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground mt-1 capitalize">
-                                        {setupMethod === 'new' && 'New WhatsApp setup (Fresh mobile number)'}
-                                        {setupMethod === 'personal' && 'Migrating personal WhatsApp number'}
-                                        {setupMethod === 'coexistence' && 'WhatsApp Business App Coexistence'}
-                                        {setupMethod === 'transfer' && 'Transfer existing API number'}
-                                    </p>
-                                    <div className="mt-4 pt-3 border-t border-border/70 flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Workspace</span>
-                                        <strong className="text-foreground">{currentOrg.name}</strong>
-                                    </div>
-                                    <div className="mt-2 flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Meta Cloud API</span>
-                                        <strong className="text-[#47b672]">v22.0 (Direct)</strong>
-                                    </div>
-                                    <div className="mt-2 flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">WABA ID</span>
-                                        <span className="font-mono text-muted-foreground">{wabaId}</span>
-                                    </div>
-                                </Card>
-
-                                <div className="p-4 rounded-xl bg-muted/40 border border-border/60 text-xs text-muted-foreground space-y-2">
-                                    <div className="flex items-center gap-2 font-semibold text-foreground">
-                                        <ShieldCheck className="size-4 text-[#47b672]" />
-                                        Official Meta Partner API
-                                    </div>
-                                    <p className="text-[11px] leading-relaxed">
-                                        Messages sent through this number will use official Meta Cloud API infrastructure with guaranteed delivery and zero SIM blocking risks.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Right Side: Direct Number Input Form */}
-                            <div className="lg:col-span-7">
-                                <Card className="border-border/80 bg-card p-6 rounded-xl shadow-xs space-y-5">
-                                    <div className="border-b border-border/70 pb-3">
-                                        <h3 className="text-base font-bold text-foreground">
-                                            Enter Mobile Number
-                                        </h3>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            Enter your WhatsApp mobile number to directly connect it to {currentOrg.name}.
+                        <div className="space-y-6">
+                            {/* Main Card: "You're almost there" + [Continue with Facebook] */}
+                            <Card className="border-border/80 bg-card rounded-2xl shadow-sm overflow-hidden">
+                                {/* Top Banner of Card */}
+                                <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/70">
+                                    <div className="space-y-1">
+                                        <h2 className="text-lg md:text-xl font-bold text-foreground tracking-tight">
+                                            You&apos;re almost there
+                                        </h2>
+                                        <p className="text-xs md:text-sm text-muted-foreground">
+                                            Sign in with Facebook and follow the Meta setup steps to connect your phone number.
                                         </p>
                                     </div>
 
-                                    {errorMsg && (
-                                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium">
-                                            {errorMsg}
+                                    {/* Primary 1-Click Facebook Button */}
+                                    <Button
+                                        onClick={launchMetaEmbeddedSignup}
+                                        disabled={isSubmitting}
+                                        className="h-11 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-sm shadow-md shadow-[#1877F2]/25 gap-2.5 shrink-0 transition-transform hover:scale-[1.02]"
+                                    >
+                                        {/* Official Facebook 'f' Logo */}
+                                        <div className="size-5 rounded-full bg-white flex items-center justify-center text-[#1877F2]">
+                                            <svg className="size-3.5 fill-current" viewBox="0 0 24 24">
+                                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                            </svg>
                                         </div>
-                                    )}
+                                        <span>Continue with Facebook</span>
+                                    </Button>
+                                </div>
 
-                                    <form onSubmit={handleConnectSubmit} className="space-y-4">
-                                        {/* Mobile Number Input with Country Code */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="phoneDigits" className="text-xs font-semibold text-foreground">
-                                                WhatsApp Phone Number <span className="text-red-500">*</span>
-                                            </Label>
-                                            <div className="flex items-center gap-2">
-                                                <select
-                                                    value={countryCode}
-                                                    onChange={(e) => setCountryCode(e.target.value)}
-                                                    className="h-10 px-3 rounded-lg border border-input bg-background text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
+                                {/* Interactive 11-Step Walkthrough (Split Layout Matching Image) */}
+                                <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-muted/10">
+                                    {/* Left Column: Mockup Facebook Popup Browser Window */}
+                                    <div className="lg:col-span-6 flex justify-center">
+                                        <div className="w-full max-w-md rounded-2xl border border-border/80 bg-background shadow-lg overflow-hidden flex flex-col h-[380px] transition-all">
+                                            {/* Browser Window Chrome */}
+                                            <div className="h-9 bg-muted/60 border-b border-border/70 px-3.5 flex items-center gap-2 select-none">
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="size-2.5 rounded-full bg-[#FF5F56]" />
+                                                    <div className="size-2.5 rounded-full bg-[#FFBD2E]" />
+                                                    <div className="size-2.5 rounded-full bg-[#27C93F]" />
+                                                </div>
+                                                <div className="flex-1 mx-2">
+                                                    <div className="h-5 rounded-md bg-background/80 border border-border/60 text-[10px] text-muted-foreground flex items-center justify-center gap-1 font-mono">
+                                                        <Lock className="size-2.5 text-muted-foreground/60" />
+                                                        facebook.com
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Mock Content Canvas per Step */}
+                                            <div className="flex-1 p-5 flex flex-col justify-center items-center text-center overflow-y-auto">
+                                                {currentStepData.previewType === 'fb_login' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <div className="size-10 mx-auto rounded-full bg-[#1877F2] text-white flex items-center justify-center shadow-md">
+                                                            <svg className="size-6 fill-current" viewBox="0 0 24 24">
+                                                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                            </svg>
+                                                        </div>
+                                                        <h4 className="text-xs font-bold text-foreground">Log in to Facebook</h4>
+                                                        <div className="space-y-2">
+                                                            <div className="h-8 rounded-lg border border-border/80 bg-muted/30 px-3 text-[11px] text-muted-foreground flex items-center">
+                                                                bhavesh.sathwara@gmail.com
+                                                            </div>
+                                                            <div className="h-8 rounded-lg border border-border/80 bg-muted/30 px-3 text-[11px] text-muted-foreground flex items-center tracking-widest">
+                                                                ••••••••••••
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center shadow-xs">
+                                                            Log In
+                                                        </div>
+                                                        <div className="text-[10px] text-[#1877F2] hover:underline cursor-pointer">
+                                                            Forgotten password?
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'get_started' && (
+                                                    <div className="w-full max-w-xs space-y-3.5 animate-in fade-in duration-200">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <div className="size-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shadow-sm">
+                                                                <MessageSquare className="size-5" />
+                                                            </div>
+                                                            <ArrowRightLeft className="size-4 text-muted-foreground/60" />
+                                                            <div className="size-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shadow-sm">
+                                                                <Building2 className="size-5" />
+                                                            </div>
+                                                        </div>
+                                                        <h4 className="text-xs font-bold text-foreground">Connect to Sathwara InfoTech</h4>
+                                                        <p className="text-[11px] text-muted-foreground leading-snug">
+                                                            Link your WhatsApp account to enable Cloud API broadcasting & chat routing.
+                                                        </p>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
+                                                            Get Started
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'portfolio' && (
+                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
+                                                        <h4 className="text-xs font-bold text-foreground text-center">Select Meta Business Portfolio</h4>
+                                                        <div className="p-3 rounded-xl border-2 border-[#1877F2] bg-[#1877F2]/5 flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <Building2 className="size-4 text-[#1877F2]" />
+                                                                <div>
+                                                                    <div className="text-xs font-bold text-foreground">Sathwara InfoTech</div>
+                                                                    <div className="text-[10px] text-muted-foreground">ID: 976124469221838 • Verified</div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="size-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center">
+                                                                <Check className="size-2.5 stroke-[3]" />
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
+                                                            Continue
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'profile' && (
+                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
+                                                        <h4 className="text-xs font-bold text-foreground text-center">Create WhatsApp Profile</h4>
+                                                        <div className="space-y-1">
+                                                            <div className="text-[10px] text-muted-foreground font-medium">Display Name</div>
+                                                            <div className="h-7 rounded border border-border px-2 text-xs flex items-center font-semibold text-foreground">
+                                                                Sathwara InfoTech
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <div className="text-[10px] text-muted-foreground font-medium">Category</div>
+                                                            <div className="h-7 rounded border border-border px-2 text-xs flex items-center text-muted-foreground">
+                                                                IT & Software Services
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
+                                                            Next
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'coexistence' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <div className="size-11 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                                                            <Smartphone className="size-6" />
+                                                        </div>
+                                                        <h4 className="text-xs font-bold text-foreground">WhatsApp Business App Coexistence</h4>
+                                                        <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-left flex items-start gap-2">
+                                                            <CheckCircle className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                                                            <div className="text-[11px] text-foreground">
+                                                                Keep using your mobile phone app. Chats will sync to both devices.
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
+                                                            Continue
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'phone_input' && (
+                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
+                                                        <h4 className="text-xs font-bold text-foreground text-center">Add a Phone Number</h4>
+                                                        <div className="flex gap-2">
+                                                            <div className="h-8 px-2 rounded border border-border flex items-center text-xs font-semibold">
+                                                                🇮🇳 +91
+                                                            </div>
+                                                            <div className="h-8 flex-1 px-3 rounded border border-border flex items-center text-xs font-mono font-medium">
+                                                                91040 81291
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1 pt-1 text-[11px] text-muted-foreground">
+                                                            <label className="flex items-center gap-1.5 cursor-pointer">
+                                                                <input type="radio" checked readOnly className="accent-[#1877F2]" />
+                                                                <span>Text message (SMS)</span>
+                                                            </label>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
+                                                            Send Code
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'otp' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <h4 className="text-xs font-bold text-foreground">Verify Your Phone Number</h4>
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Enter the 6-digit code sent to +91 91040 81291
+                                                        </p>
+                                                        <div className="flex justify-center gap-1.5">
+                                                            {['8', '4', '1', '9', '2', '0'].map((digit, i) => (
+                                                                <div
+                                                                    key={i}
+                                                                    className="size-8 rounded border-2 border-[#1877F2] bg-[#1877F2]/5 flex items-center justify-center text-sm font-bold font-mono text-foreground"
+                                                                >
+                                                                    {digit}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
+                                                            Verify
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'permissions' && (
+                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
+                                                        <h4 className="text-xs font-bold text-foreground text-center">Permissions Summary</h4>
+                                                        <div className="p-3 rounded-xl border border-border/80 bg-muted/30 space-y-2 text-[11px]">
+                                                            <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                                                                <Check className="size-3.5 stroke-[3]" />
+                                                                <span>whatsapp_business_messaging</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                                                                <Check className="size-3.5 stroke-[3]" />
+                                                                <span>whatsapp_business_management</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
+                                                            Grant Permissions
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'provisioning' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <RefreshCw className="size-10 mx-auto text-[#1877F2] animate-spin" />
+                                                        <h4 className="text-xs font-bold text-foreground">Provisioning Cloud API...</h4>
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Registering Phone Number ID & End-to-End Encryption Keys on Meta servers.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'handshake' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <div className="size-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
+                                                            <ShieldCheck className="size-7" />
+                                                        </div>
+                                                        <h4 className="text-xs font-bold text-foreground">Secure Token Exchange</h4>
+                                                        <p className="text-[11px] text-muted-foreground">
+                                                            Authenticating with Sathwara InfoTech Portal... Handshake complete!
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {currentStepData.previewType === 'live' && (
+                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
+                                                        <div className="size-12 mx-auto rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg shadow-[#25D366]/30">
+                                                            <Check className="size-7 stroke-[3]" />
+                                                        </div>
+                                                        <h4 className="text-sm font-bold text-foreground">Ready for Messaging!</h4>
+                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-semibold">
+                                                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                                            Active & Verified
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Right Column: Step Description, Green Text & Bullet Points (Exact Xobito layout) */}
+                                    <div className="lg:col-span-6 space-y-5">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="font-mono text-xs px-2.5 py-0.5 font-semibold text-muted-foreground"
                                                 >
-                                                    <option value="+91">🇮🇳 +91 (India)</option>
-                                                    <option value="+1">🇺🇸 +1 (US/Canada)</option>
-                                                    <option value="+44">🇬🇧 +44 (UK)</option>
-                                                    <option value="+971">🇦🇪 +971 (UAE)</option>
-                                                    <option value="+61">🇦🇺 +61 (Australia)</option>
-                                                    <option value="+65">🇸🇬 +65 (Singapore)</option>
-                                                    <option value="+966">🇸🇦 +966 (Saudi)</option>
-                                                </select>
+                                                    Step {currentStepData.step} of 11
+                                                </Badge>
+
+                                                {/* Stepper Arrow Buttons */}
+                                                <div className="flex items-center gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        disabled={guideStep === 1}
+                                                        onClick={() => setGuideStep((prev) => Math.max(1, prev - 1))}
+                                                        className="size-7 rounded-lg"
+                                                    >
+                                                        <ChevronLeft className="size-4" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        disabled={guideStep === 11}
+                                                        onClick={() => setGuideStep((prev) => Math.min(11, prev + 1))}
+                                                        className="size-7 rounded-lg"
+                                                    >
+                                                        <ChevronRight className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <h3 className="text-lg md:text-xl font-bold text-foreground tracking-tight">
+                                                {currentStepData.title}
+                                            </h3>
+                                        </div>
+
+                                        {/* Highlight description box in vibrant green */}
+                                        <div className="p-3.5 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] text-xs md:text-sm font-medium leading-relaxed">
+                                            {currentStepData.subtitle}
+                                        </div>
+
+                                        {/* Explanatory Bullet Points */}
+                                        <ul className="space-y-2.5 text-xs text-muted-foreground leading-relaxed">
+                                            {currentStepData.bullets.map((bullet, idx) => (
+                                                <li key={idx} className="flex items-start gap-2.5">
+                                                    <span className="text-[#1877F2] font-bold text-sm leading-none mt-0.5">•</span>
+                                                    <span>{bullet}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+
+                                        {/* Interactive Navigation Dots (1 to 11) */}
+                                        <div className="pt-2 flex items-center justify-between border-t border-border/70">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                {COEXISTENCE_STEPS.map((s) => (
+                                                    <button
+                                                        key={s.step}
+                                                        onClick={() => setGuideStep(s.step)}
+                                                        className={`size-6 rounded-md text-[11px] font-bold transition-all ${
+                                                            s.step === guideStep
+                                                                ? 'bg-[#1877F2] text-white shadow-xs scale-105'
+                                                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                        }`}
+                                                    >
+                                                        {s.step}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <Button
+                                                size="sm"
+                                                onClick={launchMetaEmbeddedSignup}
+                                                className="bg-[#1877F2] hover:bg-[#166FE5] text-white text-xs font-semibold gap-1.5 h-8 px-3 rounded-lg"
+                                            >
+                                                <span>Launch Popup</span>
+                                                <ExternalLink className="size-3" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+
+                            {/* Collapsible / Direct Input Accordion for Manual Verification */}
+                            <div className="border border-border/80 bg-card rounded-2xl p-5 shadow-xs">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <Zap className="size-4 text-[#47b672]" />
+                                            Direct Quick Connect & Verification
+                                        </h4>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            Already finished the Meta popup or want to directly verify your WhatsApp mobile number?
+                                        </p>
+                                    </div>
+
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowDirectForm(!showDirectForm)}
+                                        className="text-xs font-semibold h-8"
+                                    >
+                                        {showDirectForm ? 'Hide Form' : 'Show Direct Form'}
+                                    </Button>
+                                </div>
+
+                                {showDirectForm && (
+                                    <form onSubmit={handleConnectSubmit} className="mt-5 pt-5 border-t border-border/70 space-y-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold text-foreground">
+                                                    WhatsApp Phone Number <span className="text-red-500">*</span>
+                                                </Label>
+                                                <div className="flex gap-2">
+                                                    <select
+                                                        value={countryCode}
+                                                        onChange={(e) => setCountryCode(e.target.value)}
+                                                        className="h-10 px-3 rounded-lg border border-input bg-background text-xs font-semibold text-foreground"
+                                                    >
+                                                        <option value="+91">🇮🇳 +91 (India)</option>
+                                                        <option value="+1">🇺🇸 +1 (US)</option>
+                                                        <option value="+44">🇬🇧 +44 (UK)</option>
+                                                        <option value="+971">🇦🇪 +971 (UAE)</option>
+                                                    </select>
+                                                    <Input
+                                                        type="tel"
+                                                        value={phoneDigits}
+                                                        onChange={(e) => setPhoneDigits(e.target.value)}
+                                                        placeholder="91040 81291"
+                                                        className="h-10 text-sm font-medium tracking-wide flex-1 font-mono"
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold text-foreground">
+                                                    Business / Channel Display Name
+                                                </Label>
                                                 <Input
-                                                    id="phoneDigits"
-                                                    type="tel"
-                                                    placeholder="98765 43210"
-                                                    value={phoneDigits}
-                                                    onChange={(e) => setPhoneDigits(e.target.value)}
-                                                    className="h-10 text-sm font-medium tracking-wide flex-1"
-                                                    required
+                                                    type="text"
+                                                    value={channelName}
+                                                    onChange={(e) => setChannelName(e.target.value)}
+                                                    placeholder="Sathwara InfoTech WhatsApp"
+                                                    className="h-10 text-sm"
                                                 />
                                             </div>
-                                            <p className="text-[11px] text-muted-foreground">
-                                                This number will be verified and connected for sending broadcasts and automated chat flows.
-                                            </p>
                                         </div>
 
-                                        {/* Channel Display Name */}
-                                        <div className="space-y-1.5">
-                                            <Label htmlFor="channelName" className="text-xs font-semibold text-foreground">
-                                                Business / Channel Display Name
-                                            </Label>
-                                            <Input
-                                                id="channelName"
-                                                type="text"
-                                                placeholder="e.g. DukanHisab WhatsApp or Support Team"
-                                                value={channelName}
-                                                onChange={(e) => setChannelName(e.target.value)}
-                                                className="h-10 text-sm"
-                                            />
-                                            <p className="text-[11px] text-muted-foreground">
-                                                The internal name to identify this channel inside your workspace.
-                                            </p>
-                                        </div>
-
-                                        {/* Advanced Settings Accordion */}
-                                        <div className="pt-2">
+                                        {/* Advanced Settings */}
+                                        <div>
                                             <button
                                                 type="button"
                                                 onClick={() => setShowAdvanced(!showAdvanced)}
                                                 className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-semibold transition-colors"
                                             >
                                                 <Sliders className="size-3 text-[#47b672]" />
-                                                {showAdvanced ? 'Hide Meta Cloud API IDs' : 'Advanced: Meta Cloud API IDs (Optional)'}
+                                                {showAdvanced ? 'Hide Advanced Meta IDs' : 'Advanced: Meta Cloud API IDs'}
                                             </button>
 
                                             {showAdvanced && (
-                                                <div className="mt-3 p-4 rounded-xl bg-muted/30 border border-border/70 space-y-3">
+                                                <div className="mt-3 p-4 rounded-xl bg-muted/30 border border-border/70 grid grid-cols-1 md:grid-cols-2 gap-3">
                                                     <div className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">
-                                                            Phone Number ID (Auto-derived if left blank)
-                                                        </Label>
+                                                        <Label className="text-[11px] text-muted-foreground">Phone Number ID</Label>
                                                         <Input
                                                             value={phoneId}
                                                             onChange={(e) => setPhoneId(e.target.value)}
-                                                            placeholder="1324567864076715"
+                                                            placeholder="Leave blank for 1-click auto-discovery"
                                                             className="h-8 text-xs font-mono"
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">
-                                                            WhatsApp Business Account (WABA ID)
-                                                        </Label>
+                                                        <Label className="text-[11px] text-muted-foreground">WABA ID</Label>
                                                         <Input
                                                             value={wabaId}
                                                             onChange={(e) => setWabaId(e.target.value)}
@@ -586,67 +893,29 @@ export default function WhatsAppConnectWizard({
                                                             className="h-8 text-xs font-mono"
                                                         />
                                                     </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">
-                                                            Permanent Access Token
-                                                        </Label>
-                                                        <Input
-                                                            type="password"
-                                                            value={accessToken}
-                                                            onChange={(e) => setAccessToken(e.target.value)}
-                                                            placeholder="EAAB..."
-                                                            className="h-8 text-xs font-mono"
-                                                        />
-                                                    </div>
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* Actions: Direct Connect & Back */}
-                                        <div className="pt-3 space-y-2">
-                                            <Button
-                                                type="submit"
-                                                disabled={isSubmitting}
-                                                className="w-full bg-[#47b672] text-white hover:bg-[#3ba363] h-11 text-sm font-bold tracking-wide shadow-md shadow-[#47b672]/25 rounded-xl transition-all gap-2"
-                                            >
-                                                {isSubmitting ? (
-                                                    <>
-                                                        <RefreshCw className="size-4 animate-spin" />
-                                                        Connecting WhatsApp Number...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Zap className="size-4 fill-current" />
-                                                        Direct Connect WhatsApp Number
-                                                    </>
-                                                )}
-                                            </Button>
-
-                                            <div className="flex items-center justify-between pt-1">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => setStep(1)}
-                                                    className="text-xs text-muted-foreground hover:text-foreground"
-                                                >
-                                                    ← Back to Setup Methods
-                                                </Button>
-
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={launchMetaEmbeddedSignup}
-                                                    className="text-xs text-[#0081FB] hover:text-[#006bd1] hover:bg-[#0081FB]/5 gap-1"
-                                                >
-                                                    Connect with Meta Popup
-                                                    <ExternalLink className="size-3" />
-                                                </Button>
-                                            </div>
-                                        </div>
+                                        <Button
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="w-full bg-[#47b672] text-white hover:bg-[#3ba363] h-10 text-xs font-bold tracking-wide rounded-xl gap-2 shadow-xs"
+                                        >
+                                            {isSubmitting ? (
+                                                <>
+                                                    <RefreshCw className="size-4 animate-spin" />
+                                                    Connecting WhatsApp Number...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Zap className="size-4 fill-current" />
+                                                    Direct Connect WhatsApp Number
+                                                </>
+                                            )}
+                                        </Button>
                                     </form>
-                                </Card>
+                                )}
                             </div>
                         </div>
                     )}
@@ -660,76 +929,71 @@ export default function WhatsAppConnectWizard({
                                 {/* WhatsApp Green Celebration Badge */}
                                 <div className="flex size-16 mx-auto items-center justify-center rounded-3xl bg-[#25D366] text-white shadow-xl shadow-[#25D366]/30 mb-4 animate-in zoom-in-90 duration-300">
                                     <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor">
-                                        <path d="M12.031 2c-5.516 0-9.99 4.474-9.99 9.99 0 1.763.459 3.484 1.332 5.006l-1.416 5.174 5.305-1.391c1.47.802 3.125 1.226 4.769 1.226 5.516 0 9.99-4.474 9.99-9.99 0-5.516-4.474-9.989-9.99-9.989zm5.836 14.156c-.244.686-1.42 1.319-1.956 1.398-.517.076-1.19.109-3.488-.842-2.937-1.216-4.834-4.212-4.981-4.407-.146-.196-1.189-1.583-1.189-3.02 0-1.437.753-2.146 1.021-2.439.268-.293.585-.366.78-.366.195 0 .39.002.56.01.182.008.427-.069.668.51.244.585.83 2.025.903 2.172.073.146.122.317.024.512-.098.195-.147.317-.293.488-.146.171-.307.382-.439.512-.146.146-.299.305-.128.598.171.293.759 1.253 1.63 2.029 1.121.999 2.066 1.309 2.359 1.455.293.146.464.122.635-.073.171-.195.732-.854.927-1.147.195-.293.39-.244.659-.146.268.098 1.708.805 2.001.952.293.146.488.219.56.341.073.122.073.708-.171 1.394z"/>
+                                        <path d="M12.031 2c-5.516 0-9.99 4.474-9.99 9.99 0 1.763.459 3.484 1.332 5.006l-1.416 5.174 5.305-1.391c1.47.802 3.125 1.226 4.769 1.226 5.516 0 9.99-4.474 9.99-9.99 0-5.516-4.474-9.989-9.99-9.989zm5.836 14.156c-.244.686-1.42 1.319-1.956 1.398-.517.076-1.19.109-3.488-.842-2.937-1.216-4.834-4.212-4.981-4.407-.146-.196-1.189-1.583-1.189-3.02 0-1.437.753-2.146 1.021-2.439.268-.293.585-.366.78-.366.195 0 .39.002.56.01.182.008.427-.069.668.51.244.585.83 2.025.903 2.172.073.146.122.317.024.512-.098.195-.147.317-.293.488-.146.171-.307.382-.439.512-.146.146-.299.305-.128.598.171.293.759 1.253 1.63 2.029 1.121.999 2.066 1.309 2.359 1.455.293.146.464.122.635-.073.171-.195.732-.854.927-1.147.195-.293.39-.244.659-.146.268.098 1.708.805 2.001.952.293.146.488.219.56.341.073.122.073.708-.171 1.394z" />
                                     </svg>
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <h2 className="text-xl md:text-2xl font-bold text-foreground">
-                                        WhatsApp Connected Successfully!
+                                        WhatsApp Number Successfully Connected!
                                     </h2>
-                                    <p className="text-sm text-muted-foreground">
-                                        Your number is now live and linked to Meta Cloud API v22.0.
+                                    <p className="text-xs md:text-sm text-muted-foreground">
+                                        Your WhatsApp Business number is officially verified and registered with Meta Cloud API.
                                     </p>
                                 </div>
 
-                                {/* Channel Details Chip */}
-                                <div className="my-6 p-4 rounded-xl bg-muted/40 border border-border/70 max-w-md mx-auto text-left space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Phone Number</span>
-                                        <strong className="text-sm font-mono text-foreground">
-                                            {connectedChannel?.phone_number || fullPhoneNumber}
-                                        </strong>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Channel Name</span>
-                                        <span className="text-xs font-semibold text-foreground">
-                                            {connectedChannel?.name || channelName}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Quality Rating</span>
-                                        <Badge className="bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] text-[10px] font-semibold border-0">
-                                            QUALITY: GREEN
+                                {/* Channel Card Summary */}
+                                <div className="mt-6 p-4 rounded-xl bg-muted/30 border border-border/80 text-left space-y-3">
+                                    <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-foreground">
+                                                {connectedChannel?.name || `${currentOrg.name} WhatsApp`}
+                                            </h4>
+                                            <p className="text-xs font-mono text-muted-foreground">
+                                                {connectedChannel?.phone_number || `${countryCode} ${phoneDigits}`}
+                                            </p>
+                                        </div>
+                                        <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs px-2.5 py-1 font-semibold flex items-center gap-1.5">
+                                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            Connected & Live
                                         </Badge>
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs text-muted-foreground">Status</span>
-                                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
-                                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                            Active & Listening
-                                        </span>
+
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                            <span className="text-muted-foreground block text-[11px]">Quality Rating</span>
+                                            <strong className="text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                                                <ShieldCheck className="size-3.5" />
+                                                HIGH (Green)
+                                            </strong>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted-foreground block text-[11px]">Messaging Tier</span>
+                                            <strong className="text-foreground font-semibold mt-0.5 block">
+                                                TIER 1K (1,000 / 24h)
+                                            </strong>
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Call to action buttons */}
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                                {/* Call to Actions */}
+                                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                                     <Button
                                         asChild
-                                        className="w-full sm:w-auto bg-[#47b672] text-white hover:bg-[#3ba363] text-xs font-bold px-6 h-10 shadow-sm shadow-[#47b672]/30 rounded-xl"
+                                        className="w-full sm:w-auto bg-[#47b672] text-white hover:bg-[#3ba363] h-10 px-6 font-bold text-xs rounded-xl shadow-md shadow-[#47b672]/20"
                                     >
-                                        <Link href={connectedChannel?.id ? `/channels/${connectedChannel.id}` : '/whatsapp/connect'}>
-                                            View Channel Details
+                                        <Link href="/whatsapp/connect">
+                                            Manage All Channels
                                         </Link>
                                     </Button>
 
                                     <Button
                                         asChild
                                         variant="outline"
-                                        className="w-full sm:w-auto border-border text-foreground hover:bg-muted text-xs font-medium px-5 h-10 rounded-xl"
+                                        className="w-full sm:w-auto h-10 px-6 text-xs font-semibold rounded-xl"
                                     >
-                                        <Link href="/inbox">
-                                            Open Shared Inbox
-                                        </Link>
-                                    </Button>
-
-                                    <Button
-                                        asChild
-                                        variant="ghost"
-                                        className="w-full sm:w-auto text-muted-foreground hover:text-foreground text-xs h-10"
-                                    >
-                                        <Link href="/whatsapp/connect">
-                                            Back to Channels
+                                        <Link href="/campaigns/create">
+                                            Send First Broadcast
                                         </Link>
                                     </Button>
                                 </div>

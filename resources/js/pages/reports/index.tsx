@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     BarChart3,
     ArrowLeft,
@@ -12,6 +12,7 @@ import {
     Eye,
     Percent,
     ShieldCheck,
+    RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -61,6 +62,7 @@ type Props = {
     };
     dailyTrends: DailyTrend[];
     campaigns: CampaignMetric[];
+    last_synced_at?: string;
 };
 
 export default function ReportsIndex({
@@ -68,8 +70,20 @@ export default function ReportsIndex({
     rates,
     dailyTrends = [],
     campaigns = [],
+    last_synced_at,
 }: Props) {
     const [selectedCategory, setSelectedCategory] = useState<'ALL' | 'MARKETING' | 'UTILITY'>('ALL');
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSync = () => {
+        setIsSyncing(true);
+        router.post('/reports/sync', {}, {
+            preserveScroll: true,
+            onFinish: () => {
+                setIsSyncing(false);
+            },
+        });
+    };
 
     // Filter campaigns
     const filteredCampaigns = campaigns.filter(
@@ -146,6 +160,22 @@ export default function ReportsIndex({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {last_synced_at && (
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Synced: <span className="font-medium text-foreground">{last_synced_at}</span>
+                            </span>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="h-7 text-xs px-2.5 border-emerald-500/30 bg-emerald-50/60 hover:bg-emerald-100/60 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 gap-1.5 font-medium shadow-none transition-all"
+                        >
+                            <RefreshCw className={`size-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                            {isSyncing ? 'Syncing...' : 'Real-Time Meta Sync'}
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"

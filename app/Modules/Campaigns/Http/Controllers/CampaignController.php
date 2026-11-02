@@ -86,7 +86,8 @@ class CampaignController extends Controller
                             'costEstimate' => $cost,
                             'header' => $headerText,
                             'headerFormat' => $headerFormat,
-                            'headerUrl' => $headerUrl,
+                            'headerUrl' => $channel->metadata['template_media_urls'][$tpl['name']] ?? $headerUrl,
+                            'headerMediaId' => $channel->metadata['template_media_ids'][$tpl['name']] ?? null,
                             'body' => $bodyText,
                             'buttons' => $buttons,
                             'exampleParams' => $exampleParams,
@@ -253,7 +254,9 @@ class CampaignController extends Controller
         $errors = [];
 
         $allTemplates = $this->getMetaTemplates($channel);
-        $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+        $matchedTemplate = collect($allTemplates)->first(function ($t) use ($templateName, $templateLanguage) {
+            return $t['name'] === $templateName && ($t['language'] ?? '') === $templateLanguage;
+        }) ?? collect($allTemplates)->firstWhere('name', $templateName);
         $templateBodyTemplate = $matchedTemplate['body'] ?? '';
         $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? null;
         $matchedHeaderUrl = $validated['header_url'] ?? ($matchedTemplate['headerUrl'] ?? null);
@@ -275,17 +278,6 @@ class CampaignController extends Controller
                 $e164Phone = '+' . $cleanDigits;
             }
 
-            // Prepare customized parameter list (replacing contact name variable dynamically if present)
-            $contactSpecificParams = [];
-            foreach ($params as $idx => $paramVal) {
-                $val = (string) $paramVal;
-                // If parameter is "{{name}}" or empty on 1st param, replace with contact name
-                if ($idx === 0 && ($val === '{{name}}' || $val === 'Customer' || empty($val))) {
-                    $val = $contactName ?: 'Valued Customer';
-                }
-                $contactSpecificParams[] = ['type' => 'text', 'text' => $val];
-            }
-
             $metaPayload = [
                 'messaging_product' => 'whatsapp',
                 'to' => $cleanDigits,
@@ -299,21 +291,40 @@ class CampaignController extends Controller
             $components = [];
             $mediaHeaderUrl = null;
 
-            // 1. Add Header component if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
-            if ($matchedHeaderFormat === 'VIDEO' || str_contains($templateName, 'launch') || str_contains($templateName, 'video')) {
-                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [
-                        [
-                            'type' => 'video',
-                            'video' => [
-                                'link' => $mediaHeaderUrl,
+            $headerMediaId = $matchedTemplate['headerMediaId'] ?? ($channel->metadata['template_media_ids'][$templateName] ?? null);
+            $mediaHeaderUrl = $matchedHeaderUrl ?: ($channel->metadata['template_media_urls'][$templateName] ?? null);
+
+            $headerFormatUpper = strtoupper((string) ($matchedHeaderFormat ?? ''));
+
+            // 1. Add Header component ONLY if template requires MEDIA format in Meta (VIDEO, IMAGE, DOCUMENT)
+            if ($headerFormatUpper === 'VIDEO') {
+                if ($headerMediaId) {
+                    $components[] = [
+                        'type' => 'header',
+                        'parameters' => [
+                            [
+                                'type' => 'video',
+                                'video' => [
+                                    'id' => $headerMediaId,
+                                ],
                             ],
                         ],
-                    ],
-                ];
-            } elseif ($matchedHeaderFormat === 'IMAGE') {
+                    ];
+                } else {
+                    $mediaHeaderUrl = $mediaHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
+                    $components[] = [
+                        'type' => 'header',
+                        'parameters' => [
+                            [
+                                'type' => 'video',
+                                'video' => [
+                                    'link' => $mediaHeaderUrl,
+                                ],
+                            ],
+                        ],
+                    ];
+                }
+            } elseif ($headerFormatUpper === 'IMAGE') {
                 $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
                 $components[] = [
                     'type' => 'header',
@@ -326,7 +337,7 @@ class CampaignController extends Controller
                         ],
                     ],
                 ];
-            } elseif ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+            } elseif ($headerFormatUpper === 'DOCUMENT') {
                 $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
                 $components[] = [
                     'type' => 'header',
@@ -342,11 +353,42 @@ class CampaignController extends Controller
                 ];
             }
 
-            // 2. Add Body component parameters
-            if (! empty($contactSpecificParams)) {
+            // 2. Add Body component parameters ONLY if template actually requires body variables {{1}}, {{2}}...
+            preg_match_all('/\{\{(\d+)\}\}/', $templateBodyTemplate, $varMatches);
+            $requiredVarIndices = array_unique($varMatches[1] ?? []);
+            sort($requiredVarIndices);
+
+            $renderedContent = $templateBodyTemplate;
+
+            if (! empty($requiredVarIndices)) {
+                $bodyParams = [];
+                foreach ($requiredVarIndices as $varIdx) {
+                    $intIdx = (int) $varIdx;
+                    $userVal = $params[$intIdx - 1] ?? null;
+                    if (is_array($userVal)) {
+                        $userVal = $userVal['text'] ?? null;
+                    }
+                    $val = (string) ($userVal ?? '');
+
+                    if (empty($val) || $val === '{{name}}' || $val === 'Customer') {
+                        $val = match ($intIdx) {
+                            1 => $contactName ?: 'Valued Customer',
+                            2 => $org->name ?? 'DukanHisab Store',
+                            3 => '₹500.00',
+                            4 => date('d/m/Y'),
+                            5 => '₹0.00',
+                            6 => 'INV-' . date('Ymd') . '-01',
+                            default => 'Info',
+                        };
+                    }
+
+                    $bodyParams[] = ['type' => 'text', 'text' => (string) $val];
+                    $renderedContent = str_replace('{{' . $varIdx . '}}', (string) $val, $renderedContent);
+                }
+
                 $components[] = [
                     'type' => 'body',
-                    'parameters' => $contactSpecificParams,
+                    'parameters' => $bodyParams,
                 ];
             }
 
@@ -416,13 +458,9 @@ class CampaignController extends Controller
             ]);
 
             // Prepare rendered text for live inbox matching what was sent to customer's WhatsApp
-            $renderedContent = $templateBodyTemplate;
             $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
 
             if (! empty($renderedContent)) {
-                foreach ($contactSpecificParams as $pIdx => $pItem) {
-                    $renderedContent = str_replace('{{' . ($pIdx + 1) . '}}', $pItem['text'], $renderedContent);
-                }
                 $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix . $renderedContent;
             } else {
                 $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix;

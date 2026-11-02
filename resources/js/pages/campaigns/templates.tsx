@@ -22,6 +22,8 @@ import {
     Loader2,
     Pencil,
     Trash2,
+    Video,
+    Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +49,8 @@ export type TemplateItem = {
     header?: string | null;
     headerFormat?: string | null;
     headerType?: 'TEXT' | 'IMAGE' | 'DOCUMENT';
+    headerUrl?: string | null;
+    headerMediaId?: string | null;
     body: string;
     bodyText?: string;
     footer?: string | null;
@@ -89,15 +93,25 @@ export default function MessageTemplates({
 
     // Create Template Form State
     const [newName, setNewName] = useState('');
-    const [newCategory, setNewCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('UTILITY');
-    const [newLanguage, setNewLanguage] = useState('en_US');
+    const [newCategory, setNewCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('MARKETING');
+    const [newLanguage, setNewLanguage] = useState('gu');
+    const [newHeaderType, setNewHeaderType] = useState<'NONE' | 'TEXT' | 'VIDEO' | 'IMAGE' | 'DOCUMENT'>('NONE');
     const [newHeader, setNewHeader] = useState('');
+    const [newHeaderFile, setNewHeaderFile] = useState<File | null>(null);
+    const [newHeaderFileWarning, setNewHeaderFileWarning] = useState<string | null>(null);
     const [newBody, setNewBody] = useState('');
     const [newFooter, setNewFooter] = useState('');
+    const [newButtonType, setNewButtonType] = useState<'NONE' | 'URL' | 'QUICK_REPLY'>('NONE');
+    const [newButtonUrlText, setNewButtonUrlText] = useState('Download Now');
+    const [newButtonUrlLink, setNewButtonUrlLink] = useState('https://play.google.com/store/apps/details?id=com.app.dukanhisab');
+    const [newButtonQrText, setNewButtonQrText] = useState('Yes, Interested');
 
     // Edit Template State
     const [editingTemplate, setEditingTemplate] = useState<TemplateItem | null>(null);
     const [editHeader, setEditHeader] = useState('');
+    const [editHeaderUrl, setEditHeaderUrl] = useState('');
+    const [editVideoFile, setEditVideoFile] = useState<File | null>(null);
+    const [videoSizeWarning, setVideoSizeWarning] = useState<string | null>(null);
     const [editBody, setEditBody] = useState('');
     const [editFooter, setEditFooter] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
@@ -158,6 +172,23 @@ export default function MessageTemplates({
         );
     };
 
+    const handleHeaderFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) {
+            setNewHeaderFile(null);
+            setNewHeaderFileWarning(null);
+            return;
+        }
+
+        const sizeInMb = file.size / (1024 * 1024);
+        if (sizeInMb > 16) {
+            setNewHeaderFileWarning(`Warning: File size is ${sizeInMb.toFixed(1)} MB. Meta requires media to be strictly 16 MB or less.`);
+        } else {
+            setNewHeaderFileWarning(null);
+        }
+        setNewHeaderFile(file);
+    };
+
     const handleCreateTemplate = (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitError(null);
@@ -168,37 +199,64 @@ export default function MessageTemplates({
             return;
         }
 
+        if (newHeaderType !== 'NONE' && newHeaderType !== 'TEXT' && !newHeaderFile) {
+            setSubmitError(`Please select a sample ${newHeaderType.toLowerCase()} file for Meta review.`);
+            return;
+        }
+
+        if (newHeaderFile && newHeaderFile.size > 16 * 1024 * 1024) {
+            setSubmitError('Header media exceeds 16 MB limit. Please compress before uploading.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('name', cleanName);
+        formData.append('category', newCategory);
+        formData.append('language', newLanguage);
+        formData.append('header_type', newHeaderType);
+        if (newHeaderType === 'TEXT' && newHeader.trim()) {
+            formData.append('header_text', newHeader.trim());
+        }
+        if (newHeaderFile) {
+            formData.append('header_file', newHeaderFile);
+        }
+        formData.append('body', newBody.trim());
+        if (newFooter.trim()) {
+            formData.append('footer', newFooter.trim());
+        }
+        formData.append('button_type', newButtonType);
+        if (newButtonType === 'URL') {
+            formData.append('button_url_text', newButtonUrlText.trim());
+            formData.append('button_url_link', newButtonUrlLink.trim());
+        } else if (newButtonType === 'QUICK_REPLY') {
+            formData.append('button_qr_text', newButtonQrText.trim());
+        }
+
         setIsSubmitting(true);
-        router.post(
-            '/templates',
-            {
-                name: cleanName,
-                category: newCategory,
-                language: newLanguage,
-                header: newHeader.trim() || null,
-                body: newBody.trim(),
-                footer: newFooter.trim() || null,
+        router.post('/templates', formData, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => {
+                setIsSubmitting(false);
+                setIsCreateOpen(false);
+                setNewName('');
+                setNewHeaderType('NONE');
+                setNewHeader('');
+                setNewHeaderFile(null);
+                setNewHeaderFileWarning(null);
+                setNewBody('');
+                setNewFooter('');
+                setNewButtonType('NONE');
+                showToast(`Template "${cleanName}" submitted to Meta for review.`);
             },
-            {
-                preserveScroll: true,
-                onSuccess: () => {
-                    setIsSubmitting(false);
-                    setIsCreateOpen(false);
-                    setNewName('');
-                    setNewHeader('');
-                    setNewBody('');
-                    setNewFooter('');
-                    showToast(`Template "${cleanName}" submitted to Meta for review.`);
-                },
-                onError: (errs) => {
-                    setIsSubmitting(false);
-                    setSubmitError(errs?.message || 'Failed to submit template to Meta.');
-                },
-                onFinish: () => {
-                    setIsSubmitting(false);
-                },
-            }
-        );
+            onError: (errs) => {
+                setIsSubmitting(false);
+                setSubmitError(errs?.message || 'Failed to submit template to Meta.');
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
+            },
+        });
     };
 
     const insertVariableIntoBody = () => {
@@ -210,33 +268,66 @@ export default function MessageTemplates({
     const openEditModal = (tpl: TemplateItem) => {
         setEditingTemplate(tpl);
         setEditHeader(tpl.header || tpl.headerText || '');
+        setEditHeaderUrl(tpl.headerUrl || '');
+        setEditVideoFile(null);
+        setVideoSizeWarning(null);
         setEditBody(tpl.body || tpl.bodyText || '');
         setEditFooter(tpl.footer || tpl.footerText || '');
         setEditError(null);
+    };
+
+    const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) {
+            setEditVideoFile(null);
+            setVideoSizeWarning(null);
+            return;
+        }
+
+        const sizeInMb = file.size / (1024 * 1024);
+        if (sizeInMb > 16) {
+            setVideoSizeWarning(`Warning: File size is ${sizeInMb.toFixed(1)} MB. Meta requires video to be strictly 16 MB or less. Please compress before uploading.`);
+        } else {
+            setVideoSizeWarning(null);
+        }
+        setEditVideoFile(file);
     };
 
     const handleUpdateTemplate = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingTemplate || !editBody.trim()) return;
 
+        if (editVideoFile && editVideoFile.size > 16 * 1024 * 1024) {
+            setEditError('Video file exceeds Meta\'s 16 MB limit. Please compress the video before uploading.');
+            return;
+        }
+
         setIsUpdating(true);
         setEditError(null);
 
-        router.put(
+        const formData = new FormData();
+        formData.append('body', editBody.trim());
+        formData.append('template_name', editingTemplate.name);
+        if (editHeader.trim()) formData.append('header', editHeader.trim());
+        if (editFooter.trim()) formData.append('footer', editFooter.trim());
+        if (editHeaderUrl.trim()) formData.append('header_url', editHeaderUrl.trim());
+        if (editVideoFile) formData.append('video_file', editVideoFile);
+        formData.append('_method', 'PUT');
+
+        router.post(
             `/templates/${editingTemplate.id}`,
+            formData,
             {
-                header: editHeader.trim() || null,
-                body: editBody.trim(),
-                footer: editFooter.trim() || null,
-            },
-            {
+                forceFormData: true,
                 preserveScroll: true,
                 onSuccess: () => {
                     setIsUpdating(false);
                     setEditingTemplate(null);
+                    setEditVideoFile(null);
+                    setVideoSizeWarning(null);
                     showToast(`Template "${editingTemplate.name}" updated successfully.`);
                 },
-                onError: (errs) => {
+                onError: (errs: any) => {
                     setIsUpdating(false);
                     setEditError(errs?.message || 'Failed to update template in Meta.');
                 },
@@ -718,23 +809,102 @@ export default function MessageTemplates({
                                     onChange={(e) => setNewLanguage(e.target.value)}
                                     className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs h-9 focus:outline-none"
                                 >
-                                    <option value="en_US">English (en_US)</option>
                                     <option value="gu">Gujarati (gu)</option>
+                                    <option value="en_US">English (en_US)</option>
                                     <option value="hi">Hindi (hi)</option>
                                 </select>
                             </div>
 
                             <div className="space-y-1">
-                                <Label className="text-xs font-medium">Header (optional)</Label>
+                                <Label className="text-xs font-medium">Header Type</Label>
+                                <select
+                                    value={newHeaderType}
+                                    onChange={(e) => {
+                                        setNewHeaderType(e.target.value as any);
+                                        setNewHeaderFile(null);
+                                        setNewHeaderFileWarning(null);
+                                    }}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs h-9 focus:outline-none"
+                                >
+                                    <option value="NONE">None (Text Body Only)</option>
+                                    <option value="VIDEO">🎬 Video Header (.mp4, max 16MB)</option>
+                                    <option value="IMAGE">🖼️ Image Header (.jpg, .png)</option>
+                                    <option value="DOCUMENT">📄 Document Header (.pdf)</option>
+                                    <option value="TEXT">🔤 Text Header</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Header Details depending on selected type */}
+                        {newHeaderType === 'TEXT' && (
+                            <div className="space-y-1">
+                                <Label className="text-xs font-medium">Header Title Text</Label>
                                 <Input
                                     value={newHeader}
                                     onChange={(e) => setNewHeader(e.target.value)}
-                                    placeholder="e.g. Order Confirmation"
+                                    placeholder="e.g. DukanHisab App Launch"
                                     className="text-xs"
                                     maxLength={60}
                                 />
                             </div>
-                        </div>
+                        )}
+
+                        {newHeaderType === 'VIDEO' && (
+                            <div className="space-y-1.5 p-3 rounded-lg border border-purple-500/25 bg-purple-500/5">
+                                <Label className="text-xs font-medium text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                                    <span>🎬 Upload Sample Video (.mp4)</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">(required for Meta review)</span>
+                                </Label>
+                                <Input
+                                    type="file"
+                                    accept="video/mp4"
+                                    onChange={handleHeaderFileChange}
+                                    className="text-xs cursor-pointer bg-background"
+                                    required
+                                />
+                                {newHeaderFileWarning ? (
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">{newHeaderFileWarning}</p>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Meta requires an example video under 16 MB. The video will be sent to Meta for official approval.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {newHeaderType === 'IMAGE' && (
+                            <div className="space-y-1.5 p-3 rounded-lg border border-blue-500/25 bg-blue-500/5">
+                                <Label className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                                    <span>🖼️ Upload Sample Image (.jpg, .png)</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">(required for Meta review)</span>
+                                </Label>
+                                <Input
+                                    type="file"
+                                    accept="image/jpeg,image/png"
+                                    onChange={handleHeaderFileChange}
+                                    className="text-xs cursor-pointer bg-background"
+                                    required
+                                />
+                                <p className="text-[10px] text-muted-foreground">Max 5 MB image for header preview.</p>
+                            </div>
+                        )}
+
+                        {newHeaderType === 'DOCUMENT' && (
+                            <div className="space-y-1.5 p-3 rounded-lg border border-amber-500/25 bg-amber-500/5">
+                                <Label className="text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                                    <span>📄 Upload Sample PDF Document</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">(required for Meta review)</span>
+                                </Label>
+                                <Input
+                                    type="file"
+                                    accept="application/pdf"
+                                    onChange={handleHeaderFileChange}
+                                    className="text-xs cursor-pointer bg-background"
+                                    required
+                                />
+                                <p className="text-[10px] text-muted-foreground">Max 10 MB PDF for header preview.</p>
+                            </div>
+                        )}
 
                         <div className="space-y-1">
                             <div className="flex items-center justify-between">
@@ -762,16 +932,71 @@ export default function MessageTemplates({
                             </span>
                         </div>
 
-                        <div className="space-y-1">
-                            <Label className="text-xs font-medium">Footer (optional)</Label>
-                            <Input
-                                value={newFooter}
-                                onChange={(e) => setNewFooter(e.target.value)}
-                                placeholder="e.g. Sathwara InfoTech • Reply STOP to unsubscribe"
-                                className="text-xs"
-                                maxLength={60}
-                            />
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <Label className="text-xs font-medium">Footer (optional)</Label>
+                                <Input
+                                    value={newFooter}
+                                    onChange={(e) => setNewFooter(e.target.value)}
+                                    placeholder="e.g. Sathwara InfoTech"
+                                    className="text-xs"
+                                    maxLength={60}
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label className="text-xs font-medium">Interactive Buttons</Label>
+                                <select
+                                    value={newButtonType}
+                                    onChange={(e) => setNewButtonType(e.target.value as any)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs h-9 focus:outline-none"
+                                >
+                                    <option value="NONE">None</option>
+                                    <option value="URL">Call to Action (Website / App URL)</option>
+                                    <option value="QUICK_REPLY">Quick Reply Button</option>
+                                </select>
+                            </div>
                         </div>
+
+                        {newButtonType === 'URL' && (
+                            <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5">
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Button Label</Label>
+                                    <Input
+                                        value={newButtonUrlText}
+                                        onChange={(e) => setNewButtonUrlText(e.target.value)}
+                                        placeholder="Download Now"
+                                        className="text-xs bg-background"
+                                        maxLength={25}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Target URL</Label>
+                                    <Input
+                                        value={newButtonUrlLink}
+                                        onChange={(e) => setNewButtonUrlLink(e.target.value)}
+                                        placeholder="https://play.google.com/..."
+                                        className="text-xs bg-background"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {newButtonType === 'QUICK_REPLY' && (
+                            <div className="p-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 space-y-1">
+                                <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Quick Reply Text</Label>
+                                <Input
+                                    value={newButtonQrText}
+                                    onChange={(e) => setNewButtonQrText(e.target.value)}
+                                    placeholder="e.g. Yes, Interested"
+                                    className="text-xs bg-background"
+                                    maxLength={25}
+                                    required
+                                />
+                            </div>
+                        )}
 
                         <DialogFooter className="pt-2">
                             <Button
@@ -806,95 +1031,153 @@ export default function MessageTemplates({
                     </form>
                 </DialogContent>
             </Dialog>
+
             {/* Edit Meta Template Dialog */}
             <Dialog open={!!editingTemplate} onOpenChange={(open) => !open && setEditingTemplate(null)}>
-                <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Pencil className="size-4 text-[#47b672]" />
-                            Edit Meta Template ("{editingTemplate?.name}")
+                <DialogContent className="sm:max-w-[460px] max-h-[88vh] overflow-y-auto p-4 sm:p-5">
+                    <DialogHeader className="pb-1">
+                        <DialogTitle className="text-sm font-semibold flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                                <Pencil className="size-3.5 text-[#47b672]" />
+                                Edit Template
+                            </span>
+                            <code className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground font-normal">
+                                {editingTemplate?.name}
+                            </code>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
-                            Update message content and components. Meta will review updated variables and text.
-                        </DialogDescription>
                     </DialogHeader>
 
                     {editError && (
-                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
-                            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                        <div className="rounded-md bg-red-500/10 border border-red-500/20 p-2 text-xs text-red-600 dark:text-red-400 flex items-start gap-1.5">
+                            <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
                             <span>{editError}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleUpdateTemplate} className="space-y-3 py-1">
-                        <div className="grid grid-cols-2 gap-3">
+                    <form onSubmit={handleUpdateTemplate} className="space-y-2.5 py-0.5">
+                        {/* Text Header for non-video templates */}
+                        {!(editingTemplate?.headerFormat === 'VIDEO' || editingTemplate?.name?.toLowerCase().includes('launch') || editingTemplate?.name?.toLowerCase().includes('video')) && (
                             <div className="space-y-1">
-                                <Label className="text-xs font-medium">Template Name</Label>
-                                <Input
-                                    value={editingTemplate?.name || ''}
-                                    disabled
-                                    className="text-xs font-mono bg-muted text-muted-foreground opacity-80"
-                                />
-                                <span className="text-[10px] text-muted-foreground">Template names cannot be changed in Meta</span>
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label className="text-xs font-medium">Header (optional)</Label>
+                                <Label className="text-[11px] font-medium">Header (optional)</Label>
                                 <Input
                                     value={editHeader}
                                     onChange={(e) => setEditHeader(e.target.value)}
                                     placeholder="e.g. Order Confirmation"
-                                    className="text-xs"
+                                    className="text-xs h-8"
                                     maxLength={60}
                                 />
                             </div>
-                        </div>
+                        )}
+
+                        {/* Compact Video Header Section for Video Templates */}
+                        {(editingTemplate?.headerFormat === 'VIDEO' || editingTemplate?.name?.toLowerCase().includes('launch') || editingTemplate?.name?.toLowerCase().includes('video')) && (
+                            <div className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5 font-medium text-[11px] text-foreground">
+                                        <Video className="size-3.5 text-[#47b672]" />
+                                        Video Header
+                                    </span>
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                        MP4 (&lt; 16 MB)
+                                    </span>
+                                </div>
+
+                                {/* Option 1: Upload Video File */}
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        id="template-video-upload"
+                                        accept="video/mp4,video/3gpp"
+                                        onChange={handleVideoFileChange}
+                                        className="hidden"
+                                    />
+                                    <label
+                                        htmlFor="template-video-upload"
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-input hover:border-[#47b672] rounded cursor-pointer bg-background hover:bg-muted/30 transition-colors text-[11px] text-muted-foreground hover:text-foreground"
+                                    >
+                                        <Upload className="size-3 text-[#47b672]" />
+                                        <span className="truncate max-w-[200px]">
+                                            {editVideoFile ? editVideoFile.name : 'Upload MP4 File (< 16 MB)'}
+                                        </span>
+                                    </label>
+                                    {editVideoFile && (
+                                        <button
+                                            type="button"
+                                            className="text-[10px] text-red-500 hover:underline px-1 cursor-pointer"
+                                            onClick={() => {
+                                                setEditVideoFile(null);
+                                                setVideoSizeWarning(null);
+                                            }}
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+
+                                {videoSizeWarning ? (
+                                    <p className="text-[10px] text-red-500 font-medium">{videoSizeWarning}</p>
+                                ) : editVideoFile ? (
+                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                        <Check className="size-3" />
+                                        {(editVideoFile.size / (1024 * 1024)).toFixed(1)} MB (Ready to upload)
+                                    </p>
+                                ) : null}
+
+                                {/* Option 2: Public Video URL */}
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">OR URL:</span>
+                                    <Input
+                                        value={editHeaderUrl}
+                                        onChange={(e) => setEditHeaderUrl(e.target.value)}
+                                        placeholder="https://...video.mp4"
+                                        className="text-[11px] h-7 font-mono px-2"
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                                <Label className="text-xs font-medium">
+                                <Label className="text-[11px] font-medium">
                                     Message Body <span className="text-red-500">*</span>
                                 </Label>
                                 <button
                                     type="button"
                                     onClick={insertVariableIntoEditBody}
-                                    className="text-[11px] text-[#47b672] hover:underline font-semibold cursor-pointer"
+                                    className="text-[10px] text-[#47b672] hover:underline font-semibold cursor-pointer"
                                 >
                                     + Add Variable (&#123;&#123;1&#125;&#125;)
                                 </button>
                             </div>
                             <textarea
-                                rows={4}
+                                rows={3}
                                 value={editBody}
                                 onChange={(e) => setEditBody(e.target.value)}
                                 placeholder="Enter updated template body..."
-                                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs focus:outline-none"
+                                className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs focus:outline-none max-h-24 leading-relaxed"
                                 required
                             />
-                            <span className="text-[10px] text-muted-foreground">
-                                Ensure enough static context words surround variables so Meta approves the edit.
-                            </span>
                         </div>
 
                         <div className="space-y-1">
-                            <Label className="text-xs font-medium">Footer (optional)</Label>
+                            <Label className="text-[11px] font-medium">Footer (optional)</Label>
                             <Input
                                 value={editFooter}
                                 onChange={(e) => setEditFooter(e.target.value)}
                                 placeholder="e.g. Sathwara InfoTech"
-                                className="text-xs"
+                                className="text-xs h-7.5"
                                 maxLength={60}
                             />
                         </div>
 
-                        <DialogFooter className="pt-2">
+                        <DialogFooter className="pt-2 flex items-center justify-end gap-2">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isUpdating}
                                 onClick={() => setEditingTemplate(null)}
-                                className="text-xs"
+                                className="text-xs h-7.5 px-3"
                             >
                                 Cancel
                             </Button>
@@ -902,18 +1185,15 @@ export default function MessageTemplates({
                                 type="submit"
                                 size="sm"
                                 disabled={isUpdating}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5"
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-7.5 px-3.5 gap-1.5 cursor-pointer"
                             >
                                 {isUpdating ? (
                                     <>
-                                        <Loader2 className="size-3.5 animate-spin" />
-                                        <span>Saving to Meta...</span>
+                                        <Loader2 className="size-3 animate-spin" />
+                                        <span>Saving...</span>
                                     </>
                                 ) : (
-                                    <>
-                                        <Check className="size-3.5" />
-                                        <span>Save to Meta</span>
-                                    </>
+                                    <span>Save to Meta</span>
                                 )}
                             </Button>
                         </DialogFooter>

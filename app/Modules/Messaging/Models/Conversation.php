@@ -26,6 +26,9 @@ class Conversation extends Model
         'pipeline_stage',
         'is_opted_in',
         'label',
+        'deal_value',
+        'followup_date',
+        'lead_source',
         'window_expires_at',
         'last_message_at',
         'assigned_user_id',
@@ -33,6 +36,8 @@ class Conversation extends Model
 
     protected $casts = [
         'is_opted_in' => 'boolean',
+        'deal_value' => 'decimal:2',
+        'followup_date' => 'datetime',
         'window_expires_at' => 'datetime',
         'last_message_at' => 'datetime',
         'created_at' => 'datetime',

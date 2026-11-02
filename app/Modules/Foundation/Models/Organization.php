@@ -20,10 +20,13 @@ class Organization extends Model
         'billing_email',
         'timezone',
         'currency',
+        'subscription_plan',
+        'metadata',
         'status',
     ];
 
     protected $casts = [
+        'metadata' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -32,7 +35,7 @@ class Organization extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'organization_user')
-            ->withPivot('role')
+            ->withPivot('role', 'channel_access')
             ->withTimestamps();
     }
 

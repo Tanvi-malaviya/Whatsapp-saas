@@ -139,19 +139,31 @@ class InboxController extends Controller
         if ($isTemplate) {
             $msgType = 'template';
             $templateName = $request->input('template_name', 'dukanhisab_app_launch');
+            $requestedLang = $request->input('template_language');
             $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
             $allTemplates = $channel ? $campaignCtrl->getMetaTemplates($channel) : [];
-            $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+
+            $matchedTemplate = null;
+            if ($requestedLang) {
+                $matchedTemplate = collect($allTemplates)->first(function ($t) use ($templateName, $requestedLang) {
+                    return $t['name'] === $templateName && ($t['language'] ?? '') === $requestedLang;
+                });
+            }
+
+            if (! $matchedTemplate) {
+                $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
+            }
 
             if (! $matchedTemplate && ! empty($allTemplates)) {
                 $matchedTemplate = $allTemplates[0];
                 $templateName = $matchedTemplate['name'];
             }
 
-            $templateLanguage = $matchedTemplate['language'] ?? $request->input('template_language', 'gu');
+            $templateLanguage = $matchedTemplate['language'] ?? ($requestedLang ?: 'gu');
             $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? $matchedTemplate['header_format'] ?? null;
             $templateBodyTemplate = $matchedTemplate['body'] ?? '';
-            $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? null;
+            $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? ($channel?->metadata['template_media_urls'][$templateName] ?? null);
+            $matchedHeaderMediaId = $matchedTemplate['headerMediaId'] ?? ($channel?->metadata['template_media_ids'][$templateName] ?? null);
             $contactName = $conversation->contact_name ?: 'Valued Customer';
             $orgName = $org->name ?? 'DukanHisab Store';
 
@@ -161,7 +173,8 @@ class InboxController extends Controller
                 $orgName,
                 $matchedHeaderFormat,
                 $matchedHeaderUrl,
-                $templateBodyTemplate
+                $templateBodyTemplate,
+                $matchedHeaderMediaId
             );
 
             $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
@@ -672,26 +685,43 @@ class InboxController extends Controller
         string $orgName,
         ?string $matchedHeaderFormat,
         ?string $matchedHeaderUrl,
-        string $templateBodyTemplate
+        string $templateBodyTemplate,
+        ?string $matchedHeaderMediaId = null
     ): array {
         $components = [];
         $mediaHeaderUrl = null;
 
-        // 1. Add Header component if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
-        if ($matchedHeaderFormat === 'VIDEO' || str_contains($templateName, 'launch') || str_contains($templateName, 'video')) {
-            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
-            $components[] = [
-                'type' => 'header',
-                'parameters' => [
-                    [
-                        'type' => 'video',
-                        'video' => [
-                            'link' => $mediaHeaderUrl,
+        $headerFormatUpper = strtoupper((string) ($matchedHeaderFormat ?? ''));
+
+        // 1. Add Header component ONLY if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
+        if ($headerFormatUpper === 'VIDEO') {
+            if (! empty($matchedHeaderMediaId)) {
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'video',
+                            'video' => [
+                                'id' => $matchedHeaderMediaId,
+                            ],
                         ],
                     ],
-                ],
-            ];
-        } elseif ($matchedHeaderFormat === 'IMAGE') {
+                ];
+            } else {
+                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
+                $components[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => 'video',
+                            'video' => [
+                                'link' => $mediaHeaderUrl,
+                            ],
+                        ],
+                    ],
+                ];
+            }
+        } elseif ($headerFormatUpper === 'IMAGE') {
             $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
             $components[] = [
                 'type' => 'header',
@@ -704,7 +734,7 @@ class InboxController extends Controller
                     ],
                 ],
             ];
-        } elseif ($matchedHeaderFormat === 'DOCUMENT' || str_contains($templateName, 'invoice') || str_contains($templateName, 'purchase')) {
+        } elseif ($headerFormatUpper === 'DOCUMENT') {
             $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
             $components[] = [
                 'type' => 'header',

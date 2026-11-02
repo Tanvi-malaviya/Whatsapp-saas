@@ -62,8 +62,8 @@ class WhatsAppChannelController extends Controller
             'existingChannel' => $existing,
             'defaultWebhookUrl' => url('/webhooks/meta'),
             'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
-            'metaAppId' => config('services.meta.app_id', env('META_APP_ID', '1324567864076715')),
-            'metaConfigId' => config('services.meta.config_id', env('META_CONFIG_ID', '')),
+            'metaAppId' => env('META_APP_ID', '1079349601748656'),
+            'metaConfigId' => env('META_CONFIG_ID', '1857245935612505'),
         ]);
     }
 
@@ -73,20 +73,81 @@ class WhatsAppChannelController extends Controller
         $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
 
         $phoneNumber = trim($request->input('phone_number', ''));
-        $name = trim($request->input('name', '')) ?: 'WhatsApp ' . substr(preg_replace('/\D/', '', $phoneNumber), -4);
-        
+        $name = trim($request->input('name', ''));
+        $phoneId = $request->input('phone_number_id');
+        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '934553439246885');
+        $accessToken = $request->input('access_token') ?: ($existing?->access_token ?: '');
+
+        // If phone_number_id is passed directly from Meta Embedded Signup popup, fetch details from Graph API
+        if ($phoneId && $accessToken && empty($phoneNumber)) {
+            try {
+                $pResp = Http::withToken($accessToken)
+                    ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
+                        'fields' => 'display_phone_number,verified_name,quality_rating',
+                    ]);
+                if ($pResp->successful()) {
+                    $pData = $pResp->json();
+                    $phoneNumber = $pData['display_phone_number'] ?? '';
+                    if (!empty($pData['verified_name'])) {
+                        $name = $pData['verified_name'];
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
-        if (strlen($cleanPhone) < 10) {
+        if (strlen($cleanPhone) < 10 && empty($phoneId)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please enter a valid WhatsApp mobile number with country code.',
             ], 422);
         }
 
-        $formattedPhone = str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone;
-        $phoneId = $request->input('phone_number_id') ?: ($existing?->phone_number_id ?: '1324' . substr($cleanPhone, -8));
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '934553439246885');
-        $accessToken = $request->input('access_token') ?: ($existing?->access_token ?: 'EAAB...default');
+        $formattedPhone = !empty($phoneNumber)
+            ? (str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone)
+            : '+91 9104081291';
+        $name = $name ?: 'WhatsApp ' . substr($cleanPhone ?: '1291', -4);
+
+        // 1. Automatic 1-Click Meta Auto-Discovery:
+        // Automatically query Meta Graph API using WABA ID to find the matching Phone Number ID
+        if (!$phoneId && $accessToken && $wabaId) {
+            try {
+                $metaPhonesResp = Http::withToken($accessToken)
+                    ->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
+
+                if ($metaPhonesResp->successful()) {
+                    $metaPhones = $metaPhonesResp->json('data') ?? [];
+                    foreach ($metaPhones as $mp) {
+                        $mpClean = preg_replace('/\D/', '', $mp['display_phone_number'] ?? '');
+                        if (
+                            $mpClean === $cleanPhone ||
+                            str_ends_with($cleanPhone, substr($mpClean, -10)) ||
+                            str_ends_with($mpClean, substr($cleanPhone, -10))
+                        ) {
+                            $phoneId = $mp['id'];
+                            if (!empty($mp['verified_name'])) {
+                                $name = $mp['verified_name'];
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Continue to check fallback
+            }
+        }
+
+        // 2. Validate if Phone ID was found on Meta
+        if (!$phoneId) {
+            if ($existing?->phone_number_id && $existing->phone_number === $formattedPhone) {
+                $phoneId = $existing->phone_number_id;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => "આ મોબાઈલ નંબર ({$formattedPhone}) હજી Meta WhatsApp Manager માં ઉમેરેલો નથી. Meta ના સુરક્ષા નિયમ મુજબ ૧ વાર OTP થી Verify કરવો પડે છે. Meta માં Add કર્યા પછી અહીં ફક્ત મોબાઈલ નંબર નાખશો એટલે તરત 1-Click માં Auto-Setup થઈ જશે! લિંક: https://business.facebook.com/wa/manage/phone-numbers/?waba_id={$wabaId}",
+                ], 422);
+            }
+        }
 
         $isDefault = WhatsAppChannel::where('organization_id', $orgId)->count() === 0;
 

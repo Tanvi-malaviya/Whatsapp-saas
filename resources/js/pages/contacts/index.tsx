@@ -13,6 +13,7 @@ import {
     FileSpreadsheet,
     Pencil,
     Trash2,
+    GitMerge,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,6 +74,59 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const [isAdding, setIsAdding] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+
+    // Deduplication Modal State
+    const [isDeduplicateOpen, setIsDeduplicateOpen] = useState(false);
+    const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
+    const [duplicateGroups, setDuplicateGroups] = useState<any[]>([]);
+    const [selectedPrimaries, setSelectedPrimaries] = useState<Record<string, string>>({});
+
+    const handleOpenDeduplicate = () => {
+        setIsDeduplicateOpen(true);
+        setIsScanningDuplicates(true);
+        fetch('/contacts/duplicates')
+            .then((res) => res.json())
+            .then((data) => {
+                setDuplicateGroups(data.duplicates || []);
+                // Default primary is the first contact in each group
+                const primaries: Record<string, string> = {};
+                (data.duplicates || []).forEach((g: any) => {
+                    if (g.records && g.records.length > 0) {
+                        primaries[g.normalized_phone] = g.records[0].id;
+                    }
+                });
+                setSelectedPrimaries(primaries);
+            })
+            .catch(() => {})
+            .finally(() => setIsScanningDuplicates(false));
+    };
+
+    const handleMergeGroup = (groupPhone: string) => {
+        const primaryId = selectedPrimaries[groupPhone];
+        const group = duplicateGroups.find((g) => g.normalized_phone === groupPhone);
+        if (!primaryId || !group) return;
+
+        const duplicateIds = group.records
+            .map((r: any) => r.id)
+            .filter((id: string) => id !== primaryId);
+
+        if (duplicateIds.length === 0) return;
+
+        router.post(
+            '/contacts/merge',
+            {
+                primary_id: primaryId,
+                duplicate_ids: duplicateIds,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setDuplicateGroups((prev) => prev.filter((g) => g.normalized_phone !== groupPhone));
+                    showToast('Duplicate contacts merged successfully!');
+                },
+            }
+        );
+    };
 
     const showToast = (msg: string) => {
         setToastMessage(msg);
@@ -319,6 +373,15 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 <Check className="size-4" /> {toastMessage}
                             </span>
                         )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 h-9 text-xs border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                            onClick={handleOpenDeduplicate}
+                        >
+                            <GitMerge className="size-3.5" />
+                            Deduplicate &amp; Merge
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
@@ -783,6 +846,135 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium"
                         >
                             {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 5: Contact Deduplication & Merge Dialog */}
+            <Dialog open={isDeduplicateOpen} onOpenChange={setIsDeduplicateOpen}>
+                <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <GitMerge className="size-4 text-indigo-600" />
+                            Contact Deduplication &amp; 1-Click Merge
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            Scans your directory for duplicate WhatsApp phone numbers across multiple formats and merges conversations into 1 master record.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-y-auto py-2 space-y-4">
+                        {isScanningDuplicates ? (
+                            <div className="flex flex-col items-center justify-center p-10 text-muted-foreground">
+                                <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin mb-2" />
+                                <p className="text-xs font-semibold">Scanning phone numbers for duplicates...</p>
+                            </div>
+                        ) : duplicateGroups.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-10 text-center rounded-xl border border-dashed border-border">
+                                <div className="size-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-2">
+                                    <CheckCircle2 className="size-6" />
+                                </div>
+                                <h4 className="text-sm font-bold text-foreground">Clean Directory! No Duplicates Found</h4>
+                                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                                    All customer phone numbers in your directory are unique and properly normalized.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-800 dark:text-amber-300">
+                                    <span>Found <strong>{duplicateGroups.length} duplicate phone cluster(s)</strong>. Select which record to keep as Primary:</span>
+                                </div>
+
+                                {duplicateGroups.map((group, gIdx) => {
+                                    const primaryId = selectedPrimaries[group.normalized_phone];
+
+                                    return (
+                                        <div
+                                            key={group.normalized_phone}
+                                            className="rounded-xl border border-border bg-card p-3.5 shadow-2xs space-y-3"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-foreground">
+                                                        Cluster #{gIdx + 1}:
+                                                    </span>
+                                                    <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                                                        ending in ...{group.normalized_phone}
+                                                    </span>
+                                                    <Badge variant="secondary" className="text-[10px]">
+                                                        {group.count} records
+                                                    </Badge>
+                                                </div>
+
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleMergeGroup(group.normalized_phone)}
+                                                    className="h-7 px-3 text-xs font-semibold gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs"
+                                                >
+                                                    <GitMerge className="size-3" />
+                                                    Merge Cluster
+                                                </Button>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                                {group.records.map((rec: any) => {
+                                                    const isPrimary = rec.id === primaryId;
+
+                                                    return (
+                                                        <div
+                                                            key={rec.id}
+                                                            onClick={() =>
+                                                                setSelectedPrimaries({
+                                                                    ...selectedPrimaries,
+                                                                    [group.normalized_phone]: rec.id,
+                                                                })
+                                                            }
+                                                            className={`p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                                                isPrimary
+                                                                    ? 'border-indigo-600 ring-2 ring-indigo-500/20 bg-indigo-500/5'
+                                                                    : 'border-border/80 hover:border-border hover:bg-muted/30'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <span className="font-bold text-foreground">
+                                                                    {rec.name}
+                                                                </span>
+                                                                {isPrimary ? (
+                                                                    <Badge className="bg-indigo-600 text-[10px] px-1.5 py-0 font-bold">
+                                                                        Primary (Keep)
+                                                                    </Badge>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-muted-foreground">
+                                                                        Will merge into primary
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="space-y-0.5 text-[11px] text-muted-foreground font-mono">
+                                                                <p>Phone: <span className="text-foreground">{rec.phone}</span></p>
+                                                                <p>Stage: <span className="text-foreground">{rec.stage}</span></p>
+                                                                <p>Email: <span className="text-foreground">{rec.email}</span></p>
+                                                                <p>Deal: <span className="text-emerald-600 font-bold">₹{rec.deal_value}</span></p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="pt-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsDeduplicateOpen(false)}
+                        >
+                            Close
                         </Button>
                     </DialogFooter>
                 </DialogContent>
