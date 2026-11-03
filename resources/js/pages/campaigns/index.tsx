@@ -304,7 +304,7 @@ export default function CampaignsList({
         <>
             <Head title="WhatsApp Broadcasts & Meta Campaigns - Sathwara InfoTech" />
 
-            <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-6 min-w-0">
+            <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0">
                 {/* Header */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -322,7 +322,7 @@ export default function CampaignsList({
                             </Button>
                         </div>
                         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                            <Send className="size-6 text-[#47b672]" />
+                            <Send className="size-5 sm:size-6 text-primary" />
                             WhatsApp Broadcasts &amp; Campaigns
                         </h1>
                         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
@@ -334,7 +334,7 @@ export default function CampaignsList({
                         <Button
                             size="sm"
                             onClick={handleNewCampaignClick}
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white gap-1.5 h-9 text-xs font-semibold shadow-xs"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-8.5 sm:h-9 text-xs font-semibold shadow-xs"
                         >
                             <Plus className="size-4" />
                             New Campaign
@@ -344,9 +344,9 @@ export default function CampaignsList({
 
                 {/* Active Segment Audience Filter Banner */}
                 {activeSegmentName && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4 text-xs shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl bg-primary/10 border border-primary/25 p-3.5 text-xs shadow-2xs">
                         <div className="flex items-center gap-3">
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
                                 <Users className="size-4" />
                             </div>
                             <div>
@@ -354,7 +354,7 @@ export default function CampaignsList({
                                     <span className="font-semibold text-foreground text-sm">
                                         Audience Filter: {activeSegmentName}
                                     </span>
-                                    <Badge variant="outline" className="text-[10px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border-emerald-500/40">
+                                    <Badge variant="outline" className="text-[10px] bg-primary/15 text-primary border-primary/30">
                                         {contacts.length} Contact{contacts.length === 1 ? '' : 's'} Selected
                                     </Badge>
                                 </div>
@@ -380,10 +380,10 @@ export default function CampaignsList({
                 {/* Recent Broadcast Campaigns History */}
                 {recentCampaigns.length > 0 && (
                     <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-3 pt-4 px-4 sm:px-6">
+                        <CardHeader className="pb-3 pt-3.5 px-4 sm:px-5">
                             <div className="flex items-center justify-between">
                                 <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                                    <Clock className="size-4 text-[#47b672]" />
+                                    <Clock className="size-4 text-primary" />
                                     Recent Broadcast Activity
                                 </CardTitle>
                                 <span className="text-[11px] text-muted-foreground">
@@ -474,7 +474,7 @@ export default function CampaignsList({
                                             onClick={() => setSelectedLanguage(lang)}
                                             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
                                                 selectedLanguage === lang
-                                                    ? 'bg-[#47b672] text-white shadow-2xs'
+                                                    ? 'bg-primary text-primary-foreground shadow-2xs'
                                                     : 'bg-muted/60 text-muted-foreground hover:text-foreground'
                                             }`}
                                         >
@@ -521,13 +521,13 @@ export default function CampaignsList({
                         </div>
 
                         {/* Templates Grid */}
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid gap-3.5 md:grid-cols-2 lg:grid-cols-3">
                             {filteredTemplates.map((tpl) => (
                                 <Card
                                     key={tpl.id}
-                                    className="border-border flex flex-col justify-between hover:border-[#47b672]/50 transition-colors shadow-2xs"
+                                    className="border-border flex flex-col justify-between hover:border-primary/50 transition-colors shadow-2xs"
                                 >
-                                    <CardHeader className="pb-3">
+                                    <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
                                         <div className="flex items-center justify-between gap-2">
                                             <Badge variant="outline" className="text-[10px] font-mono uppercase">
                                                 {tpl.category}
@@ -536,7 +536,7 @@ export default function CampaignsList({
                                                 <Badge variant="secondary" className="text-[10px] uppercase font-mono">
                                                     {tpl.language}
                                                 </Badge>
-                                                <Badge className="bg-emerald-600 text-white text-[10px] hover:bg-emerald-600 font-semibold">
+                                                <Badge className="bg-primary/15 text-primary border border-primary/25 text-[10px] hover:bg-primary/20 font-semibold">
                                                     {tpl.status}
                                                 </Badge>
                                             </div>
@@ -549,8 +549,8 @@ export default function CampaignsList({
                                             <strong className="text-foreground">{tpl.costEstimate}</strong>
                                         </CardDescription>
                                     </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <div className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed border border-border/50 min-h-24 max-h-36 overflow-y-auto whitespace-pre-wrap">
+                                    <CardContent className="space-y-3 px-3.5 sm:px-4 pb-3.5">
+                                        <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground leading-relaxed border border-border/50 min-h-24 max-h-36 overflow-y-auto whitespace-pre-wrap">
                                             {tpl.body}
                                         </div>
 
@@ -559,7 +559,7 @@ export default function CampaignsList({
                                                 {tpl.buttons.map((btn, idx) => (
                                                     <span
                                                         key={idx}
-                                                        className="text-[10px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
+                                                        className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20"
                                                     >
                                                         🔘 {btn}
                                                     </span>
@@ -570,7 +570,7 @@ export default function CampaignsList({
                                         <Button
                                             onClick={() => openBroadcastModal(tpl)}
                                             size="sm"
-                                            className="w-full text-xs h-8 bg-[#47b672] hover:bg-[#3da163] text-white font-semibold gap-1.5 shadow-2xs"
+                                            className="w-full text-xs h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5 shadow-2xs"
                                         >
                                             <Send className="size-3.5" />
                                             Broadcast This Template
@@ -607,7 +607,7 @@ export default function CampaignsList({
                 ) : (
                     <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
                         <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                            <Send className="size-7 opacity-60 text-[#47b672]" />
+                            <Send className="size-7 opacity-60 text-primary" />
                         </div>
                         <div className="max-w-md space-y-1">
                             <h3 className="text-base font-bold text-foreground">
@@ -647,7 +647,7 @@ export default function CampaignsList({
                         <Button
                             asChild
                             size="sm"
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs w-full sm:w-auto"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs w-full sm:w-auto"
                         >
                             <Link href="/whatsapp/connect">
                                 Connect WhatsApp Number
@@ -663,7 +663,7 @@ export default function CampaignsList({
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
-                                <Send className="size-5 text-[#47b672]" />
+                                <Send className="size-5 text-primary" />
                                 Launch WhatsApp Broadcast Campaign
                             </DialogTitle>
                             <DialogDescription className="text-xs text-muted-foreground">
@@ -675,7 +675,7 @@ export default function CampaignsList({
                             <div
                                 className={`p-3 rounded-lg text-xs font-medium ${
                                     broadcastResult.success
-                                        ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30'
+                                        ? 'bg-primary/10 text-primary border border-primary/30'
                                         : 'bg-destructive/10 text-destructive border border-destructive/30'
                                 }`}
                             >
@@ -717,7 +717,7 @@ export default function CampaignsList({
                                 <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                            <Sparkles className="size-3.5 text-[#47b672]" />
+                                            <Sparkles className="size-3.5 text-primary" />
                                             Template Variable Values
                                         </span>
                                         <span className="text-[10px] text-muted-foreground">
@@ -745,7 +745,7 @@ export default function CampaignsList({
                             {/* Live WhatsApp Bubble Preview */}
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                                    <MessageSquare className="size-3.5 text-emerald-600" />
+                                    <MessageSquare className="size-3.5 text-primary" />
                                     Customer Message Preview:
                                 </Label>
                                 <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#111b21] p-3 text-xs shadow-inner">
@@ -762,7 +762,7 @@ export default function CampaignsList({
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-xs font-semibold flex items-center gap-1.5">
-                                        <Users className="size-3.5 text-[#47b672]" />
+                                        <Users className="size-3.5 text-primary" />
                                         Target Audience ({recipientsCount} selected)
                                     </Label>
                                     <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 text-xs">
@@ -800,7 +800,7 @@ export default function CampaignsList({
                                             <button
                                                 type="button"
                                                 onClick={handleSelectAllContacts}
-                                                className="text-[11px] text-[#47b672] font-semibold hover:underline"
+                                                className="text-[11px] text-primary font-semibold hover:underline"
                                             >
                                                 {selectedContactIds.length === contacts.length
                                                     ? 'Deselect All'
@@ -824,7 +824,7 @@ export default function CampaignsList({
                                                                 type="checkbox"
                                                                 checked={isChecked}
                                                                 onChange={() => handleToggleContact(c.id)}
-                                                                className="rounded border-input text-emerald-600 focus:ring-emerald-500"
+                                                                className="rounded border-input text-primary focus:ring-primary"
                                                             />
                                                             <span className="font-semibold text-foreground">
                                                                 {c.name}
@@ -877,7 +877,7 @@ export default function CampaignsList({
                                     type="submit"
                                     size="sm"
                                     disabled={isSending || recipientsCount === 0}
-                                    className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs font-semibold gap-1.5 px-4 shadow-xs"
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 px-4 shadow-xs"
                                 >
                                     {isSending ? (
                                         <>

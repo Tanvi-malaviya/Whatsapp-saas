@@ -40,8 +40,8 @@ class CampaignController extends Controller
         $templates = Cache::remember($cacheKey, 300, function () use ($channel) {
             try {
                 $resp = Http::withToken($channel->access_token)
-                    ->timeout(10)
-                    ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/message_templates");
+                    ->timeout(12)
+                    ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/message_templates?limit=100");
 
                 if ($resp->successful() && ! empty($resp->json('data'))) {
                     $rawTemplates = $resp->json('data');
@@ -51,6 +51,7 @@ class CampaignController extends Controller
                         $bodyText = '';
                         $headerText = null;
                         $headerFormat = null;
+                        $headerUrl = null;
                         $buttons = [];
                         $exampleParams = [];
 
@@ -97,7 +98,7 @@ class CampaignController extends Controller
                     return $formatted;
                 }
             } catch (\Throwable $e) {
-                // Return empty if API error
+                \Illuminate\Support\Facades\Log::error("getMetaTemplates error for WABA {$channel->waba_id}: " . $e->getMessage());
             }
 
             return [];

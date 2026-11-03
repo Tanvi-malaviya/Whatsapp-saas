@@ -16,8 +16,6 @@ import {
     ShieldCheck,
     Check,
     RefreshCw,
-    Sliders,
-    Zap,
     Lock,
     Globe,
     HelpCircle,
@@ -26,12 +24,11 @@ import {
     Phone,
     Shield,
     CheckCircle,
+    X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 
 type Channel = {
     id: string;
@@ -191,14 +188,12 @@ export default function WhatsAppConnectWizard({
     const [step, setStep] = useState<1 | 2 | 3>(2);
     const [setupMethod, setSetupMethod] = useState<SetupMethod>('coexistence');
     const [guideStep, setGuideStep] = useState(1);
-    const [showDirectForm, setShowDirectForm] = useState(false);
 
     const [countryCode, setCountryCode] = useState('+91');
     const [phoneDigits, setPhoneDigits] = useState('9104081291');
     const [channelName, setChannelName] = useState(
         currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'Sathwara InfoTech WhatsApp'
     );
-    const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Advanced / auto-fill credentials
     const [phoneId, setPhoneId] = useState('');
@@ -211,7 +206,25 @@ export default function WhatsAppConnectWizard({
     const [connectedChannel, setConnectedChannel] = useState<Channel | null>(null);
 
     const [configIdInput, setConfigIdInput] = useState(metaConfigId || '1857245935612505');
-    const [showConfigModal, setShowConfigModal] = useState(false);
+
+    // Auto-dismiss toast notifications so they don't remain stuck on screen
+    useEffect(() => {
+        if (successNotice) {
+            const timer = setTimeout(() => {
+                setSuccessNotice(null);
+            }, 4500);
+            return () => clearTimeout(timer);
+        }
+    }, [successNotice]);
+
+    useEffect(() => {
+        if (errorMsg) {
+            const timer = setTimeout(() => {
+                setErrorMsg(null);
+            }, 6000);
+            return () => clearTimeout(timer);
+        }
+    }, [errorMsg]);
 
     // 1. Dynamically load Meta Facebook JavaScript SDK for Embedded Signup
     useEffect(() => {
@@ -290,12 +303,10 @@ export default function WhatsAppConnectWizard({
                 setConnectedChannel(data.channel);
                 setStep(3);
             } else {
-                setErrorMsg(data.message || 'Failed to auto-connect. Please enter phone number manually below.');
-                setShowDirectForm(true);
+                setErrorMsg(data.message || 'Failed to auto-connect WhatsApp channel.');
             }
         } catch (err: any) {
             setErrorMsg('Network error: ' + err.message);
-            setShowDirectForm(true);
         } finally {
             setIsSubmitting(false);
         }
@@ -304,6 +315,7 @@ export default function WhatsAppConnectWizard({
     // 3. Trigger Official Meta WhatsApp Onboarding Popup - Exactly like Xobito
     const launchMetaEmbeddedSignup = () => {
         setErrorMsg(null);
+        setSuccessNotice('Meta Onboarding is open in the popup window. Please complete the steps.');
         const activeConfigId = configIdInput.trim() || metaConfigId || '1835889181059188';
         const appId = metaAppId || '1079349601748656';
 
@@ -323,28 +335,6 @@ export default function WhatsAppConnectWizard({
         if (!popup || popup.closed || typeof popup.closed === 'undefined') {
             window.open(onboardUrl, '_blank');
         }
-
-        // Auto-detect when popup is completed/closed
-        const timer = setInterval(() => {
-            if (popup && popup.closed) {
-                clearInterval(timer);
-                setSuccessNotice('Popup completed! Syncing and connecting WhatsApp number...');
-                handleDirectAutoConnect();
-            }
-        }, 1500);
-    };
-
-    const handleConnectSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
-        setErrorMsg(null);
-
-        const cleanDigits = phoneDigits.replace(/\D/g, '');
-        if (cleanDigits.length < 10 && !phoneId) {
-            setErrorMsg('Please enter a valid 10-digit WhatsApp phone number.');
-            return;
-        }
-
-        handleDirectAutoConnect();
     };
 
     const currentStepData = COEXISTENCE_STEPS.find((s) => s.step === guideStep) || COEXISTENCE_STEPS[0];
@@ -353,654 +343,522 @@ export default function WhatsAppConnectWizard({
         <>
             <Head title="Connect WhatsApp | Coexistence Guide | Sathwara InfoTech" />
 
-            <div className="flex flex-1 flex-col gap-5 p-4 md:p-8 max-w-6xl mx-auto w-full font-sans text-foreground">
-                {/* Top Nav Bar / Breadcrumbs (Exact Xobito style) */}
-                <div className="flex items-center justify-between border-b border-border/70 pb-3">
-                    <nav className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Link href="/whatsapp/connect" className="hover:text-foreground transition-colors">
-                            Channels
-                        </Link>
-                        <ChevronRight className="size-3 text-muted-foreground/50" />
-                        <Link href="/whatsapp/connect" className="hover:text-foreground transition-colors">
-                            WhatsApp
-                        </Link>
-                        <ChevronRight className="size-3 text-muted-foreground/50" />
-                        <span className="hover:text-foreground transition-colors">Connect</span>
-                        <ChevronRight className="size-3 text-muted-foreground/50" />
-                        <span className="hover:text-foreground transition-colors">Coexistence</span>
-                        <ChevronRight className="size-3 text-muted-foreground/50" />
-                        <span className="font-semibold text-foreground">Guide</span>
-                    </nav>
-
-                    <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
-                        <a
-                            href="https://developers.facebook.com/docs/whatsapp/cloud-api"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 hover:text-[#47b672] transition-colors"
-                        >
-                            <ExternalLink className="size-3" />
-                            Help guide
-                        </a>
-                        <a
-                            href="#tutorial"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                alert('Watch our 2-minute video on connecting any WhatsApp number with Meta Cloud API.');
-                            }}
-                            className="flex items-center gap-1 hover:text-[#47b672] transition-colors"
-                        >
-                            <Play className="size-3 fill-current" />
-                            Watch tutorial
-                        </a>
+            {/* Floating Auto-dismissing Notification Toasts (does not push content down) */}
+            {successNotice && (
+                <div className="fixed top-5 right-5 z-50 max-w-sm rounded-xl bg-background/95 backdrop-blur-md border border-emerald-500/30 p-3 shadow-xl shadow-emerald-500/10 flex items-center gap-2.5 animate-in slide-in-from-top-2 duration-200">
+                    <div className="size-7 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <RefreshCw className="size-3.5 animate-spin" />
                     </div>
+                    <p className="text-xs font-medium text-foreground flex-1 leading-snug">
+                        {successNotice}
+                    </p>
+                    <button
+                        onClick={() => setSuccessNotice(null)}
+                        className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+                        title="Dismiss"
+                    >
+                        <X className="size-3.5" />
+                    </button>
                 </div>
+            )}
 
-                <div className="space-y-6">
-                    {/* Header Action & Title (Exact Xobito Step 3 of 3) */}
-                    <div className="space-y-1.5">
+            {errorMsg && (
+                <div className="fixed top-5 right-5 z-50 max-w-sm rounded-xl bg-background/95 backdrop-blur-md border border-red-500/30 p-3 shadow-xl shadow-red-500/10 flex items-center gap-2.5 animate-in slide-in-from-top-2 duration-200">
+                    <div className="size-7 rounded-lg bg-red-500/15 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
+                        <Info className="size-3.5" />
+                    </div>
+                    <p className="text-xs font-medium text-red-600 dark:text-red-400 flex-1 leading-snug">
+                        {errorMsg}
+                    </p>
+                    <button
+                        onClick={() => setErrorMsg(null)}
+                        className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors"
+                        title="Dismiss"
+                    >
+                        <X className="size-3.5" />
+                    </button>
+                </div>
+            )}
+
+            <div className="flex flex-1 flex-col gap-2.5 p-3 sm:p-4 max-w-4xl mx-auto w-full font-sans text-foreground">
+                {/* Compact Page Header with Status & Action */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/60 pb-2.5">
+                    <div className="flex items-center gap-2">
                         <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
                             asChild
-                            className="h-8 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground gap-1.5 -ml-2"
+                            className="size-8 p-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg shrink-0"
                         >
-                            <Link href="/whatsapp/connect">
-                                <ArrowLeft className="size-3.5" />
-                                Back
+                            <Link href="/whatsapp/connect" title="Back to Channels">
+                                <ArrowLeft className="size-4" />
                             </Link>
                         </Button>
-
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-2xs">
+                            <Smartphone className="size-4" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
                                 Connect WhatsApp
                             </h1>
-                            <Badge className="bg-muted text-foreground/80 hover:bg-muted font-normal text-xs px-2 py-0.5 border border-border">
-                                Step 3 of 3
+                            <Badge className="bg-primary/10 text-primary border border-primary/20 font-semibold text-[10px] px-2 py-0.5">
+                                Step 3 • Coexistence Mode
                             </Badge>
                         </div>
-                        <p className="text-xs md:text-sm text-muted-foreground">
-                            Follow the steps in the Facebook window to complete your Meta setup.
-                        </p>
                     </div>
 
-                    {/* Notification Alerts */}
-                    {errorMsg && (
-                        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium flex items-start justify-between gap-3 animate-in fade-in">
-                            <div className="space-y-1">
-                                <p className="font-semibold">Notice:</p>
-                                <p>{errorMsg}</p>
-                            </div>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setShowDirectForm(true)}
-                                className="h-7 text-xs border-red-300 dark:border-red-800 text-red-700 dark:text-red-300"
-                            >
-                                Enter Number Manually
-                            </Button>
+                    {/* Single Primary 1-Click Launch Button in Project Blue Theme */}
+                    <Button
+                        onClick={launchMetaEmbeddedSignup}
+                        disabled={isSubmitting}
+                        className="h-8 px-3.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-2xs gap-1.5 shrink-0 self-start sm:self-auto transition-transform hover:scale-[1.02]"
+                    >
+                        <div className="size-3.5 rounded-full bg-white flex items-center justify-center text-primary">
+                            <svg className="size-2 fill-current" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                            </svg>
                         </div>
-                    )}
+                        <span>Continue with Facebook</span>
+                    </Button>
+                </div>
 
-                    {successNotice && (
-                        <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
-                            <RefreshCw className="size-4 animate-spin text-emerald-600 shrink-0" />
-                            <span>{successNotice}</span>
-                        </div>
-                    )}
-
-                    {/* ================= STEP 2: XOBITO COEXISTENCE INTERACTIVE GUIDE ================= */}
-                    {step === 2 && (
-                        <div className="space-y-6">
-                            {/* Main Card: "You're almost there" + [Continue with Facebook] */}
-                            <Card className="border-border/80 bg-card rounded-2xl shadow-sm overflow-hidden">
-                                {/* Top Banner of Card */}
-                                <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/70">
-                                    <div className="space-y-1">
-                                        <h2 className="text-lg md:text-xl font-bold text-foreground tracking-tight">
-                                            You&apos;re almost there
-                                        </h2>
-                                        <p className="text-xs md:text-sm text-muted-foreground">
-                                            Sign in with Facebook and follow the Meta setup steps to connect your phone number.
-                                        </p>
+                {/* ================= STEP 2: COEXISTENCE INTERACTIVE GUIDE ================= */}
+                {step === 2 && (
+                    <div className="space-y-3">
+                        <Card className="border border-border/80 bg-card rounded-xl shadow-2xs overflow-hidden">
+                            {/* Compact Subheader with Step Progress Indicator */}
+                            <div className="px-3.5 py-2 border-b border-border/60 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-foreground">
+                                            Meta Setup Walkthrough
+                                        </span>
+                                        <span className="text-[10px] text-primary font-mono font-bold">
+                                            (Step {guideStep}/11)
+                                        </span>
                                     </div>
-
-                                    {/* Primary 1-Click Facebook Button */}
-                                    <Button
-                                        onClick={launchMetaEmbeddedSignup}
-                                        disabled={isSubmitting}
-                                        className="h-11 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold text-sm shadow-md shadow-[#1877F2]/25 gap-2.5 shrink-0 transition-transform hover:scale-[1.02]"
-                                    >
-                                        {/* Official Facebook 'f' Logo */}
-                                        <div className="size-5 rounded-full bg-white flex items-center justify-center text-[#1877F2]">
-                                            <svg className="size-3.5 fill-current" viewBox="0 0 24 24">
-                                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                                            </svg>
-                                        </div>
-                                        <span>Continue with Facebook</span>
-                                    </Button>
+                                    {/* 11-step progress mini segments in project blue */}
+                                    <div className="hidden sm:flex items-center gap-1">
+                                        {COEXISTENCE_STEPS.map((s) => (
+                                            <div
+                                                key={s.step}
+                                                className={`h-1.5 rounded-full transition-all duration-300 ${
+                                                    s.step === guideStep
+                                                        ? 'w-4 bg-primary'
+                                                        : s.step < guideStep
+                                                        ? 'w-1.5 bg-primary/50'
+                                                        : 'w-1.5 bg-muted-foreground/20'
+                                                }`}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
 
-                                {/* Interactive 11-Step Walkthrough (Split Layout Matching Image) */}
-                                <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-muted/10">
-                                    {/* Left Column: Mockup Facebook Popup Browser Window */}
-                                    <div className="lg:col-span-6 flex justify-center">
-                                        <div className="w-full max-w-md rounded-2xl border border-border/80 bg-background shadow-lg overflow-hidden flex flex-col h-[380px] transition-all">
-                                            {/* Browser Window Chrome */}
-                                            <div className="h-9 bg-muted/60 border-b border-border/70 px-3.5 flex items-center gap-2 select-none">
-                                                <div className="flex items-center gap-1.5">
-                                                    <div className="size-2.5 rounded-full bg-[#FF5F56]" />
-                                                    <div className="size-2.5 rounded-full bg-[#FFBD2E]" />
-                                                    <div className="size-2.5 rounded-full bg-[#27C93F]" />
-                                                </div>
-                                                <div className="flex-1 mx-2">
-                                                    <div className="h-5 rounded-md bg-background/80 border border-border/60 text-[10px] text-muted-foreground flex items-center justify-center gap-1 font-mono">
-                                                        <Lock className="size-2.5 text-muted-foreground/60" />
-                                                        facebook.com
-                                                    </div>
+                                <div className="flex items-center gap-1 self-end sm:self-auto">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={guideStep === 1}
+                                        onClick={() => setGuideStep((prev) => Math.max(1, prev - 1))}
+                                        className="h-6 px-2 text-xs font-medium rounded-md gap-0.5"
+                                    >
+                                        <ChevronLeft className="size-3" />
+                                        Prev
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={guideStep === 11}
+                                        onClick={() => setGuideStep((prev) => Math.min(11, prev + 1))}
+                                        className="h-6 px-2 text-xs font-medium rounded-md gap-0.5"
+                                    >
+                                        Next
+                                        <ChevronRight className="size-3" />
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Split Workspace */}
+                            <div className="p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-center bg-muted/5">
+                                {/* Left Column: Scaled Compact macOS Window */}
+                                <div className="lg:col-span-5 flex justify-center">
+                                    <div className="w-full max-w-[310px] rounded-xl border border-border/80 bg-background shadow-2xs overflow-hidden flex flex-col h-[245px] transition-all">
+                                        {/* Browser Window Chrome */}
+                                        <div className="h-6 bg-muted/60 border-b border-border/60 px-2.5 flex items-center gap-2 select-none">
+                                            <div className="flex items-center gap-1">
+                                                <div className="size-2 rounded-full bg-red-400" />
+                                                <div className="size-2 rounded-full bg-amber-400" />
+                                                <div className="size-2 rounded-full bg-emerald-500" />
+                                            </div>
+                                            <div className="flex-1 mx-2">
+                                                <div className="h-3.5 rounded bg-background/90 border border-border/50 text-[9px] text-muted-foreground flex items-center justify-center gap-1 font-mono">
+                                                    <Lock className="size-2 text-muted-foreground/60" />
+                                                    facebook.com
                                                 </div>
                                             </div>
+                                        </div>
 
-                                            {/* Mock Content Canvas per Step */}
-                                            <div className="flex-1 p-5 flex flex-col justify-center items-center text-center overflow-y-auto">
-                                                {currentStepData.previewType === 'fb_login' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <div className="size-10 mx-auto rounded-full bg-[#1877F2] text-white flex items-center justify-center shadow-md">
-                                                            <svg className="size-6 fill-current" viewBox="0 0 24 24">
-                                                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                                                            </svg>
+                                        {/* Mock Content Canvas per Step */}
+                                        <div className="flex-1 p-2.5 flex flex-col justify-center items-center text-center overflow-hidden">
+                                            {currentStepData.previewType === 'fb_login' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <div className="size-9 mx-auto rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
+                                                        <svg className="size-5 fill-current" viewBox="0 0 24 24">
+                                                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                                                        </svg>
+                                                    </div>
+                                                    <h4 className="text-xs font-bold text-foreground">Log in to Facebook</h4>
+                                                    <div className="space-y-1.5">
+                                                        <div className="h-7 rounded-lg border border-border/80 bg-muted/30 px-2.5 text-[10px] text-muted-foreground flex items-center">
+                                                            bhavesh.sathwara@gmail.com
                                                         </div>
-                                                        <h4 className="text-xs font-bold text-foreground">Log in to Facebook</h4>
-                                                        <div className="space-y-2">
-                                                            <div className="h-8 rounded-lg border border-border/80 bg-muted/30 px-3 text-[11px] text-muted-foreground flex items-center">
-                                                                bhavesh.sathwara@gmail.com
-                                                            </div>
-                                                            <div className="h-8 rounded-lg border border-border/80 bg-muted/30 px-3 text-[11px] text-muted-foreground flex items-center tracking-widest">
-                                                                ••••••••••••
-                                                            </div>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center shadow-xs">
-                                                            Log In
-                                                        </div>
-                                                        <div className="text-[10px] text-[#1877F2] hover:underline cursor-pointer">
-                                                            Forgotten password?
+                                                        <div className="h-7 rounded-lg border border-border/80 bg-muted/30 px-2.5 text-[10px] text-muted-foreground flex items-center tracking-widest">
+                                                            ••••••••••••
                                                         </div>
                                                     </div>
-                                                )}
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center shadow-2xs">
+                                                        Log In
+                                                    </div>
+                                                    <div className="text-[10px] text-primary hover:underline cursor-pointer">
+                                                        Forgotten password?
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'get_started' && (
-                                                    <div className="w-full max-w-xs space-y-3.5 animate-in fade-in duration-200">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className="size-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shadow-sm">
-                                                                <MessageSquare className="size-5" />
-                                                            </div>
-                                                            <ArrowRightLeft className="size-4 text-muted-foreground/60" />
-                                                            <div className="size-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shadow-sm">
-                                                                <Building2 className="size-5" />
-                                                            </div>
+                                            {currentStepData.previewType === 'get_started' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <div className="size-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                                                            <MessageSquare className="size-4.5" />
                                                         </div>
-                                                        <h4 className="text-xs font-bold text-foreground">Connect to Sathwara InfoTech</h4>
-                                                        <p className="text-[11px] text-muted-foreground leading-snug">
-                                                            Link your WhatsApp account to enable Cloud API broadcasting & chat routing.
-                                                        </p>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
-                                                            Get Started
+                                                        <ArrowRightLeft className="size-3.5 text-muted-foreground/60" />
+                                                        <div className="size-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
+                                                            <Building2 className="size-4.5" />
                                                         </div>
                                                     </div>
-                                                )}
-
-                                                {currentStepData.previewType === 'portfolio' && (
-                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
-                                                        <h4 className="text-xs font-bold text-foreground text-center">Select Meta Business Portfolio</h4>
-                                                        <div className="p-3 rounded-xl border-2 border-[#1877F2] bg-[#1877F2]/5 flex items-center justify-between">
-                                                            <div className="flex items-center gap-2">
-                                                                <Building2 className="size-4 text-[#1877F2]" />
-                                                                <div>
-                                                                    <div className="text-xs font-bold text-foreground">Sathwara InfoTech</div>
-                                                                    <div className="text-[10px] text-muted-foreground">ID: 976124469221838 • Verified</div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="size-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center">
-                                                                <Check className="size-2.5 stroke-[3]" />
-                                                            </div>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
-                                                            Continue
-                                                        </div>
+                                                    <h4 className="text-xs font-bold text-foreground">Connect to Sathwara InfoTech</h4>
+                                                    <p className="text-[10px] text-muted-foreground leading-snug">
+                                                        Link your WhatsApp account to enable Cloud API broadcasting & chat routing.
+                                                    </p>
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center shadow-2xs">
+                                                        Get Started
                                                     </div>
-                                                )}
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'profile' && (
-                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
-                                                        <h4 className="text-xs font-bold text-foreground text-center">Create WhatsApp Profile</h4>
-                                                        <div className="space-y-1">
-                                                            <div className="text-[10px] text-muted-foreground font-medium">Display Name</div>
-                                                            <div className="h-7 rounded border border-border px-2 text-xs flex items-center font-semibold text-foreground">
-                                                                Sathwara InfoTech
+                                            {currentStepData.previewType === 'portfolio' && (
+                                                <div className="w-full max-w-xs space-y-2 text-left animate-in fade-in duration-200">
+                                                    <h4 className="text-xs font-bold text-foreground text-center">Select Meta Business Portfolio</h4>
+                                                    <div className="p-2.5 rounded-lg border-2 border-primary bg-primary/5 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <Building2 className="size-4 text-primary" />
+                                                            <div>
+                                                                <div className="text-xs font-bold text-foreground">Sathwara InfoTech</div>
+                                                                <div className="text-[10px] text-muted-foreground">ID: 976124469221838 • Verified</div>
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-1">
-                                                            <div className="text-[10px] text-muted-foreground font-medium">Category</div>
-                                                            <div className="h-7 rounded border border-border px-2 text-xs flex items-center text-muted-foreground">
-                                                                IT & Software Services
+                                                        <div className="size-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                                                            <Check className="size-2.5 stroke-[3]" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center mt-2 shadow-2xs">
+                                                        Continue
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {currentStepData.previewType === 'profile' && (
+                                                <div className="w-full max-w-xs space-y-2 text-left animate-in fade-in duration-200">
+                                                    <h4 className="text-xs font-bold text-foreground text-center">Create WhatsApp Profile</h4>
+                                                    <div className="space-y-1">
+                                                        <div className="text-[10px] text-muted-foreground font-medium">Display Name</div>
+                                                        <div className="h-7 rounded border border-border px-2 text-xs flex items-center font-semibold text-foreground">
+                                                            Sathwara InfoTech
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <div className="text-[10px] text-muted-foreground font-medium">Category</div>
+                                                        <div className="h-7 rounded border border-border px-2 text-xs flex items-center text-muted-foreground">
+                                                            IT & Software Services
+                                                        </div>
+                                                    </div>
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center mt-2 shadow-2xs">
+                                                        Next
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {currentStepData.previewType === 'coexistence' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <div className="size-10 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                                                        <Smartphone className="size-5" />
+                                                    </div>
+                                                    <h4 className="text-xs font-bold text-foreground">WhatsApp Business App Coexistence</h4>
+                                                    <div className="p-2 rounded-lg border border-primary/30 bg-primary/5 text-left flex items-start gap-2">
+                                                        <CheckCircle className="size-3.5 text-primary shrink-0 mt-0.5" />
+                                                        <div className="text-[10px] text-foreground">
+                                                            Keep using your phone app. Chats will sync across all devices.
+                                                        </div>
+                                                    </div>
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center shadow-2xs">
+                                                        Continue
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {currentStepData.previewType === 'phone_input' && (
+                                                <div className="w-full max-w-xs space-y-2 text-left animate-in fade-in duration-200">
+                                                    <h4 className="text-xs font-bold text-foreground text-center">Add a Phone Number</h4>
+                                                    <div className="flex gap-1.5">
+                                                        <div className="h-7 px-2 rounded border border-border flex items-center text-xs font-semibold">
+                                                            🇮🇳 +91
+                                                        </div>
+                                                        <div className="h-7 flex-1 px-2.5 rounded border border-border flex items-center text-xs font-mono font-medium">
+                                                            91040 81291
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1 text-[10px] text-muted-foreground">
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" checked readOnly className="accent-primary" />
+                                                            <span>Text message (SMS)</span>
+                                                        </label>
+                                                    </div>
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center mt-1 shadow-2xs">
+                                                        Send Code
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {currentStepData.previewType === 'otp' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <h4 className="text-xs font-bold text-foreground">Verify Your Phone Number</h4>
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Enter the 6-digit code sent to +91 91040 81291
+                                                    </p>
+                                                    <div className="flex justify-center gap-1">
+                                                        {['8', '4', '1', '9', '2', '0'].map((digit, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="size-7 rounded border-2 border-primary bg-primary/5 flex items-center justify-center text-xs font-bold font-mono text-foreground"
+                                                            >
+                                                                {digit}
                                                             </div>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
-                                                            Next
-                                                        </div>
+                                                        ))}
                                                     </div>
-                                                )}
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center mt-1 shadow-2xs">
+                                                        Verify
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'coexistence' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <div className="size-11 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
-                                                            <Smartphone className="size-6" />
+                                            {currentStepData.previewType === 'permissions' && (
+                                                <div className="w-full max-w-xs space-y-2 text-left animate-in fade-in duration-200">
+                                                    <h4 className="text-xs font-bold text-foreground text-center">Permissions Summary</h4>
+                                                    <div className="p-2.5 rounded-lg border border-border/80 bg-muted/30 space-y-1.5 text-[10px]">
+                                                        <div className="flex items-center gap-1.5 text-primary font-medium">
+                                                            <Check className="size-3 stroke-[3]" />
+                                                            <span>whatsapp_business_messaging</span>
                                                         </div>
-                                                        <h4 className="text-xs font-bold text-foreground">WhatsApp Business App Coexistence</h4>
-                                                        <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-left flex items-start gap-2">
-                                                            <CheckCircle className="size-4 text-emerald-600 shrink-0 mt-0.5" />
-                                                            <div className="text-[11px] text-foreground">
-                                                                Keep using your mobile phone app. Chats will sync to both devices.
-                                                            </div>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
-                                                            Continue
+                                                        <div className="flex items-center gap-1.5 text-primary font-medium">
+                                                            <Check className="size-3 stroke-[3]" />
+                                                            <span>whatsapp_business_management</span>
                                                         </div>
                                                     </div>
-                                                )}
+                                                    <div className="h-7 rounded-lg bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center shadow-2xs">
+                                                        Grant Permissions
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'phone_input' && (
-                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
-                                                        <h4 className="text-xs font-bold text-foreground text-center">Add a Phone Number</h4>
-                                                        <div className="flex gap-2">
-                                                            <div className="h-8 px-2 rounded border border-border flex items-center text-xs font-semibold">
-                                                                🇮🇳 +91
-                                                            </div>
-                                                            <div className="h-8 flex-1 px-3 rounded border border-border flex items-center text-xs font-mono font-medium">
-                                                                91040 81291
-                                                            </div>
-                                                        </div>
-                                                        <div className="space-y-1 pt-1 text-[11px] text-muted-foreground">
-                                                            <label className="flex items-center gap-1.5 cursor-pointer">
-                                                                <input type="radio" checked readOnly className="accent-[#1877F2]" />
-                                                                <span>Text message (SMS)</span>
-                                                            </label>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
-                                                            Send Code
-                                                        </div>
-                                                    </div>
-                                                )}
+                                            {currentStepData.previewType === 'provisioning' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <RefreshCw className="size-8 mx-auto text-primary animate-spin" />
+                                                    <h4 className="text-xs font-bold text-foreground">Provisioning Cloud API...</h4>
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Registering Phone Number ID & End-to-End Encryption Keys on Meta servers.
+                                                    </p>
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'otp' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <h4 className="text-xs font-bold text-foreground">Verify Your Phone Number</h4>
-                                                        <p className="text-[11px] text-muted-foreground">
-                                                            Enter the 6-digit code sent to +91 91040 81291
-                                                        </p>
-                                                        <div className="flex justify-center gap-1.5">
-                                                            {['8', '4', '1', '9', '2', '0'].map((digit, i) => (
-                                                                <div
-                                                                    key={i}
-                                                                    className="size-8 rounded border-2 border-[#1877F2] bg-[#1877F2]/5 flex items-center justify-center text-sm font-bold font-mono text-foreground"
-                                                                >
-                                                                    {digit}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center mt-2">
-                                                            Verify
-                                                        </div>
+                                            {currentStepData.previewType === 'handshake' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <div className="size-10 mx-auto rounded-full bg-primary/10 text-primary flex items-center justify-center border border-primary/20">
+                                                        <ShieldCheck className="size-6" />
                                                     </div>
-                                                )}
+                                                    <h4 className="text-xs font-bold text-foreground">Secure Token Exchange</h4>
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Authenticating with Sathwara InfoTech Portal... Handshake complete!
+                                                    </p>
+                                                </div>
+                                            )}
 
-                                                {currentStepData.previewType === 'permissions' && (
-                                                    <div className="w-full max-w-xs space-y-2.5 text-left animate-in fade-in duration-200">
-                                                        <h4 className="text-xs font-bold text-foreground text-center">Permissions Summary</h4>
-                                                        <div className="p-3 rounded-xl border border-border/80 bg-muted/30 space-y-2 text-[11px]">
-                                                            <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                                                                <Check className="size-3.5 stroke-[3]" />
-                                                                <span>whatsapp_business_messaging</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
-                                                                <Check className="size-3.5 stroke-[3]" />
-                                                                <span>whatsapp_business_management</span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="h-8 rounded-lg bg-[#1877F2] text-white text-xs font-semibold flex items-center justify-center">
-                                                            Grant Permissions
-                                                        </div>
+                                            {currentStepData.previewType === 'live' && (
+                                                <div className="w-full max-w-xs space-y-2.5 animate-in fade-in duration-200">
+                                                    <div className="size-10 mx-auto rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/30">
+                                                        <Check className="size-6 stroke-[3]" />
                                                     </div>
-                                                )}
-
-                                                {currentStepData.previewType === 'provisioning' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <RefreshCw className="size-10 mx-auto text-[#1877F2] animate-spin" />
-                                                        <h4 className="text-xs font-bold text-foreground">Provisioning Cloud API...</h4>
-                                                        <p className="text-[11px] text-muted-foreground">
-                                                            Registering Phone Number ID & End-to-End Encryption Keys on Meta servers.
-                                                        </p>
+                                                    <h4 className="text-xs font-bold text-foreground">Ready for Messaging!</h4>
+                                                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-semibold">
+                                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                        Active & Verified
                                                     </div>
-                                                )}
-
-                                                {currentStepData.previewType === 'handshake' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <div className="size-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center border border-emerald-500/20">
-                                                            <ShieldCheck className="size-7" />
-                                                        </div>
-                                                        <h4 className="text-xs font-bold text-foreground">Secure Token Exchange</h4>
-                                                        <p className="text-[11px] text-muted-foreground">
-                                                            Authenticating with Sathwara InfoTech Portal... Handshake complete!
-                                                        </p>
-                                                    </div>
-                                                )}
-
-                                                {currentStepData.previewType === 'live' && (
-                                                    <div className="w-full max-w-xs space-y-3 animate-in fade-in duration-200">
-                                                        <div className="size-12 mx-auto rounded-full bg-[#25D366] text-white flex items-center justify-center shadow-lg shadow-[#25D366]/30">
-                                                            <Check className="size-7 stroke-[3]" />
-                                                        </div>
-                                                        <h4 className="text-sm font-bold text-foreground">Ready for Messaging!</h4>
-                                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 text-[11px] font-semibold">
-                                                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                                            Active & Verified
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Right Column: Step Description, Green Text & Bullet Points (Exact Xobito layout) */}
-                                    <div className="lg:col-span-6 space-y-5">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="font-mono text-xs px-2.5 py-0.5 font-semibold text-muted-foreground"
-                                                >
-                                                    Step {currentStepData.step} of 11
-                                                </Badge>
+                                {/* Right Column: Step Description, Bullets & Step Selector */}
+                                <div className="lg:col-span-7 flex flex-col justify-between h-full space-y-2.5">
+                                    <div className="space-y-1.5">
+                                        <span className="text-[11px] font-bold text-primary uppercase tracking-wider">
+                                            Step {currentStepData.step} of 11
+                                        </span>
 
-                                                {/* Stepper Arrow Buttons */}
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        disabled={guideStep === 1}
-                                                        onClick={() => setGuideStep((prev) => Math.max(1, prev - 1))}
-                                                        className="size-7 rounded-lg"
-                                                    >
-                                                        <ChevronLeft className="size-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        disabled={guideStep === 11}
-                                                        onClick={() => setGuideStep((prev) => Math.min(11, prev + 1))}
-                                                        className="size-7 rounded-lg"
-                                                    >
-                                                        <ChevronRight className="size-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            <h3 className="text-lg md:text-xl font-bold text-foreground tracking-tight">
-                                                {currentStepData.title}
-                                            </h3>
-                                        </div>
-
-                                        {/* Highlight description box in vibrant green */}
-                                        <div className="p-3.5 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#128C7E] dark:text-[#25D366] text-xs md:text-sm font-medium leading-relaxed">
-                                            {currentStepData.subtitle}
-                                        </div>
+                                        <h3 className="text-sm sm:text-base font-bold text-foreground tracking-tight">
+                                            {currentStepData.title}
+                                        </h3>
 
                                         {/* Explanatory Bullet Points */}
-                                        <ul className="space-y-2.5 text-xs text-muted-foreground leading-relaxed">
+                                        <ul className="space-y-1 text-xs text-muted-foreground leading-relaxed pt-1">
                                             {currentStepData.bullets.map((bullet, idx) => (
-                                                <li key={idx} className="flex items-start gap-2.5">
-                                                    <span className="text-[#1877F2] font-bold text-sm leading-none mt-0.5">•</span>
+                                                <li key={idx} className="flex items-start gap-1.5">
+                                                    <span className="text-primary font-bold text-xs leading-none mt-0.5">•</span>
                                                     <span>{bullet}</span>
                                                 </li>
                                             ))}
                                         </ul>
+                                    </div>
 
-                                        {/* Interactive Navigation Dots (1 to 11) */}
-                                        <div className="pt-2 flex items-center justify-between border-t border-border/70">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                {COEXISTENCE_STEPS.map((s) => (
-                                                    <button
-                                                        key={s.step}
-                                                        onClick={() => setGuideStep(s.step)}
-                                                        className={`size-6 rounded-md text-[11px] font-bold transition-all ${
-                                                            s.step === guideStep
-                                                                ? 'bg-[#1877F2] text-white shadow-xs scale-105'
-                                                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                                        }`}
-                                                    >
-                                                        {s.step}
-                                                    </button>
-                                                ))}
-                                            </div>
+                                    {/* Interactive Navigation Dots (1 to 11) - Single Bottom Control Bar */}
+                                    <div className="pt-2 flex items-center justify-between border-t border-border/60 gap-2 flex-wrap">
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                            {COEXISTENCE_STEPS.map((s) => (
+                                                <button
+                                                    key={s.step}
+                                                    onClick={() => setGuideStep(s.step)}
+                                                    className={`size-6 rounded-md text-[10px] font-bold transition-all ${
+                                                        s.step === guideStep
+                                                            ? 'bg-primary text-primary-foreground shadow-2xs scale-105'
+                                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                    }`}
+                                                >
+                                                    {s.step}
+                                                </button>
+                                            ))}
+                                        </div>
 
+                                        <div className="flex items-center gap-1">
                                             <Button
+                                                variant="ghost"
                                                 size="sm"
-                                                onClick={launchMetaEmbeddedSignup}
-                                                className="bg-[#1877F2] hover:bg-[#166FE5] text-white text-xs font-semibold gap-1.5 h-8 px-3 rounded-lg"
+                                                disabled={guideStep === 1}
+                                                onClick={() => setGuideStep((prev) => Math.max(1, prev - 1))}
+                                                className="h-6 px-2 text-xs font-medium rounded-md gap-0.5 text-muted-foreground hover:text-foreground"
                                             >
-                                                <span>Launch Popup</span>
-                                                <ExternalLink className="size-3" />
+                                                <ChevronLeft className="size-3" />
+                                                Prev
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                disabled={guideStep === 11}
+                                                onClick={() => setGuideStep((prev) => Math.min(11, prev + 1))}
+                                                className="h-6 px-2 text-xs font-medium rounded-md gap-0.5 text-muted-foreground hover:text-foreground"
+                                            >
+                                                Next
+                                                <ChevronRight className="size-3" />
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
-                            </Card>
+                            </div>
+                        </Card>
+                    </div>
+                )}
 
-                            {/* Collapsible / Direct Input Accordion for Manual Verification */}
-                            <div className="border border-border/80 bg-card rounded-2xl p-5 shadow-xs">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* ================= STEP 3: SUCCESS & CONNECTED ================= */}
+                {step === 3 && (
+                    <div className="max-w-xl mx-auto pt-4 text-center space-y-4">
+                        <Card className="border-border/80 bg-card p-6 rounded-xl shadow-sm overflow-hidden relative">
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-primary" />
+
+                            {/* WhatsApp Green Celebration Badge */}
+                            <div className="flex size-14 mx-auto items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 mb-3 animate-in zoom-in-90 duration-300">
+                                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                                    <path d="M12.031 2c-5.516 0-9.99 4.474-9.99 9.99 0 1.763.459 3.484 1.332 5.006l-1.416 5.174 5.305-1.391c1.47.802 3.125 1.226 4.769 1.226 5.516 0 9.99-4.474 9.99-9.99 0-5.516-4.474-9.989-9.99-9.989zm5.836 14.156c-.244.686-1.42 1.319-1.956 1.398-.517.076-1.19.109-3.488-.842-2.937-1.216-4.834-4.212-4.981-4.407-.146-.196-1.189-1.583-1.189-3.02 0-1.437.753-2.146 1.021-2.439.268-.293.585-.366.78-.366.195 0 .39.002.56.01.182.008.427-.069.668.51.244.585.83 2.025.903 2.172.073.146.122.317.024.512-.098.195-.147.317-.293.488-.146.171-.307.382-.439.512-.146.146-.299.305-.128.598.171.293.759 1.253 1.63 2.029 1.121.999 2.066 1.309 2.359 1.455.293.146.464.122.635-.073.171-.195.732-.854.927-1.147.195-.293.39-.244.659-.146.268.098 1.708.805 2.001.952.293.146.488.219.56.341.073.122.073.708-.171 1.394z" />
+                                </svg>
+                            </div>
+
+                            <div className="space-y-1">
+                                <h2 className="text-lg md:text-xl font-bold text-foreground">
+                                    WhatsApp Number Successfully Connected!
+                                </h2>
+                                <p className="text-xs text-muted-foreground">
+                                    Your WhatsApp Business number is officially verified and registered with Meta Cloud API.
+                                </p>
+                            </div>
+
+                            {/* Channel Card Summary */}
+                            <div className="mt-4 p-3.5 rounded-xl bg-muted/30 border border-border/80 text-left space-y-2.5">
+                                <div className="flex items-center justify-between pb-2 border-b border-border/60">
                                     <div>
-                                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                            <Zap className="size-4 text-[#47b672]" />
-                                            Direct Quick Connect & Verification
+                                        <h4 className="text-xs font-bold text-foreground">
+                                            {connectedChannel?.name || `${currentOrg.name} WhatsApp`}
                                         </h4>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            Already finished the Meta popup or want to directly verify your WhatsApp mobile number?
+                                        <p className="text-[11px] font-mono text-muted-foreground">
+                                            {connectedChannel?.phone_number || `${countryCode} ${phoneDigits}`}
                                         </p>
                                     </div>
-
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setShowDirectForm(!showDirectForm)}
-                                        className="text-xs font-semibold h-8"
-                                    >
-                                        {showDirectForm ? 'Hide Form' : 'Show Direct Form'}
-                                    </Button>
+                                    <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px] px-2 py-0.5 font-semibold flex items-center gap-1">
+                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                        Connected & Live
+                                    </Badge>
                                 </div>
 
-                                {showDirectForm && (
-                                    <form onSubmit={handleConnectSubmit} className="mt-5 pt-5 border-t border-border/70 space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-semibold text-foreground">
-                                                    WhatsApp Phone Number <span className="text-red-500">*</span>
-                                                </Label>
-                                                <div className="flex gap-2">
-                                                    <select
-                                                        value={countryCode}
-                                                        onChange={(e) => setCountryCode(e.target.value)}
-                                                        className="h-10 px-3 rounded-lg border border-input bg-background text-xs font-semibold text-foreground"
-                                                    >
-                                                        <option value="+91">🇮🇳 +91 (India)</option>
-                                                        <option value="+1">🇺🇸 +1 (US)</option>
-                                                        <option value="+44">🇬🇧 +44 (UK)</option>
-                                                        <option value="+971">🇦🇪 +971 (UAE)</option>
-                                                    </select>
-                                                    <Input
-                                                        type="tel"
-                                                        value={phoneDigits}
-                                                        onChange={(e) => setPhoneDigits(e.target.value)}
-                                                        placeholder="91040 81291"
-                                                        className="h-10 text-sm font-medium tracking-wide flex-1 font-mono"
-                                                        required
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-1.5">
-                                                <Label className="text-xs font-semibold text-foreground">
-                                                    Business / Channel Display Name
-                                                </Label>
-                                                <Input
-                                                    type="text"
-                                                    value={channelName}
-                                                    onChange={(e) => setChannelName(e.target.value)}
-                                                    placeholder="Sathwara InfoTech WhatsApp"
-                                                    className="h-10 text-sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Advanced Settings */}
-                                        <div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowAdvanced(!showAdvanced)}
-                                                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-semibold transition-colors"
-                                            >
-                                                <Sliders className="size-3 text-[#47b672]" />
-                                                {showAdvanced ? 'Hide Advanced Meta IDs' : 'Advanced: Meta Cloud API IDs'}
-                                            </button>
-
-                                            {showAdvanced && (
-                                                <div className="mt-3 p-4 rounded-xl bg-muted/30 border border-border/70 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">Phone Number ID</Label>
-                                                        <Input
-                                                            value={phoneId}
-                                                            onChange={(e) => setPhoneId(e.target.value)}
-                                                            placeholder="Leave blank for 1-click auto-discovery"
-                                                            className="h-8 text-xs font-mono"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-[11px] text-muted-foreground">WABA ID</Label>
-                                                        <Input
-                                                            value={wabaId}
-                                                            onChange={(e) => setWabaId(e.target.value)}
-                                                            placeholder="934553439246885"
-                                                            className="h-8 text-xs font-mono"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <Button
-                                            type="submit"
-                                            disabled={isSubmitting}
-                                            className="w-full bg-[#47b672] text-white hover:bg-[#3ba363] h-10 text-xs font-bold tracking-wide rounded-xl gap-2 shadow-xs"
-                                        >
-                                            {isSubmitting ? (
-                                                <>
-                                                    <RefreshCw className="size-4 animate-spin" />
-                                                    Connecting WhatsApp Number...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Zap className="size-4 fill-current" />
-                                                    Direct Connect WhatsApp Number
-                                                </>
-                                            )}
-                                        </Button>
-                                    </form>
-                                )}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                        <span className="text-muted-foreground block text-[10px]">Quality Rating</span>
+                                        <strong className="text-emerald-600 font-semibold flex items-center gap-1 mt-0.5 text-xs">
+                                            <ShieldCheck className="size-3.5" />
+                                            HIGH (Green)
+                                        </strong>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground block text-[10px]">Messaging Tier</span>
+                                        <strong className="text-foreground font-semibold mt-0.5 block text-xs">
+                                            TIER 1K (1,000 / 24h)
+                                        </strong>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    )}
 
-                    {/* ================= STEP 3: SUCCESS & CONNECTED ================= */}
-                    {step === 3 && (
-                        <div className="max-w-2xl mx-auto pt-6 text-center space-y-6">
-                            <Card className="border-border/80 bg-card p-8 rounded-2xl shadow-lg shadow-[#47b672]/5 overflow-hidden relative">
-                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#47b672]" />
+                            {/* Call to Actions */}
+                            <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                                <Button
+                                    asChild
+                                    size="sm"
+                                    className="w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-4 font-semibold text-xs rounded-lg shadow-2xs"
+                                >
+                                    <Link href="/whatsapp/connect">
+                                        Manage All Channels
+                                    </Link>
+                                </Button>
 
-                                {/* WhatsApp Green Celebration Badge */}
-                                <div className="flex size-16 mx-auto items-center justify-center rounded-3xl bg-[#25D366] text-white shadow-xl shadow-[#25D366]/30 mb-4 animate-in zoom-in-90 duration-300">
-                                    <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor">
-                                        <path d="M12.031 2c-5.516 0-9.99 4.474-9.99 9.99 0 1.763.459 3.484 1.332 5.006l-1.416 5.174 5.305-1.391c1.47.802 3.125 1.226 4.769 1.226 5.516 0 9.99-4.474 9.99-9.99 0-5.516-4.474-9.989-9.99-9.989zm5.836 14.156c-.244.686-1.42 1.319-1.956 1.398-.517.076-1.19.109-3.488-.842-2.937-1.216-4.834-4.212-4.981-4.407-.146-.196-1.189-1.583-1.189-3.02 0-1.437.753-2.146 1.021-2.439.268-.293.585-.366.78-.366.195 0 .39.002.56.01.182.008.427-.069.668.51.244.585.83 2.025.903 2.172.073.146.122.317.024.512-.098.195-.147.317-.293.488-.146.171-.307.382-.439.512-.146.146-.299.305-.128.598.171.293.759 1.253 1.63 2.029 1.121.999 2.066 1.309 2.359 1.455.293.146.464.122.635-.073.171-.195.732-.854.927-1.147.195-.293.39-.244.659-.146.268.098 1.708.805 2.001.952.293.146.488.219.56.341.073.122.073.708-.171 1.394z" />
-                                    </svg>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <h2 className="text-xl md:text-2xl font-bold text-foreground">
-                                        WhatsApp Number Successfully Connected!
-                                    </h2>
-                                    <p className="text-xs md:text-sm text-muted-foreground">
-                                        Your WhatsApp Business number is officially verified and registered with Meta Cloud API.
-                                    </p>
-                                </div>
-
-                                {/* Channel Card Summary */}
-                                <div className="mt-6 p-4 rounded-xl bg-muted/30 border border-border/80 text-left space-y-3">
-                                    <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                                        <div>
-                                            <h4 className="text-sm font-bold text-foreground">
-                                                {connectedChannel?.name || `${currentOrg.name} WhatsApp`}
-                                            </h4>
-                                            <p className="text-xs font-mono text-muted-foreground">
-                                                {connectedChannel?.phone_number || `${countryCode} ${phoneDigits}`}
-                                            </p>
-                                        </div>
-                                        <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs px-2.5 py-1 font-semibold flex items-center gap-1.5">
-                                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                                            Connected & Live
-                                        </Badge>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                        <div>
-                                            <span className="text-muted-foreground block text-[11px]">Quality Rating</span>
-                                            <strong className="text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
-                                                <ShieldCheck className="size-3.5" />
-                                                HIGH (Green)
-                                            </strong>
-                                        </div>
-                                        <div>
-                                            <span className="text-muted-foreground block text-[11px]">Messaging Tier</span>
-                                            <strong className="text-foreground font-semibold mt-0.5 block">
-                                                TIER 1K (1,000 / 24h)
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Call to Actions */}
-                                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-                                    <Button
-                                        asChild
-                                        className="w-full sm:w-auto bg-[#47b672] text-white hover:bg-[#3ba363] h-10 px-6 font-bold text-xs rounded-xl shadow-md shadow-[#47b672]/20"
-                                    >
-                                        <Link href="/whatsapp/connect">
-                                            Manage All Channels
-                                        </Link>
-                                    </Button>
-
-                                    <Button
-                                        asChild
-                                        variant="outline"
-                                        className="w-full sm:w-auto h-10 px-6 text-xs font-semibold rounded-xl"
-                                    >
-                                        <Link href="/campaigns/create">
-                                            Send First Broadcast
-                                        </Link>
-                                    </Button>
-                                </div>
-                            </Card>
-                        </div>
-                    )}
-                </div>
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full sm:w-auto h-8 px-4 text-xs font-semibold rounded-lg"
+                                >
+                                    <Link href="/campaigns/create">
+                                        Send First Broadcast
+                                    </Link>
+                                </Button>
+                            </div>
+                        </Card>
+                    </div>
+                )}
             </div>
         </>
     );

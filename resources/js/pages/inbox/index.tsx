@@ -132,6 +132,21 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     const imageInputRef = useRef<HTMLInputElement>(null);
     const documentInputRef = useRef<HTMLInputElement>(null);
     const replyInputRef = useRef<HTMLInputElement>(null);
+    const chatFeedRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+        if (chatFeedRef.current) {
+            chatFeedRef.current.scrollTo({
+                top: chatFeedRef.current.scrollHeight,
+                behavior,
+            });
+        }
+        messagesEndRef.current?.scrollIntoView({
+            behavior,
+            block: 'end',
+        });
+    };
 
     // Contact Edit Modal state
     const [showEditContactDialog, setShowEditContactDialog] = useState(false);
@@ -174,6 +189,24 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             document.body.style.overflow = origBodyOverflow;
         };
     }, []);
+
+    // Auto-scroll chat feed directly to the bottom when entering a conversation or when messages change
+    useEffect(() => {
+        if (selectedThread?.id) {
+            scrollToBottom('auto');
+            const frameId = requestAnimationFrame(() => scrollToBottom('auto'));
+            const timer1 = setTimeout(() => scrollToBottom('auto'), 50);
+            const timer2 = setTimeout(() => scrollToBottom('auto'), 150);
+            const timer3 = setTimeout(() => scrollToBottom('auto'), 300);
+
+            return () => {
+                cancelAnimationFrame(frameId);
+                clearTimeout(timer1);
+                clearTimeout(timer2);
+                clearTimeout(timer3);
+            };
+        }
+    }, [selectedThread?.id, messages[selectedThread?.id || '']?.length]);
 
     // Sync state when initialThreads prop changes (e.g. on workspace switch)
     useEffect(() => {
@@ -415,6 +448,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             ...prev,
             [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
         }));
+        setTimeout(() => scrollToBottom('smooth'), 40);
 
         setThreads((prev) =>
             prev.map((t) => (t.id === selectedThread.id ? { ...t, lastMessage: optimisticContent, time: 'Just now' } : t))
@@ -827,6 +861,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             ...prev,
             [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
         }));
+        setTimeout(() => scrollToBottom('smooth'), 40);
 
         // Update last message in thread list
         setThreads((prev) =>
@@ -1014,7 +1049,10 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 return (
                                     <div
                                         key={thread.id}
-                                        onClick={() => setSelectedThread(thread)}
+                                        onClick={() => {
+                                            setSelectedThread(thread);
+                                            setTimeout(() => scrollToBottom('auto'), 10);
+                                        }}
                                         className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors relative ${isSelected
                                                 ? 'bg-[#47b672]/10 border-l-4 border-l-[#47b672]'
                                                 : 'hover:bg-muted/40'
@@ -1192,7 +1230,10 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                             </div>
 
                             {/* Message Feed */}
-                            <div className="flex-1 overflow-y-auto p-5 space-y-3.5 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px]">
+                            <div
+                                ref={chatFeedRef}
+                                className="flex-1 overflow-y-auto p-5 space-y-3.5 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px]"
+                            >
                                 {(messages[selectedThread.id] || []).map((msg) => (
                                     <div
                                         key={msg.id}
@@ -1483,6 +1524,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         </div>
                                     </div>
                                 ))}
+                                <div ref={messagesEndRef} className="h-0 w-full" />
                             </div>
 
                             {/* Hidden File Input Pickers */}
