@@ -2,7 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::get('/', function () {
+    return auth()->check() ? redirect()->route('dashboard') : redirect()->route('login');
+})->name('home');
 Route::inertia('/privacy', 'privacy')->name('privacy');
 Route::inertia('/terms', 'terms')->name('terms');
 

@@ -36,13 +36,25 @@ import {
     SidebarMenuSub,
     SidebarMenuSubButton,
     SidebarMenuSubItem,
+    SidebarRail,
+    useSidebar,
 } from '@/components/ui/sidebar';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { WorkspaceSwitcher } from '@/components/workspace-switcher';
 import { NavUser } from '@/components/nav-user';
 
 export function AppSidebar() {
     const { url } = usePage();
     const { tenant } = usePage().props as any;
+    const { state } = useSidebar();
+    const isCollapsed = state === 'collapsed';
     const currentOrg = tenant?.current;
 
     // Expand Automation submenu automatically when inside bot/flows/agent
@@ -79,7 +91,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             {/* 2. Main Navigation Items with 5 V2 Sections */}
-            <SidebarContent className="px-2 py-2 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.3)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border/60 hover:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full group-data-[collapsible=icon]:px-1.5">
+            <SidebarContent className="px-2 py-2 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] [scrollbar-color:rgba(156,163,175,0.3)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border/60 hover:[&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5 group-data-[collapsible=icon]:[scrollbar-width:none] group-data-[collapsible=icon]:[&::-webkit-scrollbar]:hidden">
                 
                 {/* ========================================================= */}
                 {/* SECTION 1: WORKSPACE */}
@@ -159,7 +171,7 @@ export function AppSidebar() {
                 <div className="px-2 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none group-data-[collapsible=icon]:hidden">
                     Marketing
                 </div>
-                <div className="hidden group-data-[collapsible=icon]:block my-1.5 w-5 h-px bg-border/60 mx-auto" />
+                <div className="hidden group-data-[collapsible=icon]:block my-1 w-4 h-px bg-border/50 mx-auto" />
                 <SidebarMenu className="space-y-0.5">
                     {/* Broadcasts */}
                     <SidebarMenuItem>
@@ -211,49 +223,107 @@ export function AppSidebar() {
 
                     {/* Automation (Submenu: Flows, Auto Responder, AI Agent) */}
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            onClick={() => setAutomationOpen(!automationOpen)}
-                            className={isInsideAutomation ? 'font-semibold text-foreground' : inactiveClass}
-                            tooltip="Automation"
-                        >
-                            <Zap className="size-4 text-amber-500" />
-                            <span className="flex-1">Automation</span>
-                            {automationOpen ? (
-                                <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
-                            ) : (
-                                <ChevronRight className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
-                            )}
-                        </SidebarMenuButton>
-
-                        {automationOpen && (
-                            <SidebarMenuSub className="ml-4 mt-0.5 border-l border-border/80 pl-2 space-y-0.5 group-data-[collapsible=icon]:hidden">
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={isActive('/flows')}>
-                                        <Link href="/flows" prefetch className={isActive('/flows') ? activeClass : inactiveClass}>
-                                            <GitBranch className="size-3.5" />
+                        {isCollapsed ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <SidebarMenuButton
+                                        isActive={isInsideAutomation}
+                                        className={isInsideAutomation ? activeClass : inactiveClass}
+                                        tooltip="Automation"
+                                    >
+                                        <Zap className="size-4 text-amber-500" />
+                                        <span>Automation</span>
+                                    </SidebarMenuButton>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    side="right"
+                                    align="start"
+                                    sideOffset={12}
+                                    className="w-48 p-1.5 shadow-xl rounded-xl border border-border bg-popover z-50 animate-in fade-in-0 zoom-in-95"
+                                >
+                                    <DropdownMenuLabel className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                                        Automation
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuSeparator className="my-1" />
+                                    <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
+                                        <Link
+                                            href="/flows"
+                                            prefetch
+                                            className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/flows') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
+                                        >
+                                            <GitBranch className="size-3.5 text-muted-foreground" />
                                             <span>Bot Flows</span>
                                         </Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={isActive('/auto-responder')}>
-                                        <Link href="/auto-responder" prefetch className={isActive('/auto-responder') ? activeClass : inactiveClass}>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
+                                        <Link
+                                            href="/auto-responder"
+                                            prefetch
+                                            className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/auto-responder') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
+                                        >
                                             <Zap className="size-3.5 text-amber-500" />
                                             <span>Auto Responder</span>
                                         </Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-
-                                <SidebarMenuSubItem>
-                                    <SidebarMenuSubButton asChild isActive={isActive('/ai-agent')}>
-                                        <Link href="/ai-agent" prefetch className={isActive('/ai-agent') ? activeClass : inactiveClass}>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
+                                        <Link
+                                            href="/ai-agent"
+                                            prefetch
+                                            className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/ai-agent') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
+                                        >
                                             <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
                                             <span>AI Agent</span>
                                         </Link>
-                                    </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                            </SidebarMenuSub>
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : (
+                            <>
+                                <SidebarMenuButton
+                                    onClick={() => setAutomationOpen(!automationOpen)}
+                                    className={isInsideAutomation ? 'font-semibold text-foreground' : inactiveClass}
+                                    tooltip="Automation"
+                                >
+                                    <Zap className="size-4 text-amber-500" />
+                                    <span className="flex-1">Automation</span>
+                                    {automationOpen ? (
+                                        <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                                    ) : (
+                                        <ChevronRight className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                                    )}
+                                </SidebarMenuButton>
+
+                                {automationOpen && (
+                                    <SidebarMenuSub className="ml-4 mt-0.5 border-l border-border/80 pl-2 space-y-0.5 group-data-[collapsible=icon]:hidden">
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton asChild isActive={isActive('/flows')}>
+                                                <Link href="/flows" prefetch className={isActive('/flows') ? activeClass : inactiveClass}>
+                                                    <GitBranch className="size-3.5" />
+                                                    <span>Bot Flows</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton asChild isActive={isActive('/auto-responder')}>
+                                                <Link href="/auto-responder" prefetch className={isActive('/auto-responder') ? activeClass : inactiveClass}>
+                                                    <Zap className="size-3.5 text-amber-500" />
+                                                    <span>Auto Responder</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+
+                                        <SidebarMenuSubItem>
+                                            <SidebarMenuSubButton asChild isActive={isActive('/ai-agent')}>
+                                                <Link href="/ai-agent" prefetch className={isActive('/ai-agent') ? activeClass : inactiveClass}>
+                                                    <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
+                                                    <span>AI Agent</span>
+                                                </Link>
+                                            </SidebarMenuSubButton>
+                                        </SidebarMenuSubItem>
+                                    </SidebarMenuSub>
+                                )}
+                            </>
                         )}
                     </SidebarMenuItem>
                 </SidebarMenu>
@@ -264,7 +334,7 @@ export function AppSidebar() {
                 <div className="px-2 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none group-data-[collapsible=icon]:hidden">
                     CRM
                 </div>
-                <div className="hidden group-data-[collapsible=icon]:block my-1.5 w-5 h-px bg-border/60 mx-auto" />
+                <div className="hidden group-data-[collapsible=icon]:block my-1 w-4 h-px bg-border/50 mx-auto" />
                 <SidebarMenu className="space-y-0.5">
                     {/* Contacts Directory */}
                     <SidebarMenuItem>
@@ -321,7 +391,7 @@ export function AppSidebar() {
                 <div className="px-2 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none group-data-[collapsible=icon]:hidden">
                     Insights
                 </div>
-                <div className="hidden group-data-[collapsible=icon]:block my-1.5 w-5 h-px bg-border/60 mx-auto" />
+                <div className="hidden group-data-[collapsible=icon]:block my-1 w-4 h-px bg-border/50 mx-auto" />
                 <SidebarMenu className="space-y-0.5">
                     {/* Analytics & Meta Costs */}
                     <SidebarMenuItem>
@@ -375,7 +445,7 @@ export function AppSidebar() {
                 <div className="px-2 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none group-data-[collapsible=icon]:hidden">
                     Management
                 </div>
-                <div className="hidden group-data-[collapsible=icon]:block my-1.5 w-5 h-px bg-border/60 mx-auto" />
+                <div className="hidden group-data-[collapsible=icon]:block my-1 w-4 h-px bg-border/50 mx-auto" />
                 <SidebarMenu className="space-y-0.5">
                     {/* Team & Roles Management (NEW) */}
                     <SidebarMenuItem>
@@ -407,22 +477,6 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Billing & Subscription (Temporarily Commented Out)
-                    <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isActive('/settings/billing')}
-                            className={isActive('/settings/billing') ? activeClass : inactiveClass}
-                            tooltip="Billing"
-                        >
-                            <Link href="/settings/billing" prefetch>
-                                <CreditCard className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                <span>Billing &amp; Plans</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    */}
-
                     {/* Help & Docs */}
                     <SidebarMenuItem>
                         <SidebarMenuButton
@@ -440,9 +494,10 @@ export function AppSidebar() {
             </SidebarContent>
 
             {/* 3. Footer (User Profile & Workspace) */}
-            <SidebarFooter className="border-t border-border/70 p-2">
+            <SidebarFooter className="border-t border-border/70 p-2 group-data-[collapsible=icon]:p-1.5 shrink-0">
                 <NavUser />
             </SidebarFooter>
+            <SidebarRail />
         </Sidebar>
     );
 }
