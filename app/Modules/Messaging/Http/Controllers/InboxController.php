@@ -126,10 +126,19 @@ class InboxController extends Controller
         }
 
         // Channel resolution
-        $channel = WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected')
-            ->orderBy('is_default', 'desc')
-            ->first();
+        $channel = null;
+        if (!empty($conversation->channel_phone_number_id)) {
+            $channel = WhatsAppChannel::where('organization_id', $org->id)
+                ->where('phone_number_id', $conversation->channel_phone_number_id)
+                ->first();
+        }
+
+        if (!$channel) {
+            $channel = WhatsAppChannel::where('organization_id', $org->id)
+                ->where('status', 'connected')
+                ->orderBy('is_default', 'desc')
+                ->first();
+        }
 
         // Determine message type and database content
         $msgType = 'text';
@@ -468,25 +477,30 @@ class InboxController extends Controller
         }
 
         // Create or find conversation
-        $conversation = Conversation::firstOrCreate(
-            [
+        $activePhoneId = $channel ? $channel->phone_number_id : $phoneId;
+
+        $conversation = Conversation::where('organization_id', $org->id)
+            ->where('contact_phone', $cleanPhone)
+            ->first();
+
+        if ($conversation) {
+            $conversation->update([
+                'contact_name' => $name,
+                'channel_phone_number_id' => $activePhoneId,
+                'last_message_at' => now(),
+                'window_expires_at' => now()->addHours(24),
+            ]);
+        } else {
+            $conversation = Conversation::create([
                 'organization_id' => $org->id,
                 'contact_phone' => $cleanPhone,
-            ],
-            [
                 'contact_name' => $name,
-                'channel_phone_number_id' => $phoneId,
+                'channel_phone_number_id' => $activePhoneId,
                 'status' => 'open',
                 'window_expires_at' => now()->addHours(24),
                 'last_message_at' => now(),
-            ]
-        );
-
-        $conversation->update([
-            'contact_name' => $name,
-            'last_message_at' => now(),
-            'window_expires_at' => now()->addHours(24),
-        ]);
+            ]);
+        }
 
         Message::create([
             'conversation_id' => $conversation->id,
