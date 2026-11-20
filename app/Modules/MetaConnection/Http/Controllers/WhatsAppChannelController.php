@@ -201,23 +201,56 @@ class WhatsAppChannelController extends Controller
 
                         if ($debugResp->successful()) {
                             $scopes = $debugResp->json('data.granular_scopes') ?? [];
+                            $allWabas = [];
                             foreach ($scopes as $scope) {
                                 if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
-                                    $wabaId = $scope['target_ids'][0] ?? $wabaId;
-                                    break;
+                                    $allWabas = array_merge($allWabas, $scope['target_ids'] ?? []);
                                 }
                             }
-                        }
+                            $allWabas = array_unique(array_filter($allWabas));
 
-                        if ($wabaId) {
-                            $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
-                            if ($phonesResp->successful()) {
-                                $phones = $phonesResp->json('data') ?? [];
-                                if (!empty($phones)) {
-                                    $phoneId = $phones[0]['id'];
-                                    $phoneNumber = $phones[0]['display_phone_number'] ?? $phoneNumber;
-                                    $name = $phones[0]['verified_name'] ?? $name;
-                                }
+                            // Sync ALL phone numbers across ALL shared WABAs (e.g. Tuoora, Sathwara, etc.)
+                            foreach ($allWabas as $targetWaba) {
+                                try {
+                                    $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$targetWaba}/phone_numbers");
+                                    if ($phonesResp->successful()) {
+                                        $metaPhones = $phonesResp->json('data') ?? [];
+                                        foreach ($metaPhones as $mp) {
+                                            $mpId = $mp['id'] ?? null;
+                                            $mpPhone = $mp['display_phone_number'] ?? '';
+                                            $mpName = $mp['verified_name'] ?? ('WhatsApp ' . substr(preg_replace('/\D/', '', $mpPhone), -4));
+                                            $mpQuality = $mp['quality_rating'] ?? 'GREEN';
+
+                                            if ($mpId) {
+                                                WhatsAppChannel::updateOrCreate(
+                                                    [
+                                                        'organization_id' => $orgId,
+                                                        'phone_number_id' => $mpId,
+                                                    ],
+                                                    [
+                                                        'name' => $mpName,
+                                                        'phone_number' => $mpPhone ?: $formattedPhone ?? '+91 9104081291',
+                                                        'waba_id' => $targetWaba,
+                                                        'access_token' => $userToken,
+                                                        'quality_rating' => $mpQuality,
+                                                        'messaging_limit' => 'TIER_1K',
+                                                        'status' => 'connected',
+                                                        'is_default' => false,
+                                                        'webhook_verified_at' => now(),
+                                                    ]
+                                                );
+
+                                                // If phoneId is not yet set or matches this phone, track it
+                                                if (!$phoneId || (isset($cleanPhone) && str_contains($mpPhone, $cleanPhone))) {
+                                                    $phoneId = $mpId;
+                                                    $phoneNumber = $mpPhone;
+                                                    $name = $mpName;
+                                                    $wabaId = $targetWaba;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (\Throwable $e) {}
                             }
                         }
                     }
@@ -465,6 +498,37 @@ class WhatsAppChannelController extends Controller
 
         if ($wabaId && $token) {
             $wabaPairs[$wabaId] = $token;
+        }
+
+        $appId = env('META_APP_ID', '1079349601748656');
+        $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
+
+        // Auto-discover all other WABAs (like Tuoora) linked to any stored access tokens
+        $uniqueTokens = array_unique(array_filter($channels->pluck('access_token')->toArray()));
+        if ($token) {
+            $uniqueTokens[] = $token;
+        }
+        $uniqueTokens = array_unique(array_filter($uniqueTokens));
+
+        foreach ($uniqueTokens as $tok) {
+            try {
+                $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
+                    'input_token' => $tok,
+                    'access_token' => "{$appId}|{$appSecret}",
+                ]);
+                if ($debugResp->successful()) {
+                    $scopes = $debugResp->json('data.granular_scopes') ?? [];
+                    foreach ($scopes as $scope) {
+                        if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
+                            foreach (($scope['target_ids'] ?? []) as $targetWaba) {
+                                if (!isset($wabaPairs[$targetWaba])) {
+                                    $wabaPairs[$targetWaba] = $tok;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
         }
 
         foreach ($wabaPairs as $wid => $tok) {
