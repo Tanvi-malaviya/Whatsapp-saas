@@ -31,7 +31,7 @@ class InboxController extends Controller
     protected function getRealThreads($org): array
     {
         $conversations = Conversation::where('organization_id', $org->id)
-            ->with(['messages' => fn ($q) => $q->orderBy('created_at', 'asc')])
+            ->with(['messages' => fn($q) => $q->orderBy('created_at', 'asc')])
             ->orderBy('last_message_at', 'desc')
             ->get();
 
@@ -54,7 +54,7 @@ class InboxController extends Controller
                 'stage' => $c->pipeline_stage ?: 'New',
                 'label' => $c->label ?: 'Prospect',
                 'status' => $c->status,
-                'messages' => $c->messages->map(fn ($m) => [
+                'messages' => $c->messages->map(fn($m) => [
                     'id' => (string) $m->id,
                     'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
                     'text' => $m->content,
@@ -109,7 +109,7 @@ class InboxController extends Controller
             ->where('id', $validated['conversation_id'])
             ->first();
 
-        if (! $conversation) {
+        if (!$conversation) {
             return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
         }
 
@@ -126,19 +126,10 @@ class InboxController extends Controller
         }
 
         // Channel resolution
-        $channel = null;
-        if (!empty($conversation->channel_phone_number_id)) {
-            $channel = WhatsAppChannel::where('organization_id', $org->id)
-                ->where('phone_number_id', $conversation->channel_phone_number_id)
-                ->first();
-        }
-
-        if (!$channel) {
-            $channel = WhatsAppChannel::where('organization_id', $org->id)
-                ->where('status', 'connected')
-                ->orderBy('is_default', 'desc')
-                ->first();
-        }
+        $channel = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->orderBy('is_default', 'desc')
+            ->first();
 
         // Determine message type and database content
         $msgType = 'text';
@@ -159,11 +150,11 @@ class InboxController extends Controller
                 });
             }
 
-            if (! $matchedTemplate) {
+            if (!$matchedTemplate) {
                 $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
             }
 
-            if (! $matchedTemplate && ! empty($allTemplates)) {
+            if (!$matchedTemplate && !empty($allTemplates)) {
                 $matchedTemplate = $allTemplates[0];
                 $templateName = $matchedTemplate['name'];
             }
@@ -198,7 +189,7 @@ class InboxController extends Controller
                 ],
             ];
 
-            if (! empty($tplData['components'])) {
+            if (!empty($tplData['components'])) {
                 $templatePayload['template']['components'] = $tplData['components'];
             }
 
@@ -226,7 +217,7 @@ class InboxController extends Controller
         $conversation->update(['last_message_at' => now()]);
 
         // Attempt live dispatch to Meta Cloud API if channel connected
-        if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
+        if ($channel && !empty($channel->access_token) && !empty($channel->phone_number_id)) {
             $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
             try {
                 if ($isTemplate && $templatePayload) {
@@ -251,7 +242,7 @@ class InboxController extends Controller
                     if ($mediaId) {
                         // 2. Dispatch real WhatsApp media message (document or image) to recipient phone
                         $mediaPayload = ['id' => $mediaId];
-                        if (! empty($messageText)) {
+                        if (!empty($messageText)) {
                             $mediaPayload['caption'] = $messageText;
                         }
                         if ($mediaType === 'document') {
@@ -340,7 +331,7 @@ class InboxController extends Controller
             ->where('id', $validated['conversation_id'])
             ->first();
 
-        if (! $conversation) {
+        if (!$conversation) {
             return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
         }
 
@@ -348,15 +339,15 @@ class InboxController extends Controller
             'contact_name' => trim($validated['contact_name']),
         ];
 
-        if (! empty($validated['status'])) {
+        if (!empty($validated['status'])) {
             $updateData['status'] = $validated['status'];
         }
 
-        if (! empty($validated['pipeline_stage'])) {
+        if (!empty($validated['pipeline_stage'])) {
             $updateData['pipeline_stage'] = $validated['pipeline_stage'];
         }
 
-        if (! empty($validated['label'])) {
+        if (!empty($validated['label'])) {
             $updateData['label'] = $validated['label'];
         }
 
@@ -405,14 +396,14 @@ class InboxController extends Controller
         $metaDelivered = false;
         $metaError = null;
 
-        if ($channel && ! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
+        if ($channel && !empty($channel->access_token) && !empty($channel->phone_number_id)) {
             $digitsPhone = preg_replace('/\D/', '', $cleanPhone);
             try {
                 if ($type === 'template') {
                     $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
                     $allTemplates = $campaignCtrl->getMetaTemplates($channel);
                     $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
-                    
+
                     if (!$matchedTemplate && !empty($allTemplates)) {
                         $matchedTemplate = $allTemplates[0];
                         $templateName = $matchedTemplate['name'];
@@ -444,7 +435,7 @@ class InboxController extends Controller
                         ],
                     ];
 
-                    if (! empty($tplData['components'])) {
+                    if (!empty($tplData['components'])) {
                         $payload['template']['components'] = $tplData['components'];
                     }
 
@@ -477,30 +468,25 @@ class InboxController extends Controller
         }
 
         // Create or find conversation
-        $activePhoneId = $channel ? $channel->phone_number_id : $phoneId;
-
-        $conversation = Conversation::where('organization_id', $org->id)
-            ->where('contact_phone', $cleanPhone)
-            ->first();
-
-        if ($conversation) {
-            $conversation->update([
-                'contact_name' => $name,
-                'channel_phone_number_id' => $activePhoneId,
-                'last_message_at' => now(),
-                'window_expires_at' => now()->addHours(24),
-            ]);
-        } else {
-            $conversation = Conversation::create([
+        $conversation = Conversation::firstOrCreate(
+            [
                 'organization_id' => $org->id,
                 'contact_phone' => $cleanPhone,
+            ],
+            [
                 'contact_name' => $name,
-                'channel_phone_number_id' => $activePhoneId,
+                'channel_phone_number_id' => $phoneId,
                 'status' => 'open',
                 'window_expires_at' => now()->addHours(24),
                 'last_message_at' => now(),
-            ]);
-        }
+            ]
+        );
+
+        $conversation->update([
+            'contact_name' => $name,
+            'last_message_at' => now(),
+            'window_expires_at' => now()->addHours(24),
+        ]);
 
         Message::create([
             'conversation_id' => $conversation->id,
@@ -517,8 +503,8 @@ class InboxController extends Controller
         return response()->json([
             'success' => true,
             'conversation_id' => (string) $conversation->id,
-            'message' => $metaDelivered 
-                ? "Message dispatched to {$cleanPhone} and chat opened!" 
+            'message' => $metaDelivered
+                ? "Message dispatched to {$cleanPhone} and chat opened!"
                 : "Chat thread created for {$cleanPhone}." . ($metaError ? " (Meta notice: {$metaError})" : ''),
             'meta_delivered' => $metaDelivered,
             'meta_error' => $metaError,
@@ -604,7 +590,7 @@ class InboxController extends Controller
     {
         $org = $this->resolveOrg($request);
         $conversations = Conversation::where('organization_id', $org->id)
-            ->with(['messages' => fn ($q) => $q->orderBy('created_at', 'asc')])
+            ->with(['messages' => fn($q) => $q->orderBy('created_at', 'asc')])
             ->orderByDesc('updated_at')
             ->get();
 
@@ -633,7 +619,7 @@ class InboxController extends Controller
                 'duration' => $duration,
                 'closedAt' => $c->updated_at ? $c->updated_at->timezone('Asia/Kolkata')->format('M d, h:i A') : 'Recently',
                 'summary' => $lastMsg ? $lastMsg->content : 'No messages recorded',
-                'transcript' => $msgs->map(fn ($m) => [
+                'transcript' => $msgs->map(fn($m) => [
                     'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
                     'text' => $m->content,
                     'time' => $m->created_at ? $m->created_at->timezone('Asia/Kolkata')->format('h:i A') : '',
@@ -650,7 +636,7 @@ class InboxController extends Controller
     {
         $org = $this->resolveOrg($request);
         $conversations = Conversation::where('organization_id', $org->id)
-            ->with(['messages' => fn ($q) => $q->latest()->take(1)])
+            ->with(['messages' => fn($q) => $q->latest()->take(1)])
             ->orderByDesc('updated_at')
             ->get();
 
@@ -689,7 +675,7 @@ class InboxController extends Controller
             ->where('id', $validated['conversation_id'])
             ->first();
 
-        if (! $conversation) {
+        if (!$conversation) {
             return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
         }
 
@@ -714,7 +700,7 @@ class InboxController extends Controller
 
         // 1. Add Header component ONLY if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
         if ($headerFormatUpper === 'VIDEO') {
-            if (! empty($matchedHeaderMediaId)) {
+            if (!empty($matchedHeaderMediaId)) {
                 $components[] = [
                     'type' => 'header',
                     'parameters' => [
@@ -776,7 +762,7 @@ class InboxController extends Controller
 
         $renderedText = $templateBodyTemplate;
 
-        if (! empty($variableIndices)) {
+        if (!empty($variableIndices)) {
             $bodyParams = [];
             foreach ($variableIndices as $idx) {
                 $val = match ((int) $idx) {
@@ -811,7 +797,7 @@ class InboxController extends Controller
         }
 
         $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
-        $finalContent = ! empty($renderedText)
+        $finalContent = !empty($renderedText)
             ? "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . $renderedText
             : "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . "Template dispatched to {$contactName}.";
 

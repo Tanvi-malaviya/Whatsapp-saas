@@ -169,10 +169,63 @@ class WhatsAppChannelController extends Controller
         $phoneNumber = trim($request->input('phone_number', ''));
         $name = trim($request->input('name', ''));
         $phoneId = $request->input('phone_number_id');
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '934553439246885');
+        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '1600590645151650');
         $accessToken = $request->input('access_token') ?: ($existing?->access_token ?: '');
+        $code = $request->input('code');
 
-        // If phone_number_id is passed directly from Meta Embedded Signup popup, fetch details from Graph API
+        // Exchange Meta OAuth code if provided from Embedded Signup popup
+        if ($code) {
+            $appId = env('META_APP_ID', '1079349601748656');
+            $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
+            $origin = $request->getSchemeAndHttpHost();
+            $redirectUri = "{$origin}/whatsapp/connect";
+
+            try {
+                $tokenResp = Http::get('https://graph.facebook.com/v22.0/oauth/access_token', [
+                    'client_id' => $appId,
+                    'client_secret' => $appSecret,
+                    'redirect_uri' => $redirectUri,
+                    'code' => $code,
+                ]);
+
+                if ($tokenResp->successful()) {
+                    $userToken = $tokenResp->json('access_token');
+                    if ($userToken) {
+                        $accessToken = $userToken;
+
+                        // Debug token to find the shared WABA ID
+                        $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
+                            'input_token' => $userToken,
+                            'access_token' => "{$appId}|{$appSecret}",
+                        ]);
+
+                        if ($debugResp->successful()) {
+                            $scopes = $debugResp->json('data.granular_scopes') ?? [];
+                            foreach ($scopes as $scope) {
+                                if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
+                                    $wabaId = $scope['target_ids'][0] ?? $wabaId;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if ($wabaId) {
+                            $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
+                            if ($phonesResp->successful()) {
+                                $phones = $phonesResp->json('data') ?? [];
+                                if (!empty($phones)) {
+                                    $phoneId = $phones[0]['id'];
+                                    $phoneNumber = $phones[0]['display_phone_number'] ?? $phoneNumber;
+                                    $name = $phones[0]['verified_name'] ?? $name;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // If phone_number_id is passed directly, fetch details from Graph API
         if ($phoneId && $accessToken && empty($phoneNumber)) {
             try {
                 $pResp = Http::withToken($accessToken)
@@ -190,20 +243,8 @@ class WhatsAppChannelController extends Controller
         }
 
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
-        if (strlen($cleanPhone) < 10 && empty($phoneId)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Please enter a valid WhatsApp mobile number with country code.',
-            ], 422);
-        }
 
-        $formattedPhone = !empty($phoneNumber)
-            ? (str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone)
-            : '+91 9104081291';
-        $name = $name ?: 'WhatsApp ' . substr($cleanPhone ?: '1291', -4);
-
-        // 1. Automatic 1-Click Meta Auto-Discovery:
-        // Automatically query Meta Graph API using WABA ID to find the matching Phone Number ID
+        // Auto-discover phone number ID from WABA if not yet known
         if (!$phoneId && $accessToken && $wabaId) {
             try {
                 $metaPhonesResp = Http::withToken($accessToken)
@@ -214,11 +255,13 @@ class WhatsAppChannelController extends Controller
                     foreach ($metaPhones as $mp) {
                         $mpClean = preg_replace('/\D/', '', $mp['display_phone_number'] ?? '');
                         if (
+                            empty($cleanPhone) ||
                             $mpClean === $cleanPhone ||
                             str_ends_with($cleanPhone, substr($mpClean, -10)) ||
                             str_ends_with($mpClean, substr($cleanPhone, -10))
                         ) {
                             $phoneId = $mp['id'];
+                            $phoneNumber = $mp['display_phone_number'] ?? $phoneNumber;
                             if (!empty($mp['verified_name'])) {
                                 $name = $mp['verified_name'];
                             }
@@ -226,15 +269,20 @@ class WhatsAppChannelController extends Controller
                         }
                     }
                 }
-            } catch (\Throwable $e) {
-                // Continue to check fallback
-            }
+            } catch (\Throwable $e) {}
         }
 
-        // 2. Validate if Phone ID was found on Meta or fallback to unique ID
-        if (!$phoneId) {
-            $phoneId = 'phone_' . ($cleanPhone ?: '9104081291');
+        if (!$phoneId || str_starts_with($phoneId, 'phone_')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not automatically retrieve the 15-digit Phone Number ID from Meta. Please enter credentials manually.',
+            ], 422);
         }
+
+        $formattedPhone = !empty($phoneNumber)
+            ? (str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone)
+            : '+91 9104081291';
+        $name = $name ?: 'WhatsApp ' . substr($cleanPhone ?: '1291', -4);
 
         $isDefault = WhatsAppChannel::where('organization_id', $orgId)->count() === 0;
 
@@ -257,6 +305,11 @@ class WhatsAppChannelController extends Controller
                 'webhook_verified_at' => now(),
             ]
         );
+
+        // Clean up any remaining dummy placeholder channels
+        WhatsAppChannel::where('organization_id', $orgId)
+            ->where('phone_number_id', 'like', 'phone_%')
+            ->delete();
 
         // Auto-sync all other numbers that belong to this WABA on Meta
         if ($accessToken && $wabaId) {

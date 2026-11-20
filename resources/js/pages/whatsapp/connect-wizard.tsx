@@ -263,11 +263,12 @@ export default function WhatsAppConnectWizard({
 
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (data.type === 'WA_EMBEDDED_SIGNUP' || data.event === 'FINISH' || data.phone_number_id) {
+                if (data.type === 'WA_EMBEDDED_SIGNUP' || data.event === 'FINISH' || data.phone_number_id || data.code || data.data?.code) {
                     const phoneId = data.data?.phone_number_id || data.phone_number_id;
                     const customWaba = data.data?.waba_id || data.waba_id;
+                    const code = data.data?.code || data.code;
                     setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
-                    handleDirectAutoConnect(phoneId, customWaba);
+                    handleDirectAutoConnect(phoneId, customWaba, code);
                 }
             } catch (e) {
                 // Ignore parsing errors for other message events
@@ -279,7 +280,7 @@ export default function WhatsAppConnectWizard({
     }, [phoneDigits, countryCode, channelName]);
 
     // Automatic connection handler when Meta popup finishes or manual submit
-    const handleDirectAutoConnect = async (customPhoneId?: string, customWabaId?: string) => {
+    const handleDirectAutoConnect = async (customPhoneId?: string, customWabaId?: string, code?: string) => {
         setIsSubmitting(true);
         setErrorMsg(null);
         try {
@@ -291,10 +292,11 @@ export default function WhatsAppConnectWizard({
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
                 },
                 body: JSON.stringify({
+                    code: code || '',
                     name: channelName || `${currentOrg.name} WhatsApp`,
                     phone_number: `${countryCode} ${phoneDigits.replace(/\D/g, '')}`,
                     phone_number_id: customPhoneId || phoneId || '',
-                    waba_id: customWabaId || wabaId || '934553439246885',
+                    waba_id: customWabaId || wabaId || '',
                     access_token: accessToken || existingChannel?.access_token || '',
                     setup_method: 'coexistence',
                 }),

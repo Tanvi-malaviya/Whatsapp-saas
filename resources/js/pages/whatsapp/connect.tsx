@@ -102,6 +102,71 @@ export default function WhatsAppConnect({
         }
     }, []);
 
+    // Listen to Meta Embedded Signup finish events in parent window
+    useEffect(() => {
+        const handleMetaEmbeddedSignupMsg = async (event: MessageEvent) => {
+            const data = event.data;
+            if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
+                const code = data.data?.code;
+                const phoneId = data.data?.phone_number_id;
+                const wabaId = data.data?.waba_id;
+
+                setIsSyncing(true);
+                setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
+
+                try {
+                    const res = await fetch('/channels/quick-connect', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                        },
+                        body: JSON.stringify({
+                            code,
+                            phone_number_id: phoneId,
+                            waba_id: wabaId,
+                        }),
+                    });
+
+                    const json = await res.json();
+                    if (json.success) {
+                        setSyncNotice('WhatsApp connected successfully!');
+                        router.reload();
+                    } else {
+                        setSyncNotice(json.message || 'Could not auto-connect');
+                    }
+                } catch (e: any) {
+                    setSyncNotice('Auto-connect error: ' + e.message);
+                } finally {
+                    setIsSyncing(false);
+                }
+            }
+        };
+
+        window.addEventListener('message', handleMetaEmbeddedSignupMsg);
+        return () => window.removeEventListener('message', handleMetaEmbeddedSignupMsg);
+    }, []);
+
+    const launchDirectMetaWizard = () => {
+        const appId = '1079349601748656';
+        const configId = '1835889181059188';
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://whatsapp.sathwarainfotech.cloud';
+        const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
+
+        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${configId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
+
+        const w = 650;
+        const h = 750;
+        const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
+        const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
+
+        window.open(
+            onboardUrl,
+            'MetaWhatsAppOnboarding',
+            `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`
+        );
+    };
+
     const handleAddNewChannel = () => {
         setIsEditing(false);
         const existing = channels[0];
@@ -274,15 +339,15 @@ export default function WhatsAppConnect({
                         </Button>
 
                         <Button
-                            asChild
+                            type="button"
                             variant="secondary"
                             size="sm"
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1 border border-border/80"
+                            onClick={launchDirectMetaWizard}
+                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1 border border-border/80 shadow-2xs hover:bg-muted"
+                            title="1-Click Connect WhatsApp Number via Official Meta Wizard"
                         >
-                            <Link href="/whatsapp/connect/setup" title="Open Meta Embedded Signup Walkthrough">
-                                <Sparkles className="size-3.5 text-primary" />
-                                <span>Meta Wizard</span>
-                            </Link>
+                            <Sparkles className="size-3.5 text-primary" />
+                            <span>Meta Wizard</span>
                         </Button>
                     </div>
                 </div>
