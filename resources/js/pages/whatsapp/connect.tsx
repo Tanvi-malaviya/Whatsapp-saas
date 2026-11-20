@@ -223,6 +223,7 @@ export default function WhatsAppConnect({
                         config_id: configId,
                         response_type: 'code',
                         override_default_response_type: true,
+                        auth_type: 'rerequest',
                         extras: {
                             featureType: 'whatsapp_business_app_onboarding',
                             sessionInfoVersion: '3',
@@ -256,10 +257,10 @@ export default function WhatsAppConnect({
         const existing = channels[0];
         setForm({
             id: '',
-            name: currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'Sathwara InfoTech WhatsApp',
-            phone_number: '+91 91040 81291',
+            name: '',
+            phone_number: '',
             phone_number_id: '',
-            waba_id: existing?.waba_id || '934553439246885',
+            waba_id: '',
             access_token: existing?.access_token || '',
             app_id: existing?.app_id || '1079349601748656',
             app_secret: existing?.app_secret || '',
