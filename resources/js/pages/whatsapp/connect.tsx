@@ -84,13 +84,14 @@ export default function WhatsAppConnect({
             const params = new URLSearchParams(window.location.search);
             const phoneId = params.get('phone_number_id');
             const wabaId = params.get('waba_id');
-            if (phoneId || wabaId) {
+            const code = params.get('code');
+            if (phoneId || wabaId || code) {
                 try {
                     window.opener.postMessage(
                         {
                             type: 'WA_EMBEDDED_SIGNUP',
                             event: 'FINISH',
-                            data: { phone_number_id: phoneId, waba_id: wabaId },
+                            data: { phone_number_id: phoneId, waba_id: wabaId, code: code },
                         },
                         '*'
                     );

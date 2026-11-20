@@ -28,35 +28,40 @@ class WhatsAppChannelController extends Controller
         $orgId = $this->resolveTenantId($request);
 
         // Automatically connect if redirected from Meta Embedded Signup popup
-        if ($request->has('phone_number_id') || ($request->has('phone_number') && $request->has('waba_id'))) {
+        if ($request->has('phone_number_id') || ($request->has('phone_number') && $request->has('waba_id')) || $request->has('code')) {
             $phoneId = $request->query('phone_number_id');
             $wabaId = $request->query('waba_id', '934553439246885');
             $phoneNumber = $request->query('phone_number', '+91 91040 81291');
             $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
             $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-            $accessToken = $existing?->access_token ?: '';
+            $accessToken = $existing?->access_token ?: env('META_WHATSAPP_TOKEN', '');
 
-            if (!$phoneId) {
-                $phoneId = 'phone_' . ($cleanPhone ?: '9104081291');
+            if (!$phoneId && $cleanPhone) {
+                $phoneId = 'phone_' . $cleanPhone;
             }
 
-            WhatsAppChannel::updateOrCreate(
-                [
-                    'organization_id' => $orgId,
-                    'phone_number_id' => $phoneId,
-                ],
-                [
-                    'name' => 'Sathwara InfoTech WhatsApp',
-                    'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
-                    'waba_id' => $wabaId,
-                    'access_token' => $accessToken,
-                    'quality_rating' => 'GREEN',
-                    'messaging_limit' => 'TIER_1K',
-                    'status' => 'connected',
-                    'is_default' => false,
-                    'webhook_verified_at' => now(),
-                ]
-            );
+            if ($phoneId) {
+                WhatsAppChannel::updateOrCreate(
+                    [
+                        'organization_id' => $orgId,
+                        'phone_number_id' => $phoneId,
+                    ],
+                    [
+                        'name' => 'Sathwara InfoTech WhatsApp',
+                        'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
+                        'waba_id' => $wabaId,
+                        'access_token' => $accessToken,
+                        'quality_rating' => 'GREEN',
+                        'messaging_limit' => 'TIER_1K',
+                        'status' => 'connected',
+                        'is_default' => false,
+                        'webhook_verified_at' => now(),
+                    ]
+                );
+            }
+
+            // Automatically sync all registered numbers from Meta for this WABA
+            $this->autoSyncFromMeta($orgId, $wabaId, $accessToken);
         }
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)
@@ -95,7 +100,7 @@ class WhatsAppChannelController extends Controller
             'defaultWebhookUrl' => url('/webhooks/meta'),
             'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
             'metaAppId' => env('META_APP_ID', '1079349601748656'),
-            'metaConfigId' => env('META_CONFIG_ID', '1857245935612505'),
+            'metaConfigId' => env('META_CONFIG_ID', '1835889181059188'),
         ]);
     }
 
@@ -196,6 +201,11 @@ class WhatsAppChannelController extends Controller
             ]
         );
 
+        // Auto-sync all other numbers that belong to this WABA on Meta
+        if ($accessToken && $wabaId) {
+            $this->autoSyncFromMeta($orgId, $wabaId, $accessToken);
+        }
+
         return response()->json([
             'success' => true,
             'message' => "WhatsApp number {$channel->phone_number} successfully connected to Meta Cloud API!",
@@ -278,8 +288,8 @@ class WhatsAppChannelController extends Controller
         $orgId = $this->resolveTenantId($request);
         $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
 
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '934553439246885');
-        $token = $request->input('access_token') ?: ($existing?->access_token ?: '');
+        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: env('META_WABA_ID', '934553439246885'));
+        $token = $request->input('access_token') ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
 
         if (!$token || !$wabaId) {
             return response()->json([
@@ -289,14 +299,41 @@ class WhatsAppChannelController extends Controller
         }
 
         try {
+            $added = $this->autoSyncFromMeta($orgId, $wabaId, $token);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully synced {$added} WhatsApp number(s) from Meta!",
+                'count' => $added,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sync failed: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Internal helper to query Meta Graph API for all registered phone numbers on a WABA
+     */
+    private function autoSyncFromMeta(string $orgId, ?string $wabaId = null, ?string $token = null): int
+    {
+        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
+        $wabaId = $wabaId ?: ($existing?->waba_id ?: env('META_WABA_ID', '934553439246885'));
+        $token = $token ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
+
+        if (!$token || !$wabaId) {
+            return 0;
+        }
+
+        try {
             $response = Http::withToken($token)
+                ->timeout(5)
                 ->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
 
             if (!$response->successful()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Meta API error: ' . ($response->json('error.message') ?? 'Could not fetch numbers'),
-                ], 422);
+                return 0;
             }
 
             $metaPhones = $response->json('data') ?? [];
@@ -329,16 +366,9 @@ class WhatsAppChannelController extends Controller
                 }
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => "Successfully synced {$added} WhatsApp number(s) from Meta!",
-                'count' => $added,
-            ]);
+            return $added;
         } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Sync failed: ' . $e->getMessage(),
-            ], 500);
+            return 0;
         }
     }
 
