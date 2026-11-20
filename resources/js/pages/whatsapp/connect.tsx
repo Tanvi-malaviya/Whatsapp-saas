@@ -81,6 +81,29 @@ export default function WhatsAppConnect({
 
     const popupRef = useRef<Window | null>(null);
 
+    // Initialize official Facebook JavaScript SDK for Embedded Signup
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            (window as any).fbAsyncInit = function () {
+                (window as any).FB.init({
+                    appId: '1079349601748656',
+                    cookie: true,
+                    xfbml: true,
+                    version: 'v22.0',
+                });
+            };
+
+            if (!document.getElementById('facebook-jssdk')) {
+                const js = document.createElement('script');
+                js.id = 'facebook-jssdk';
+                js.src = 'https://connect.facebook.net/en_US/sdk.js';
+                js.async = true;
+                js.defer = true;
+                document.body.appendChild(js);
+            }
+        }
+    }, []);
+
     // If opened in a popup from Meta Embedded Signup redirect, notify opener
     useEffect(() => {
         if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
@@ -103,6 +126,34 @@ export default function WhatsAppConnect({
             }
         }
     }, []);
+
+    const processAutoConnect = async (payload: { code?: string; phone_number_id?: string; waba_id?: string }) => {
+        setIsSyncing(true);
+        setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
+
+        try {
+            const res = await fetch('/channels/quick-connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const json = await res.json();
+            if (json.success) {
+                setSyncNotice(json.message || 'WhatsApp connected successfully!');
+                router.reload();
+            } else {
+                setSyncNotice(json.message || 'Could not auto-connect');
+            }
+        } catch (e: any) {
+            setSyncNotice('Auto-connect error: ' + e.message);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     // Listen to Meta Embedded Signup finish events in parent window
     useEffect(() => {
@@ -144,35 +195,11 @@ export default function WhatsAppConnect({
             const phoneId = payload.phone_number_id;
             const wabaId = payload.waba_id || payload.messaging_account_id || (payload.messaging_account_ids ? payload.messaging_account_ids[0] : null);
 
-            setIsSyncing(true);
-            setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
-
-            try {
-                const res = await fetch('/channels/quick-connect', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                    },
-                    body: JSON.stringify({
-                        code,
-                        phone_number_id: phoneId,
-                        waba_id: wabaId,
-                    }),
-                });
-
-                const json = await res.json();
-                if (json.success) {
-                    setSyncNotice(json.message || 'WhatsApp connected successfully!');
-                    router.reload();
-                } else {
-                    setSyncNotice(json.message || 'Could not auto-connect');
-                }
-            } catch (e: any) {
-                setSyncNotice('Auto-connect error: ' + e.message);
-            } finally {
-                setIsSyncing(false);
-            }
+            processAutoConnect({
+                code,
+                phone_number_id: phoneId,
+                waba_id: wabaId,
+            });
         };
 
         window.addEventListener('message', handleMetaEmbeddedSignupMsg);
@@ -182,6 +209,31 @@ export default function WhatsAppConnect({
     const launchDirectMetaWizard = () => {
         const appId = '1079349601748656';
         const configId = '1835889181059188';
+
+        // Prefer official Facebook JS SDK FB.login for rock-solid popup handling
+        if (typeof window !== 'undefined' && (window as any).FB) {
+            try {
+                (window as any).FB.login(
+                    function (response: any) {
+                        if (response.authResponse && response.authResponse.code) {
+                            processAutoConnect({ code: response.authResponse.code });
+                        }
+                    },
+                    {
+                        config_id: configId,
+                        response_type: 'code',
+                        override_default_response_type: true,
+                        extras: {
+                            featureType: 'whatsapp_business_app_onboarding',
+                            sessionInfoVersion: '3',
+                        },
+                    }
+                );
+                return;
+            } catch (e) {}
+        }
+
+        // Fallback to direct popup window URL
         const origin = typeof window !== 'undefined' ? window.location.origin : 'https://whatsapp.sathwarainfotech.cloud';
         const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
 
