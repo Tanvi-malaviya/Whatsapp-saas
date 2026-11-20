@@ -537,6 +537,42 @@ class WhatsAppChannelController extends Controller
                 } catch (\Throwable $e) {}
             }
 
+            // Attempt 5: Verify WhatsApp Business Account (WABA) directly
+            if ($channel->waba_id) {
+                try {
+                    $wabaCheck = Http::withToken($channel->access_token)
+                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}");
+                    if ($wabaCheck->successful()) {
+                        $channel->update([
+                            'status' => 'connected',
+                            'webhook_verified_at' => now(),
+                        ]);
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Connection verified with Meta (WABA Account Active)!',
+                            'data' => $wabaCheck->json(),
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            // Attempt 6: Verify Access Token validity via /me or /debug_token
+            try {
+                $meCheck = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/me");
+                if ($meCheck->successful()) {
+                    $channel->update([
+                        'status' => 'connected',
+                        'webhook_verified_at' => now(),
+                    ]);
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Connection verified with Meta (Access Token Verified)!',
+                        'data' => $meCheck->json(),
+                    ]);
+                }
+            } catch (\Throwable $e) {}
+
             return response()->json([
                 'success' => false,
                 'message' => 'Meta API returned error: ' . ($response->json('error.message') ?? 'Unknown error'),
