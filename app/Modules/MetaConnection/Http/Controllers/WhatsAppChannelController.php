@@ -74,8 +74,8 @@ class WhatsAppChannelController extends Controller
                                             'phone_number_id' => $p['id'],
                                         ],
                                         [
-                                            'name' => $p['verified_name'] ?? 'Sathwara InfoTech',
-                                            'phone_number' => $p['display_phone_number'] ?? '+91 91040 81291',
+                                            'name' => $p['verified_name'] ?? 'WhatsApp Channel',
+                                            'phone_number' => $p['display_phone_number'] ?? '',
                                             'waba_id' => $wabaId,
                                             'access_token' => $userToken,
                                             'quality_rating' => $p['quality_rating'] ?? 'GREEN',
@@ -103,8 +103,8 @@ class WhatsAppChannelController extends Controller
                     'phone_number_id' => $phoneId,
                 ],
                 [
-                    'name' => 'Sathwara InfoTech',
-                    'phone_number' => $phoneNumber ?: '+91 91040 81291',
+                    'name' => $request->query('name') ?: 'WhatsApp Channel',
+                    'phone_number' => $phoneNumber ?: '',
                     'waba_id' => $wabaId ?: ($existing?->waba_id ?: '1600590645151650'),
                     'access_token' => $accessToken,
                     'quality_rating' => 'GREEN',
@@ -230,7 +230,7 @@ class WhatsAppChannelController extends Controller
                                                     ],
                                                     [
                                                         'name' => $mpName,
-                                                        'phone_number' => $mpPhone ?: $formattedPhone ?? '+91 9104081291',
+                                                        'phone_number' => $mpPhone,
                                                         'waba_id' => $targetWaba,
                                                         'access_token' => $userToken,
                                                         'quality_rating' => $mpQuality,
@@ -242,7 +242,7 @@ class WhatsAppChannelController extends Controller
                                                 );
 
                                                 // If phoneId is not yet set or matches this phone, track it
-                                                if (!$phoneId || (isset($cleanPhone) && str_contains($mpPhone, $cleanPhone))) {
+                                                if (!$phoneId || (!str_contains($mpPhone, '9104081291') && str_contains($phoneNumber, '9104081291'))) {
                                                     $phoneId = $mpId;
                                                     $phoneNumber = $mpPhone;
                                                     $name = $mpName;
@@ -315,8 +315,8 @@ class WhatsAppChannelController extends Controller
 
         $formattedPhone = !empty($phoneNumber)
             ? (str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone)
-            : '+91 9104081291';
-        $name = $name ?: 'WhatsApp ' . substr($cleanPhone ?: '1291', -4);
+            : ($cleanPhone ? ('+' . $cleanPhone) : '');
+        $name = $name ?: ('WhatsApp ' . ($cleanPhone ? substr($cleanPhone, -4) : 'Channel'));
 
         $isDefault = WhatsAppChannel::where('organization_id', $orgId)->count() === 0;
 
