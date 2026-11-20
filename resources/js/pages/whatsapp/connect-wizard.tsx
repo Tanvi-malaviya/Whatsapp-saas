@@ -326,7 +326,7 @@ export default function WhatsAppConnectWizard({
         const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8000';
         const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
 
-        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
+        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&auth_type=rerequest&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
 
         const w = 650;
         const h = 750;
@@ -432,6 +432,19 @@ export default function WhatsAppConnectWizard({
                 {/* ================= STEP 2: COEXISTENCE INTERACTIVE GUIDE ================= */}
                 {step === 2 && (
                     <div className="space-y-3">
+                        {/* Previously Linked Tip Notice */}
+                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 flex items-start gap-2.5 text-xs text-foreground">
+                            <Info className="size-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5">
+                                <span className="font-semibold text-blue-700 dark:text-blue-300">
+                                    Meta Prompt Tip ("You've previously linked Sathwara InfoTech"):
+                                </span>
+                                <p className="text-muted-foreground leading-relaxed">
+                                    If Facebook shows <em>"Would you like to continue with your previous settings?"</em>, click <strong>"Edit settings"</strong> to select or add a new WhatsApp number. Or use the <strong>Direct Connect Box</strong> below.
+                                </p>
+                            </div>
+                        </div>
+
                         <Card className="border border-border/80 bg-card rounded-xl shadow-2xs overflow-hidden">
                             {/* Compact Subheader with Step Progress Indicator */}
                             <div className="px-3.5 py-2 border-b border-border/60 bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
