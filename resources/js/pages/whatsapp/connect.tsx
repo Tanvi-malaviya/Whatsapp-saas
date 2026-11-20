@@ -65,6 +65,7 @@ export default function WhatsAppConnect({
     const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
     const emptyForm = {
+        id: '',
         name: '',
         phone_number: '',
         phone_number_id: '',
@@ -105,6 +106,7 @@ export default function WhatsAppConnect({
         setIsEditing(false);
         const existing = channels[0];
         setForm({
+            id: '',
             name: currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'Sathwara InfoTech WhatsApp',
             phone_number: '+91 91040 81291',
             phone_number_id: '',
@@ -119,6 +121,7 @@ export default function WhatsAppConnect({
     const handleEditChannel = (ch: Channel) => {
         setIsEditing(true);
         setForm({
+            id: ch.id,
             name: ch.name || '',
             phone_number: ch.phone_number || '',
             phone_number_id: ch.phone_number_id || '',

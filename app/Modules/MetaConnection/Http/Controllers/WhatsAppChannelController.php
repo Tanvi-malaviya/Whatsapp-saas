@@ -216,7 +216,14 @@ class WhatsAppChannelController extends Controller
     public function store(Request $request): mixed
     {
         $orgId = $this->resolveTenantId($request);
-        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
+        $channelId = $request->input('id');
+
+        $channel = null;
+        if ($channelId) {
+            $channel = WhatsAppChannel::where('organization_id', $orgId)->find($channelId);
+        }
+
+        $existing = $channel ?: WhatsAppChannel::where('organization_id', $orgId)->first();
 
         $phoneNumber = trim($request->input('phone_number', ''));
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
@@ -233,9 +240,7 @@ class WhatsAppChannelController extends Controller
         if ($accessToken && $phoneId && !str_starts_with($phoneId, 'phone_')) {
             try {
                 $response = Http::withToken($accessToken)
-                    ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
-                        'fields' => 'verified_name,code_verification_status,display_phone_number,quality_rating',
-                    ]);
+                    ->get("https://graph.facebook.com/v22.0/{$phoneId}");
 
                 if ($response->successful()) {
                     $data = $response->json();
@@ -249,17 +254,11 @@ class WhatsAppChannelController extends Controller
             }
         }
 
-        $existingCount = WhatsAppChannel::where('organization_id', $orgId)->count();
-        $isDefault = $existingCount === 0;
-
-        $channel = WhatsAppChannel::updateOrCreate(
-            [
-                'organization_id' => $orgId,
-                'phone_number_id' => $phoneId,
-            ],
-            [
+        if ($channel) {
+            $channel->update([
                 'name' => $name,
                 'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
+                'phone_number_id' => $phoneId,
                 'waba_id' => $wabaId,
                 'access_token' => $accessToken,
                 'app_id' => $request->input('app_id', $existing?->app_id),
@@ -267,10 +266,32 @@ class WhatsAppChannelController extends Controller
                 'quality_rating' => $quality,
                 'messaging_limit' => $limit,
                 'status' => 'connected',
-                'is_default' => $isDefault,
                 'webhook_verified_at' => $verifiedAt,
-            ]
-        );
+            ]);
+        } else {
+            $existingCount = WhatsAppChannel::where('organization_id', $orgId)->count();
+            $isDefault = $existingCount === 0;
+
+            $channel = WhatsAppChannel::updateOrCreate(
+                [
+                    'organization_id' => $orgId,
+                    'phone_number_id' => $phoneId,
+                ],
+                [
+                    'name' => $name,
+                    'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
+                    'waba_id' => $wabaId,
+                    'access_token' => $accessToken,
+                    'app_id' => $request->input('app_id', $existing?->app_id),
+                    'app_secret' => $request->input('app_secret', $existing?->app_secret),
+                    'quality_rating' => $quality,
+                    'messaging_limit' => $limit,
+                    'status' => 'connected',
+                    'is_default' => $isDefault,
+                    'webhook_verified_at' => $verifiedAt,
+                ]
+            );
+        }
 
         if ($request->wantsJson()) {
             return response()->json([
@@ -451,23 +472,69 @@ class WhatsAppChannelController extends Controller
         }
 
         try {
+            // Attempt 1: Full fields
             $response = Http::withToken($channel->access_token)
                 ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
                     'fields' => 'verified_name,code_verification_status,display_phone_number,quality_rating',
                 ]);
 
+            // Attempt 2: Basic fields fallback (if verified_name is not permitted e.g. test numbers or messaging tokens)
+            if (!$response->successful()) {
+                $response = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
+                        'fields' => 'display_phone_number,quality_rating',
+                    ]);
+            }
+
+            // Attempt 3: Bare node query
+            if (!$response->successful()) {
+                $response = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}");
+            }
+
             if ($response->successful()) {
-                $channel->update([
+                $data = $response->json();
+                $updateData = [
                     'status' => 'connected',
-                    'quality_rating' => $response->json('quality_rating', 'GREEN'),
+                    'quality_rating' => $data['quality_rating'] ?? 'GREEN',
                     'webhook_verified_at' => now(),
-                ]);
+                ];
+                if (!empty($data['display_phone_number'])) {
+                    $updateData['phone_number'] = $data['display_phone_number'];
+                }
+                $channel->update($updateData);
 
                 return response()->json([
                     'success' => true,
                     'message' => 'Connection verified with Meta!',
-                    'data' => $response->json(),
+                    'data' => $data,
                 ]);
+            }
+
+            // Attempt 4: Query via WABA phone numbers list
+            if ($channel->waba_id) {
+                try {
+                    $wabaResp = Http::withToken($channel->access_token)
+                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/phone_numbers");
+                    if ($wabaResp->successful()) {
+                        $phones = $wabaResp->json('data') ?? [];
+                        foreach ($phones as $p) {
+                            if (($p['id'] ?? '') === $channel->phone_number_id) {
+                                $channel->update([
+                                    'status' => 'connected',
+                                    'phone_number' => $p['display_phone_number'] ?? $channel->phone_number,
+                                    'quality_rating' => $p['quality_rating'] ?? 'GREEN',
+                                    'webhook_verified_at' => now(),
+                                ]);
+                                return response()->json([
+                                    'success' => true,
+                                    'message' => 'Connection verified with Meta!',
+                                    'data' => $p,
+                                ]);
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {}
             }
 
             return response()->json([
