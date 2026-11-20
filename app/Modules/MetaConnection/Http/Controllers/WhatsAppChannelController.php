@@ -64,33 +64,6 @@ class WhatsAppChannelController extends Controller
             $this->autoSyncFromMeta($orgId, $wabaId, $accessToken);
         }
 
-        // Auto-ensure verified Sathwara InfoTech (+91 91040 81291) is present in active channels
-        $hasSathwara = WhatsAppChannel::where('organization_id', $orgId)
-            ->where(function ($q) {
-                $q->where('phone_number', 'like', '%9104081291%')
-                  ->orWhere('phone_number_id', 'like', '%9104081291%');
-            })
-            ->exists();
-
-        if (!$hasSathwara) {
-            $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-            $accessToken = $existing?->access_token ?: env('META_WHATSAPP_TOKEN', '');
-
-            WhatsAppChannel::create([
-                'organization_id' => $orgId,
-                'name' => 'Sathwara InfoTech',
-                'phone_number' => '+91 91040 81291',
-                'phone_number_id' => 'phone_9104081291',
-                'waba_id' => '168495056789012',
-                'access_token' => $accessToken,
-                'quality_rating' => 'GREEN',
-                'messaging_limit' => 'TIER_1K',
-                'status' => 'connected',
-                'is_default' => false,
-                'webhook_verified_at' => now(),
-            ]);
-        }
-
         $channels = WhatsAppChannel::where('organization_id', $orgId)
             ->orderBy('is_default', 'desc')
             ->orderBy('created_at', 'desc')
