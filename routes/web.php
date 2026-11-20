@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('channels/quick-connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'quickConnect'])->name('channels.quick-connect');
     Route::post('channels/sync-meta', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncFromMeta'])->name('channels.sync-meta');
     Route::delete('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'destroy'])->name('channels.destroy');
+    Route::post('channels/{id}/set-default', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'setDefault'])->name('channels.set-default');
     Route::post('channels/{id}/test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'testConnection'])->name('channels.test');
     Route::get('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('channels.show');
     Route::get('whatsapp/channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('whatsapp.channels.show');

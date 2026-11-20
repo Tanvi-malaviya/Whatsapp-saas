@@ -433,6 +433,15 @@ class WhatsAppChannelController extends Controller
         return back()->with('success', 'WhatsApp channel disconnected.');
     }
 
+    public function setDefault(Request $request, string $id): RedirectResponse
+    {
+        $orgId = $this->resolveTenantId($request);
+        WhatsAppChannel::where('organization_id', $orgId)->update(['is_default' => false]);
+        WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->update(['is_default' => true]);
+
+        return back()->with('success', 'Default WhatsApp channel updated.');
+    }
+
     public function testConnection(Request $request, string $id): JsonResponse
     {
         $orgId = $this->resolveTenantId($request);

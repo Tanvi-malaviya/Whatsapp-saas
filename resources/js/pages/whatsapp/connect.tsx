@@ -366,6 +366,21 @@ export default function WhatsAppConnect({
                                     </div>
 
                                     <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                        {!ch.is_default && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    router.post(`/channels/${ch.id}/set-default`, {}, { preserveScroll: true });
+                                                }}
+                                                className="h-7 text-xs px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                title="Set this as your primary default WhatsApp sending number"
+                                            >
+                                                Make Default
+                                            </Button>
+                                        )}
+
                                         <Button
                                             variant="outline"
                                             size="sm"

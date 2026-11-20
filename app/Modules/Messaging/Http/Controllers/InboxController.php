@@ -371,6 +371,7 @@ class InboxController extends Controller
             'message' => 'nullable|string',
             'type' => 'nullable|string|in:text,template',
             'template_name' => 'nullable|string',
+            'channel_id' => 'nullable|string',
         ]);
 
         $cleanPhone = (new \App\Shared\PhoneNumber($validated['phone']))->getE164();
@@ -382,10 +383,14 @@ class InboxController extends Controller
         $org = $this->resolveOrg($request);
         TenantContext::set($org);
 
-        $channel = WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected')
-            ->orderBy('is_default', 'desc')
-            ->first();
+        $channelQuery = WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected');
+        if (!empty($validated['channel_id'])) {
+            $channel = (clone $channelQuery)->where('id', $validated['channel_id'])->first();
+        }
+        if (empty($channel)) {
+            $channel = $channelQuery->orderBy('is_default', 'desc')->first();
+        }
 
         $phoneId = $channel ? $channel->phone_number_id : '1324567864076715';
         $metaDelivered = false;
