@@ -79,6 +79,8 @@ export default function WhatsAppConnect({
     const [form, setForm] = useState(emptyForm);
     const [isEditing, setIsEditing] = useState(false);
 
+    const popupRef = useRef<Window | null>(null);
+
     // If opened in a popup from Meta Embedded Signup redirect, notify opener
     useEffect(() => {
         if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
@@ -89,11 +91,11 @@ export default function WhatsAppConnect({
             if (phoneId || wabaId || code) {
                 try {
                     window.opener.postMessage(
-                        {
+                        JSON.stringify({
                             type: 'WA_EMBEDDED_SIGNUP',
                             event: 'FINISH',
                             data: { phone_number_id: phoneId, waba_id: wabaId, code: code },
-                        },
+                        }),
                         '*'
                     );
                 } catch (e) {}
@@ -105,41 +107,71 @@ export default function WhatsAppConnect({
     // Listen to Meta Embedded Signup finish events in parent window
     useEffect(() => {
         const handleMetaEmbeddedSignupMsg = async (event: MessageEvent) => {
-            const data = event.data;
-            if (data?.type === 'WA_EMBEDDED_SIGNUP' && data?.event === 'FINISH') {
-                const code = data.data?.code;
-                const phoneId = data.data?.phone_number_id;
-                const wabaId = data.data?.waba_id;
-
-                setIsSyncing(true);
-                setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
-
+            let data = event.data;
+            if (typeof data === 'string') {
                 try {
-                    const res = await fetch('/channels/quick-connect', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                        },
-                        body: JSON.stringify({
-                            code,
-                            phone_number_id: phoneId,
-                            waba_id: wabaId,
-                        }),
-                    });
-
-                    const json = await res.json();
-                    if (json.success) {
-                        setSyncNotice('WhatsApp connected successfully!');
-                        router.reload();
-                    } else {
-                        setSyncNotice(json.message || 'Could not auto-connect');
-                    }
-                } catch (e: any) {
-                    setSyncNotice('Auto-connect error: ' + e.message);
-                } finally {
-                    setIsSyncing(false);
+                    data = JSON.parse(data);
+                } catch (e) {
+                    return;
                 }
+            }
+
+            if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') {
+                return;
+            }
+
+            const isFinished =
+                data.event === 'FINISH' ||
+                data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
+                data.phone_number_id ||
+                data.data?.phone_number_id ||
+                data.code ||
+                data.data?.code;
+
+            if (!isFinished) {
+                return;
+            }
+
+            // Close popup window if open
+            if (popupRef.current && !popupRef.current.closed) {
+                try {
+                    popupRef.current.close();
+                } catch (e) {}
+            }
+
+            const payload = data.data || data;
+            const code = payload.code;
+            const phoneId = payload.phone_number_id;
+            const wabaId = payload.waba_id || payload.messaging_account_id || (payload.messaging_account_ids ? payload.messaging_account_ids[0] : null);
+
+            setIsSyncing(true);
+            setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
+
+            try {
+                const res = await fetch('/channels/quick-connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                    },
+                    body: JSON.stringify({
+                        code,
+                        phone_number_id: phoneId,
+                        waba_id: wabaId,
+                    }),
+                });
+
+                const json = await res.json();
+                if (json.success) {
+                    setSyncNotice(json.message || 'WhatsApp connected successfully!');
+                    router.reload();
+                } else {
+                    setSyncNotice(json.message || 'Could not auto-connect');
+                }
+            } catch (e: any) {
+                setSyncNotice('Auto-connect error: ' + e.message);
+            } finally {
+                setIsSyncing(false);
             }
         };
 
@@ -160,7 +192,7 @@ export default function WhatsAppConnect({
         const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
         const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
 
-        window.open(
+        popupRef.current = window.open(
             onboardUrl,
             'MetaWhatsAppOnboarding',
             `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`

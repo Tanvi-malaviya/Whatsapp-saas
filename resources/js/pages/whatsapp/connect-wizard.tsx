@@ -263,9 +263,19 @@ export default function WhatsAppConnectWizard({
 
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (data.type === 'WA_EMBEDDED_SIGNUP' || data.event === 'FINISH' || data.phone_number_id || data.code || data.data?.code) {
+                if (!data) return;
+                const isFinished =
+                    data.type === 'WA_EMBEDDED_SIGNUP' ||
+                    data.event === 'FINISH' ||
+                    data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
+                    data.phone_number_id ||
+                    data.data?.phone_number_id ||
+                    data.code ||
+                    data.data?.code;
+
+                if (isFinished) {
                     const phoneId = data.data?.phone_number_id || data.phone_number_id;
-                    const customWaba = data.data?.waba_id || data.waba_id;
+                    const customWaba = data.data?.waba_id || data.waba_id || data.data?.messaging_account_id;
                     const code = data.data?.code || data.code;
                     setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
                     handleDirectAutoConnect(phoneId, customWaba, code);
