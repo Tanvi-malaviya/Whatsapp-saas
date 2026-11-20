@@ -417,6 +417,39 @@ class WhatsAppChannelController extends Controller
         $orgId = $this->resolveTenantId($request);
         $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->firstOrFail();
 
+        // If phone_number_id is a placeholder, try to auto-discover the real 15-digit ID from Meta
+        if (str_starts_with($channel->phone_number_id, 'phone_')) {
+            if ($channel->access_token && $channel->waba_id) {
+                try {
+                    $lookupResp = Http::withToken($channel->access_token)
+                        ->timeout(5)
+                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/phone_numbers");
+                    if ($lookupResp->successful()) {
+                        $phones = $lookupResp->json('data') ?? [];
+                        $clean = preg_replace('/\D/', '', $channel->phone_number);
+                        foreach ($phones as $p) {
+                            $pClean = preg_replace('/\D/', '', $p['display_phone_number'] ?? '');
+                            if (str_ends_with($clean, substr($pClean, -10)) || str_ends_with($pClean, substr($clean, -10))) {
+                                $channel->update([
+                                    'phone_number_id' => $p['id'],
+                                    'quality_rating' => $p['quality_rating'] ?? 'GREEN',
+                                ]);
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        // If still a placeholder, explain clearly to the user
+        if (str_starts_with($channel->phone_number_id, 'phone_')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please enter the real 15-digit Meta Phone Number ID. Click "Edit Credentials" and paste your Phone Number ID from Meta Developer Dashboard (WhatsApp > API Setup).',
+            ], 422);
+        }
+
         try {
             $response = Http::withToken($channel->access_token)
                 ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
