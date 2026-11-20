@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Smartphone,
@@ -61,6 +61,8 @@ export default function WhatsAppConnect({
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState<string | null>(null);
     const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
     const emptyForm = {
         name: '',
@@ -76,6 +78,43 @@ export default function WhatsAppConnect({
     const [form, setForm] = useState(emptyForm);
     const [isEditing, setIsEditing] = useState(false);
 
+    // If opened in a popup from Meta Embedded Signup redirect, notify opener
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
+            const params = new URLSearchParams(window.location.search);
+            const phoneId = params.get('phone_number_id');
+            const wabaId = params.get('waba_id');
+            if (phoneId || wabaId) {
+                try {
+                    window.opener.postMessage(
+                        {
+                            type: 'WA_EMBEDDED_SIGNUP',
+                            event: 'FINISH',
+                            data: { phone_number_id: phoneId, waba_id: wabaId },
+                        },
+                        '*'
+                    );
+                } catch (e) {}
+                window.close();
+            }
+        }
+    }, []);
+
+    const handleAddNewChannel = () => {
+        setIsEditing(false);
+        const existing = channels[0];
+        setForm({
+            name: currentOrg?.name ? `${currentOrg.name} WhatsApp` : 'Sathwara InfoTech WhatsApp',
+            phone_number: '+91 91040 81291',
+            phone_number_id: '',
+            waba_id: existing?.waba_id || '934553439246885',
+            access_token: existing?.access_token || '',
+            app_id: existing?.app_id || '1079349601748656',
+            app_secret: existing?.app_secret || '',
+        });
+        setIsModalOpen(true);
+    };
+
     const handleEditChannel = (ch: Channel) => {
         setIsEditing(true);
         setForm({
@@ -88,6 +127,32 @@ export default function WhatsAppConnect({
             app_secret: ch.app_secret || '',
         });
         setIsModalOpen(true);
+    };
+
+    const handleSyncMeta = async () => {
+        setIsSyncing(true);
+        setSyncNotice(null);
+        try {
+            const res = await fetch('/channels/sync-meta', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+                },
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSyncNotice(data.message || 'Synced successfully!');
+                router.reload({ only: ['channels'] });
+            } else {
+                setSyncNotice(data.message || 'Could not sync from Meta.');
+            }
+        } catch (e: any) {
+            setSyncNotice('Sync error: ' + e.message);
+        } finally {
+            setIsSyncing(false);
+            setTimeout(() => setSyncNotice(null), 5000);
+        }
     };
 
     const copyToClipboard = (text: string, field: string) => {
@@ -180,19 +245,50 @@ export default function WhatsAppConnect({
                         </div>
                     </div>
 
-                    {channels.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSyncing}
+                            onClick={handleSyncMeta}
+                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1.5 shadow-2xs text-foreground hover:bg-muted"
+                            title="Fetch registered WhatsApp numbers directly from Meta Cloud API"
+                        >
+                            <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin text-primary' : 'text-muted-foreground'}`} />
+                            <span>{isSyncing ? 'Syncing...' : 'Sync from Meta'}</span>
+                        </Button>
+
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleAddNewChannel}
+                            className="h-8 px-3 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg gap-1.5 shadow-2xs"
+                        >
+                            <Plus className="size-3.5" />
+                            Connect New Number
+                        </Button>
+
                         <Button
                             asChild
+                            variant="secondary"
                             size="sm"
-                            className="h-8 px-3 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg gap-1.5 shadow-2xs self-start sm:self-auto shrink-0"
+                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1 border border-border/80"
                         >
-                            <Link href="/whatsapp/connect/setup">
-                                <Plus className="size-3.5" />
-                                Connect New Number
+                            <Link href="/whatsapp/connect/setup" title="Open Meta Embedded Signup Walkthrough">
+                                <Sparkles className="size-3.5 text-primary" />
+                                <span>Meta Wizard</span>
                             </Link>
                         </Button>
-                    )}
+                    </div>
                 </div>
+
+                {syncNotice && (
+                    <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-xs text-primary font-medium flex items-center justify-between">
+                        <span>{syncNotice}</span>
+                        <button onClick={() => setSyncNotice(null)} className="text-primary hover:text-primary/70 text-xs">Dismiss</button>
+                    </div>
+                )}
 
                 {/* Connected Channels List */}
                 <div className="space-y-2.5">

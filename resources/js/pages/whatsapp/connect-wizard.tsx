@@ -252,20 +252,22 @@ export default function WhatsAppConnectWizard({
     // 2. Listen to Meta Embedded Signup session message events
     useEffect(() => {
         const handleMetaMessage = (event: MessageEvent) => {
-            if (
-                event.origin !== 'https://www.facebook.com' &&
-                event.origin !== 'https://web.facebook.com'
-            ) {
+            const isMetaOrigin =
+                event.origin.includes('facebook.com') ||
+                event.origin.includes('meta.com') ||
+                (typeof window !== 'undefined' && event.origin === window.location.origin);
+
+            if (!isMetaOrigin) {
                 return;
             }
+
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (data.type === 'WA_EMBEDDED_SIGNUP') {
-                    if (data.event === 'FINISH') {
-                        const { phone_number_id, waba_id } = data.data || {};
-                        setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
-                        handleDirectAutoConnect(phone_number_id, waba_id);
-                    }
+                if (data.type === 'WA_EMBEDDED_SIGNUP' || data.event === 'FINISH' || data.phone_number_id) {
+                    const phoneId = data.data?.phone_number_id || data.phone_number_id;
+                    const customWaba = data.data?.waba_id || data.waba_id;
+                    setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
+                    handleDirectAutoConnect(phoneId, customWaba);
                 }
             } catch (e) {
                 // Ignore parsing errors for other message events
@@ -274,9 +276,9 @@ export default function WhatsAppConnectWizard({
 
         window.addEventListener('message', handleMetaMessage);
         return () => window.removeEventListener('message', handleMetaMessage);
-    }, []);
+    }, [phoneDigits, countryCode, channelName]);
 
-    // Automatic connection handler when Meta popup finishes
+    // Automatic connection handler when Meta popup finishes or manual submit
     const handleDirectAutoConnect = async (customPhoneId?: string, customWabaId?: string) => {
         setIsSubmitting(true);
         setErrorMsg(null);
@@ -290,7 +292,7 @@ export default function WhatsAppConnectWizard({
                 },
                 body: JSON.stringify({
                     name: channelName || `${currentOrg.name} WhatsApp`,
-                    phone_number: `${countryCode}${phoneDigits.replace(/\D/g, '')}`,
+                    phone_number: `${countryCode} ${phoneDigits.replace(/\D/g, '')}`,
                     phone_number_id: customPhoneId || phoneId || '',
                     waba_id: customWabaId || wabaId || '934553439246885',
                     access_token: accessToken || existingChannel?.access_token || '',
@@ -302,6 +304,9 @@ export default function WhatsAppConnectWizard({
             if (data.success && data.channel) {
                 setConnectedChannel(data.channel);
                 setStep(3);
+                setTimeout(() => {
+                    router.visit('/whatsapp/connect');
+                }, 1800);
             } else {
                 setErrorMsg(data.message || 'Failed to auto-connect WhatsApp channel.');
             }
@@ -312,14 +317,16 @@ export default function WhatsAppConnectWizard({
         }
     };
 
-    // 3. Trigger Official Meta WhatsApp Onboarding Popup - Exactly like Xobito
+    // 3. Trigger Official Meta WhatsApp Onboarding Popup
     const launchMetaEmbeddedSignup = () => {
         setErrorMsg(null);
         setSuccessNotice('Meta Onboarding is open in the popup window. Please complete the steps.');
         const activeConfigId = configIdInput.trim() || metaConfigId || '1835889181059188';
         const appId = metaAppId || '1079349601748656';
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8000';
+        const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
 
-        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=https%3A%2F%2Fwhatsapp.sathwarainfotech.cloud%2Fwhatsapp%2Fconnect`;
+        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
 
         const w = 650;
         const h = 750;
@@ -772,6 +779,90 @@ export default function WhatsAppConnectWizard({
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </Card>
+
+                        {/* Instant Direct Connect Box (For numbers already completed on Meta) */}
+                        <Card className="border border-border/80 bg-card rounded-xl p-3.5 shadow-2xs space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                                        <Smartphone className="size-4" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-bold text-foreground">
+                                            Already Finished Meta Onboarding? Save Number Directly
+                                        </h4>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            If you completed the OTP verification in Meta's popup, save your number to this workspace in 1 click.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                <div className="space-y-1">
+                                    <label className="text-[11px] font-semibold text-foreground">
+                                        Channel Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={channelName}
+                                        onChange={(e) => setChannelName(e.target.value)}
+                                        placeholder="Sathwara InfoTech WhatsApp"
+                                        className="w-full h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[11px] font-semibold text-foreground">
+                                        WhatsApp Mobile Number *
+                                    </label>
+                                    <div className="flex gap-1.5">
+                                        <input
+                                            type="text"
+                                            value={countryCode}
+                                            onChange={(e) => setCountryCode(e.target.value)}
+                                            className="w-14 h-8 text-center rounded-lg border border-input bg-background text-xs font-mono font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={phoneDigits}
+                                            onChange={(e) => setPhoneDigits(e.target.value)}
+                                            placeholder="9104081291"
+                                            className="flex-1 h-8 rounded-lg border border-input bg-background px-2.5 text-xs font-mono font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[11px] font-semibold text-foreground">
+                                        Meta Phone Number ID (Optional)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={phoneId}
+                                        onChange={(e) => setPhoneId(e.target.value)}
+                                        placeholder="e.g. 1324567864076715"
+                                        className="w-full h-8 rounded-lg border border-input bg-background px-2.5 text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1">
+                                <span className="text-[11px] text-muted-foreground">
+                                    Connected to WABA ID: <strong className="font-mono text-foreground">{wabaId}</strong>
+                                </span>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isSubmitting}
+                                    onClick={() => handleDirectAutoConnect(phoneId, wabaId)}
+                                    className="h-8 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg gap-1.5 shadow-2xs"
+                                >
+                                    <Check className="size-3.5 stroke-[2.5]" />
+                                    <span>{isSubmitting ? 'Connecting...' : `Save & Connect +91 ${phoneDigits}`}</span>
+                                </Button>
                             </div>
                         </Card>
                     </div>
