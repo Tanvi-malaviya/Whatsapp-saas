@@ -27,42 +27,99 @@ class WhatsAppChannelController extends Controller
     {
         $orgId = $this->resolveTenantId($request);
 
-        // Automatically connect if redirected from Meta Embedded Signup popup
-        if ($request->has('phone_number_id') || ($request->has('phone_number') && $request->has('waba_id')) || $request->has('code')) {
+        // Automatically connect if redirected from Meta Embedded Signup popup with OAuth code
+        if ($request->has('code')) {
+            $code = $request->query('code');
+            $appId = env('META_APP_ID', '1079349601748656');
+            $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
+            $origin = $request->getSchemeAndHttpHost();
+            $redirectUri = "{$origin}/whatsapp/connect";
+
+            try {
+                $tokenResp = Http::get('https://graph.facebook.com/v22.0/oauth/access_token', [
+                    'client_id' => $appId,
+                    'client_secret' => $appSecret,
+                    'redirect_uri' => $redirectUri,
+                    'code' => $code,
+                ]);
+
+                if ($tokenResp->successful()) {
+                    $userToken = $tokenResp->json('access_token');
+                    if ($userToken) {
+                        // Debug token to find the shared WABA ID
+                        $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
+                            'input_token' => $userToken,
+                            'access_token' => "{$appId}|{$appSecret}",
+                        ]);
+
+                        $wabaId = null;
+                        if ($debugResp->successful()) {
+                            $scopes = $debugResp->json('data.granular_scopes') ?? [];
+                            foreach ($scopes as $scope) {
+                                if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
+                                    $wabaId = $scope['target_ids'][0] ?? null;
+                                    if ($wabaId) break;
+                                }
+                            }
+                        }
+
+                        if ($wabaId) {
+                            $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
+                            if ($phonesResp->successful()) {
+                                $phones = $phonesResp->json('data') ?? [];
+                                foreach ($phones as $p) {
+                                    WhatsAppChannel::updateOrCreate(
+                                        [
+                                            'organization_id' => $orgId,
+                                            'phone_number_id' => $p['id'],
+                                        ],
+                                        [
+                                            'name' => $p['verified_name'] ?? 'Sathwara InfoTech',
+                                            'phone_number' => $p['display_phone_number'] ?? '+91 91040 81291',
+                                            'waba_id' => $wabaId,
+                                            'access_token' => $userToken,
+                                            'quality_rating' => $p['quality_rating'] ?? 'GREEN',
+                                            'messaging_limit' => 'TIER_1K',
+                                            'status' => 'connected',
+                                            'webhook_verified_at' => now(),
+                                        ]
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($request->has('phone_number_id') && !str_starts_with($request->query('phone_number_id'), 'phone_')) {
             $phoneId = $request->query('phone_number_id');
-            $wabaId = $request->query('waba_id', '934553439246885');
-            $phoneNumber = $request->query('phone_number', '+91 91040 81291');
-            $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
+            $wabaId = $request->query('waba_id');
+            $phoneNumber = $request->query('phone_number');
             $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
             $accessToken = $existing?->access_token ?: env('META_WHATSAPP_TOKEN', '');
 
-            if (!$phoneId && $cleanPhone) {
-                $phoneId = 'phone_' . $cleanPhone;
-            }
-
-            if ($phoneId) {
-                WhatsAppChannel::updateOrCreate(
-                    [
-                        'organization_id' => $orgId,
-                        'phone_number_id' => $phoneId,
-                    ],
-                    [
-                        'name' => 'Sathwara InfoTech',
-                        'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
-                        'waba_id' => $wabaId,
-                        'access_token' => $accessToken,
-                        'quality_rating' => 'GREEN',
-                        'messaging_limit' => 'TIER_1K',
-                        'status' => 'connected',
-                        'is_default' => false,
-                        'webhook_verified_at' => now(),
-                    ]
-                );
-            }
-
-            // Automatically sync all registered numbers from Meta
-            $this->autoSyncFromMeta($orgId, $wabaId, $accessToken);
+            WhatsAppChannel::updateOrCreate(
+                [
+                    'organization_id' => $orgId,
+                    'phone_number_id' => $phoneId,
+                ],
+                [
+                    'name' => 'Sathwara InfoTech',
+                    'phone_number' => $phoneNumber ?: '+91 91040 81291',
+                    'waba_id' => $wabaId ?: ($existing?->waba_id ?: '1600590645151650'),
+                    'access_token' => $accessToken,
+                    'quality_rating' => 'GREEN',
+                    'messaging_limit' => 'TIER_1K',
+                    'status' => 'connected',
+                    'is_default' => false,
+                    'webhook_verified_at' => now(),
+                ]
+            );
         }
+
+        // Clean up any old dummy placeholder channels that start with 'phone_'
+        WhatsAppChannel::where('organization_id', $orgId)
+            ->where('phone_number_id', 'like', 'phone_%')
+            ->delete();
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)
             ->orderBy('is_default', 'desc')
@@ -340,87 +397,65 @@ class WhatsAppChannelController extends Controller
      */
     private function autoSyncFromMeta(string $orgId, ?string $wabaId = null, ?string $token = null): int
     {
-        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-        $token = $token ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
-
-        // Collect all potential WABA IDs in this organization
-        $wabaIds = WhatsAppChannel::where('organization_id', $orgId)
-            ->whereNotNull('waba_id')
-            ->pluck('waba_id')
-            ->toArray();
-
-        if ($wabaId) {
-            $wabaIds[] = $wabaId;
-        }
-        $wabaIds[] = env('META_WABA_ID', '934553439246885');
-        $wabaIds[] = '934553439246885';
-        $wabaIds = array_values(array_unique(array_filter($wabaIds)));
-
         $added = 0;
-        if ($token) {
-            foreach ($wabaIds as $wid) {
-                try {
-                    $response = Http::withToken($token)
-                        ->timeout(4)
-                        ->get("https://graph.facebook.com/v22.0/{$wid}/phone_numbers");
+        $channels = WhatsAppChannel::where('organization_id', $orgId)
+            ->whereNotNull('access_token')
+            ->where('access_token', '!=', '')
+            ->get();
 
-                    if ($response->successful()) {
-                        $metaPhones = $response->json('data') ?? [];
-                        foreach ($metaPhones as $mp) {
-                            $phoneId = $mp['id'] ?? null;
-                            $displayPhone = $mp['display_phone_number'] ?? '';
-                            $name = $mp['verified_name'] ?? ('WhatsApp ' . substr(preg_replace('/\D/', '', $displayPhone), -4));
-                            $quality = $mp['quality_rating'] ?? 'GREEN';
-
-                            if ($phoneId) {
-                                WhatsAppChannel::updateOrCreate(
-                                    [
-                                        'organization_id' => $orgId,
-                                        'phone_number_id' => $phoneId,
-                                    ],
-                                    [
-                                        'name' => $name,
-                                        'phone_number' => $displayPhone,
-                                        'waba_id' => $wid,
-                                        'access_token' => $token,
-                                        'quality_rating' => $quality,
-                                        'messaging_limit' => 'TIER_1K',
-                                        'status' => 'connected',
-                                        'webhook_verified_at' => now(),
-                                    ]
-                                );
-                                $added++;
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {}
+        $wabaPairs = [];
+        foreach ($channels as $ch) {
+            if ($ch->waba_id && $ch->access_token) {
+                $wabaPairs[$ch->waba_id] = $ch->access_token;
             }
         }
 
-        // Auto-ensure verified Sathwara InfoTech (+91 91040 81291) is present
-        $sathwaraExists = WhatsAppChannel::where('organization_id', $orgId)
-            ->where(function ($q) {
-                $q->where('phone_number', 'like', '%9104081291%')
-                  ->orWhere('phone_number_id', 'like', '%9104081291%');
-            })
-            ->exists();
-
-        if (!$sathwaraExists) {
-            WhatsAppChannel::create([
-                'organization_id' => $orgId,
-                'name' => 'Sathwara InfoTech',
-                'phone_number' => '+91 91040 81291',
-                'phone_number_id' => 'phone_9104081291',
-                'waba_id' => '168495056789012',
-                'access_token' => $token ?: '',
-                'quality_rating' => 'GREEN',
-                'messaging_limit' => 'TIER_1K',
-                'status' => 'connected',
-                'is_default' => false,
-                'webhook_verified_at' => now(),
-            ]);
-            $added++;
+        if ($wabaId && $token) {
+            $wabaPairs[$wabaId] = $token;
         }
+
+        foreach ($wabaPairs as $wid => $tok) {
+            try {
+                $response = Http::withToken($tok)
+                    ->timeout(6)
+                    ->get("https://graph.facebook.com/v22.0/{$wid}/phone_numbers");
+
+                if ($response->successful()) {
+                    $metaPhones = $response->json('data') ?? [];
+                    foreach ($metaPhones as $mp) {
+                        $phoneId = $mp['id'] ?? null;
+                        $displayPhone = $mp['display_phone_number'] ?? '';
+                        $name = $mp['verified_name'] ?? ('WhatsApp ' . substr(preg_replace('/\D/', '', $displayPhone), -4));
+                        $quality = $mp['quality_rating'] ?? 'GREEN';
+
+                        if ($phoneId) {
+                            WhatsAppChannel::updateOrCreate(
+                                [
+                                    'organization_id' => $orgId,
+                                    'phone_number_id' => $phoneId,
+                                ],
+                                [
+                                    'name' => $name,
+                                    'phone_number' => $displayPhone,
+                                    'waba_id' => $wid,
+                                    'access_token' => $tok,
+                                    'quality_rating' => $quality,
+                                    'messaging_limit' => 'TIER_1K',
+                                    'status' => 'connected',
+                                    'webhook_verified_at' => now(),
+                                ]
+                            );
+                            $added++;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // Clean up any remaining dummy placeholder channels that start with 'phone_'
+        WhatsAppChannel::where('organization_id', $orgId)
+            ->where('phone_number_id', 'like', 'phone_%')
+            ->delete();
 
         return $added;
     }
