@@ -116,9 +116,10 @@ class WhatsAppChannelController extends Controller
             );
         }
 
-        // Clean up any old dummy placeholder channels that start with 'phone_'
+        // Clean up only the old legacy dummy placeholder channel
         WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'like', 'phone_%')
+            ->where('phone_number_id', 'phone_9104081291')
+            ->where('waba_id', '168495056789012')
             ->delete();
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)
@@ -339,9 +340,10 @@ class WhatsAppChannelController extends Controller
             ]
         );
 
-        // Clean up any remaining dummy placeholder channels
+        // Clean up only the old legacy dummy placeholder channel
         WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'like', 'phone_%')
+            ->where('phone_number_id', 'phone_9104081291')
+            ->where('waba_id', '168495056789012')
             ->delete();
 
         // Auto-sync all other numbers that belong to this WABA on Meta
@@ -371,10 +373,10 @@ class WhatsAppChannelController extends Controller
         $phoneNumber = trim($request->input('phone_number', ''));
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
 
-        $name = $request->input('name') ?: 'WhatsApp ' . substr($cleanPhone, -4);
-        $phoneId = $request->input('phone_number_id') ?: ('phone_' . ($cleanPhone ?: '9104081291'));
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '934553439246885');
-        $accessToken = $request->input('access_token') ?: ($existing?->access_token ?: '');
+        $name = trim($request->input('name', '')) ?: ('WhatsApp ' . substr($cleanPhone ?: 'Channel', -4));
+        $phoneId = trim($request->input('phone_number_id', '')) ?: ('phone_' . ($cleanPhone ?: uniqid()));
+        $wabaId = trim($request->input('waba_id', '')) ?: ($existing?->waba_id ?: '934553439246885');
+        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: '');
 
         $quality = 'GREEN';
         $limit = 'TIER_1K';
@@ -388,7 +390,7 @@ class WhatsAppChannelController extends Controller
                 if ($response->successful()) {
                     $data = $response->json();
                     $quality = $data['quality_rating'] ?? 'GREEN';
-                    if (!empty($data['display_phone_number'])) {
+                    if (!empty($data['display_phone_number']) && empty($phoneNumber)) {
                         $phoneNumber = $data['display_phone_number'];
                     }
                 }
@@ -569,9 +571,10 @@ class WhatsAppChannelController extends Controller
             } catch (\Throwable $e) {}
         }
 
-        // Clean up any remaining dummy placeholder channels that start with 'phone_'
+        // Clean up only the old legacy dummy placeholder channel
         WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'like', 'phone_%')
+            ->where('phone_number_id', 'phone_9104081291')
+            ->where('waba_id', '168495056789012')
             ->delete();
 
         return $added;

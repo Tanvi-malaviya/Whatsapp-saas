@@ -696,28 +696,26 @@ export default function WhatsAppConnect({
                             <div className="grid gap-2.5 sm:grid-cols-2">
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-foreground">
-                                        Meta Phone Number ID *
+                                        Meta Phone Number ID
                                     </label>
                                     <input
                                         type="text"
-                                        required
                                         value={form.phone_number_id}
                                         onChange={(e) => setForm({ ...form, phone_number_id: e.target.value })}
-                                        placeholder="1431069246745536"
+                                        placeholder="15-digit ID (e.g. 1431069246745536)"
                                         className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                                     />
                                 </div>
 
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold text-foreground">
-                                        WhatsApp Business Account (WABA) ID *
+                                        WhatsApp Business Account (WABA) ID
                                     </label>
                                     <input
                                         type="text"
-                                        required
                                         value={form.waba_id}
                                         onChange={(e) => setForm({ ...form, waba_id: e.target.value })}
-                                        placeholder="799788166562792"
+                                        placeholder="15-digit WABA ID"
                                         className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                                     />
                                 </div>
@@ -725,10 +723,9 @@ export default function WhatsAppConnect({
 
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground">
-                                    Permanent Access Token (System User Token) *
+                                    Permanent Access Token (System User Token)
                                 </label>
                                 <textarea
-                                    required
                                     rows={2}
                                     value={form.access_token}
                                     onChange={(e) => setForm({ ...form, access_token: e.target.value })}
