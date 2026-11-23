@@ -23,7 +23,7 @@ class WhatsAppChannelController extends Controller
             ?? '';
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|RedirectResponse
     {
         $orgId = $this->resolveTenantId($request);
 
@@ -68,14 +68,16 @@ class WhatsAppChannelController extends Controller
                             if ($phonesResp->successful()) {
                                 $phones = $phonesResp->json('data') ?? [];
                                 foreach ($phones as $p) {
+                                    $pPhone = $p['display_phone_number'] ?? '';
+                                    $pName = $p['verified_name'] ?? ($pPhone ? "WhatsApp ({$pPhone})" : 'WhatsApp Channel');
                                     WhatsAppChannel::updateOrCreate(
                                         [
                                             'organization_id' => $orgId,
                                             'phone_number_id' => $p['id'],
                                         ],
                                         [
-                                            'name' => $p['verified_name'] ?? 'WhatsApp Channel',
-                                            'phone_number' => $p['display_phone_number'] ?? '',
+                                            'name' => $pName,
+                                            'phone_number' => $pPhone,
                                             'waba_id' => $wabaId,
                                             'access_token' => $userToken,
                                             'quality_rating' => $p['quality_rating'] ?? 'GREEN',
@@ -90,20 +92,49 @@ class WhatsAppChannelController extends Controller
                     }
                 }
             } catch (\Throwable $e) {}
+
+            return redirect()->route('whatsapp.connect');
         } elseif ($request->has('phone_number_id') && !str_starts_with($request->query('phone_number_id'), 'phone_')) {
             $phoneId = $request->query('phone_number_id');
             $wabaId = $request->query('waba_id');
-            $phoneNumber = $request->query('phone_number');
+            $phoneNumber = trim($request->query('phone_number', ''));
+            $queryName = trim($request->query('name', ''));
             $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
             $accessToken = $existing?->access_token ?: env('META_WHATSAPP_TOKEN', '');
 
-            WhatsAppChannel::updateOrCreate(
-                [
+            // Try to fetch real display_phone_number and verified_name from Graph API if token available
+            if ($accessToken && empty($phoneNumber)) {
+                try {
+                    $pResp = Http::withToken($accessToken)
+                        ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
+                            'fields' => 'display_phone_number,verified_name,quality_rating',
+                        ]);
+                    if ($pResp->successful()) {
+                        $pData = $pResp->json();
+                        $phoneNumber = $pData['display_phone_number'] ?? $phoneNumber;
+                        if (!empty($pData['verified_name']) && empty($queryName)) {
+                            $queryName = $pData['verified_name'];
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            $targetChannel = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
+            if ($targetChannel) {
+                // If channel exists, NEVER overwrite existing phone_number or name with empty values!
+                $updates = [];
+                if (!empty($wabaId)) $updates['waba_id'] = $wabaId;
+                if (!empty($accessToken)) $updates['access_token'] = $accessToken;
+                if (!empty($phoneNumber)) $updates['phone_number'] = $phoneNumber;
+                if (!empty($queryName)) $updates['name'] = $queryName;
+                if (!empty($updates)) {
+                    $targetChannel->update($updates);
+                }
+            } else {
+                WhatsAppChannel::create([
                     'organization_id' => $orgId,
                     'phone_number_id' => $phoneId,
-                ],
-                [
-                    'name' => $request->query('name') ?: 'WhatsApp Channel',
+                    'name' => $queryName ?: ($phoneNumber ? "WhatsApp ({$phoneNumber})" : 'WhatsApp Channel'),
                     'phone_number' => $phoneNumber ?: '',
                     'waba_id' => $wabaId ?: ($existing?->waba_id ?: '1600590645151650'),
                     'access_token' => $accessToken,
@@ -112,8 +143,11 @@ class WhatsAppChannelController extends Controller
                     'status' => 'connected',
                     'is_default' => false,
                     'webhook_verified_at' => now(),
-                ]
-            );
+                ]);
+            }
+
+            // Immediately redirect cleanly so query string params are permanently cleared from URL!
+            return redirect()->route('whatsapp.connect');
         }
 
         // Clean up only the old legacy dummy placeholder channel
@@ -345,10 +379,18 @@ class WhatsAppChannelController extends Controller
             ], 422);
         }
 
-        $formattedPhone = !empty($phoneNumber)
-            ? (str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone)
-            : ($cleanPhone ? ('+' . $cleanPhone) : '');
-        $name = $name ?: ('WhatsApp ' . ($cleanPhone ? substr($cleanPhone, -4) : 'Channel'));
+        if (strlen($cleanPhone) === 10) {
+            $formattedPhone = '+91 ' . substr($cleanPhone, 0, 5) . ' ' . substr($cleanPhone, 5);
+        } elseif (strlen($cleanPhone) === 12 && str_starts_with($cleanPhone, '91')) {
+            $formattedPhone = '+91 ' . substr($cleanPhone, 2, 5) . ' ' . substr($cleanPhone, 7);
+        } elseif (str_starts_with($phoneNumber, '+')) {
+            $formattedPhone = $phoneNumber;
+        } elseif (!empty($cleanPhone)) {
+            $formattedPhone = '+' . $cleanPhone;
+        } else {
+            $formattedPhone = '';
+        }
+        $name = $name ?: ($formattedPhone ? ('WhatsApp (' . $formattedPhone . ')') : 'WhatsApp Channel');
 
         $isDefault = WhatsAppChannel::where('organization_id', $orgId)->count() === 0;
 
@@ -394,10 +436,14 @@ class WhatsAppChannelController extends Controller
     {
         $orgId = $this->resolveTenantId($request);
         $channelId = $request->input('id');
+        $phoneId = trim($request->input('phone_number_id', ''));
 
         $channel = null;
         if ($channelId) {
             $channel = WhatsAppChannel::where('organization_id', $orgId)->find($channelId);
+        }
+        if (!$channel && $phoneId) {
+            $channel = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
         }
 
         $existing = $channel ?: WhatsAppChannel::where('organization_id', $orgId)->first();
@@ -405,10 +451,27 @@ class WhatsAppChannelController extends Controller
         $phoneNumber = trim($request->input('phone_number', ''));
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
 
-        $name = trim($request->input('name', '')) ?: ('WhatsApp ' . substr($cleanPhone ?: 'Channel', -4));
-        $phoneId = trim($request->input('phone_number_id', '')) ?: ('phone_' . ($cleanPhone ?: uniqid()));
+        // Standardize Indian and International phone formats
+        if (strlen($cleanPhone) === 10) {
+            $formattedPhone = '+91 ' . substr($cleanPhone, 0, 5) . ' ' . substr($cleanPhone, 5);
+        } elseif (strlen($cleanPhone) === 12 && str_starts_with($cleanPhone, '91')) {
+            $formattedPhone = '+91 ' . substr($cleanPhone, 2, 5) . ' ' . substr($cleanPhone, 7);
+        } elseif (str_starts_with($phoneNumber, '+')) {
+            $formattedPhone = $phoneNumber;
+        } elseif (!empty($cleanPhone)) {
+            $formattedPhone = '+' . $cleanPhone;
+        } else {
+            $formattedPhone = '';
+        }
+
+        $name = trim($request->input('name', ''));
+        if (empty($name) || $name === 'WhatsApp Channel') {
+            $name = $formattedPhone ? ("WhatsApp (" . $formattedPhone . ")") : 'WhatsApp Channel';
+        }
+
+        $phoneId = $phoneId ?: ('phone_' . ($cleanPhone ?: uniqid()));
         $wabaId = trim($request->input('waba_id', '')) ?: ($existing?->waba_id ?: '934553439246885');
-        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: '');
+        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
 
         $quality = 'GREEN';
         $limit = 'TIER_1K';
@@ -422,8 +485,11 @@ class WhatsAppChannelController extends Controller
                 if ($response->successful()) {
                     $data = $response->json();
                     $quality = $data['quality_rating'] ?? 'GREEN';
-                    if (!empty($data['display_phone_number']) && empty($phoneNumber)) {
-                        $phoneNumber = $data['display_phone_number'];
+                    if (!empty($data['display_phone_number']) && empty($formattedPhone)) {
+                        $formattedPhone = $data['display_phone_number'];
+                    }
+                    if (!empty($data['verified_name']) && ($name === 'WhatsApp Channel' || empty($name))) {
+                        $name = $data['verified_name'];
                     }
                 }
             } catch (\Throwable $e) {
@@ -434,7 +500,7 @@ class WhatsAppChannelController extends Controller
         if ($channel) {
             $channel->update([
                 'name' => $name,
-                'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
+                'phone_number' => $formattedPhone,
                 'phone_number_id' => $phoneId,
                 'waba_id' => $wabaId,
                 'access_token' => $accessToken,
@@ -471,7 +537,7 @@ class WhatsAppChannelController extends Controller
                 ],
                 [
                     'name' => $name,
-                    'phone_number' => str_starts_with($phoneNumber, '+') ? $phoneNumber : '+' . $cleanPhone,
+                    'phone_number' => $formattedPhone,
                     'waba_id' => $wabaId,
                     'access_token' => $accessToken,
                     'app_id' => $request->input('app_id', $existing?->app_id),
@@ -493,7 +559,7 @@ class WhatsAppChannelController extends Controller
             ]);
         }
 
-        return back()->with('success', "WhatsApp Number ({$channel->name}) successfully connected!");
+        return redirect()->route('whatsapp.connect')->with('success', "WhatsApp Number ({$channel->name} - {$channel->phone_number}) successfully updated!");
     }
 
     public function syncFromMeta(Request $request): JsonResponse
@@ -595,18 +661,30 @@ class WhatsAppChannelController extends Controller
                         $quality = $mp['quality_rating'] ?? 'GREEN';
 
                         if ($phoneId) {
-                            $alreadyInDb = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
+                            $existingChan = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
                             $org = Organization::find($orgId);
-                            if (!$alreadyInDb && $org && !$org->canAddMoreChannels()) {
+                            if (!$existingChan && $org && !$org->canAddMoreChannels()) {
                                 continue;
                             }
 
-                            WhatsAppChannel::updateOrCreate(
-                                [
+                            if ($existingChan) {
+                                $syncUpdates = [
+                                    'waba_id' => $wid,
+                                    'access_token' => $tok,
+                                    'quality_rating' => $quality,
+                                    'status' => 'connected',
+                                ];
+                                if (!empty($displayPhone)) {
+                                    $syncUpdates['phone_number'] = $displayPhone;
+                                }
+                                if (!empty($name) && $name !== 'WhatsApp Channel' && (empty($existingChan->name) || $existingChan->name === 'WhatsApp Channel')) {
+                                    $syncUpdates['name'] = $name;
+                                }
+                                $existingChan->update($syncUpdates);
+                            } else {
+                                WhatsAppChannel::create([
                                     'organization_id' => $orgId,
                                     'phone_number_id' => $phoneId,
-                                ],
-                                [
                                     'name' => $name,
                                     'phone_number' => $displayPhone,
                                     'waba_id' => $wid,
@@ -615,8 +693,8 @@ class WhatsAppChannelController extends Controller
                                     'messaging_limit' => 'TIER_1K',
                                     'status' => 'connected',
                                     'webhook_verified_at' => now(),
-                                ]
-                            );
+                                ]);
+                            }
                             $added++;
                         }
                     }
@@ -636,9 +714,12 @@ class WhatsAppChannelController extends Controller
     public function destroy(Request $request, string $id): RedirectResponse
     {
         $orgId = $this->resolveTenantId($request);
-        WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->delete();
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->first();
+        if ($channel) {
+            $channel->forceDelete();
+        }
 
-        return back()->with('success', 'WhatsApp channel disconnected.');
+        return redirect()->route('whatsapp.connect')->with('success', 'WhatsApp channel disconnected.');
     }
 
     public function setDefault(Request $request, string $id): RedirectResponse
