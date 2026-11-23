@@ -16,6 +16,7 @@ import {
     ExternalLink,
     AlertCircle,
     Check,
+    Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -77,6 +78,28 @@ export default function AdminOrganizations({
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Delete workspace state
+    const [deleteOrgTarget, setDeleteOrgTarget] = useState<OrgItem | null>(null);
+    const [isDeletingOrg, setIsDeletingOrg] = useState(false);
+
+    const openDeleteOrgModal = (org: OrgItem) => {
+        setDeleteOrgTarget(org);
+    };
+
+    const confirmDeleteOrg = () => {
+        if (!deleteOrgTarget) return;
+        setIsDeletingOrg(true);
+        router.delete(`/admin/organizations/${deleteOrgTarget.id}`, {
+            onSuccess: () => {
+                setIsDeletingOrg(false);
+                setDeleteOrgTarget(null);
+            },
+            onError: () => {
+                setIsDeletingOrg(false);
+            },
+        });
+    };
+
     // Form state
     const [formMaxChannels, setFormMaxChannels] = useState<number>(1);
     const [formPlan, setFormPlan] = useState<string>('starter');
@@ -121,7 +144,7 @@ export default function AdminOrganizations({
     };
 
     const handleSwitchWorkspace = (orgId: string) => {
-        router.post(`/admin/organizations/${orgId}/switch`);
+        window.open(`/admin/organizations/${orgId}/switch`, '_blank');
     };
 
     const filteredOrgs = useMemo(() => {
@@ -240,13 +263,13 @@ export default function AdminOrganizations({
 
                 {/* Workspaces Master Table */}
                 <Card className="border-border/70 shadow-2xs overflow-hidden rounded-xl">
-                    <div className="w-full">
-                        <table className="w-full text-left text-sm border-collapse table-auto">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
                             <thead className="bg-muted/40 border-b border-border text-[11px] uppercase font-bold text-muted-foreground tracking-wider">
                                 <tr>
-                                    <th className="py-2.5 px-3">Workspace / Organization</th>
-                                    <th className="py-2.5 px-3">Account Owner</th>
-                                    <th className="py-2.5 px-3">WhatsApp Quota &amp; Plan</th>
+                                    <th className="py-2.5 px-3">Workspace</th>
+                                    <th className="py-2.5 px-3">Owner</th>
+                                    <th className="py-2.5 px-3">WhatsApp Quota</th>
                                     <th className="py-2.5 px-3">Connected Numbers</th>
                                     <th className="py-2.5 px-3">Status</th>
                                     <th className="py-2.5 px-3 text-right">Actions</th>
@@ -255,10 +278,10 @@ export default function AdminOrganizations({
                             <tbody className="divide-y divide-border/60">
                                 {filteredOrgs.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center text-muted-foreground text-sm">
-                                            <Building2 className="size-8 mx-auto text-muted-foreground/40 mb-2" />
+                                        <td colSpan={6} className="py-10 text-center text-muted-foreground text-xs">
+                                            <Building2 className="size-7 mx-auto text-muted-foreground/40 mb-1.5" />
                                             <p className="font-semibold text-foreground">No organizations found</p>
-                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                            <p className="text-[11px] text-muted-foreground mt-0.5">
                                                 Try adjusting your search query or filter.
                                             </p>
                                         </td>
@@ -278,14 +301,14 @@ export default function AdminOrganizations({
                                         return (
                                             <tr key={org.id} className="hover:bg-muted/30 transition-colors group">
                                                 {/* Workspace Column with Avatar */}
-                                                <td className="py-2.5 px-3">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="size-8.5 rounded-lg bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 border border-primary/20 text-primary font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                                                <td className="py-2 px-3">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="size-7 rounded-md bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 border border-primary/20 text-primary font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                                                             {initial}
                                                         </div>
-                                                        <div className="min-w-0 max-w-[200px]">
-                                                            <div className="font-semibold text-xs sm:text-sm text-foreground flex items-center gap-1.5 truncate">
-                                                                <span className="truncate">{org.name}</span>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-xs text-foreground flex items-center gap-1.5 leading-tight">
+                                                                <span className="truncate max-w-[130px] sm:max-w-[200px]">{org.name}</span>
                                                                 {isCurrent && (
                                                                     <Badge
                                                                         variant="outline"
@@ -295,7 +318,7 @@ export default function AdminOrganizations({
                                                                     </Badge>
                                                                 )}
                                                             </div>
-                                                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                                                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono leading-tight mt-0.5 truncate">
                                                                 <span>/{org.slug}</span>
                                                                 <span className="text-muted-foreground/40">•</span>
                                                                 <span className="font-sans">{org.created_at}</span>
@@ -305,60 +328,60 @@ export default function AdminOrganizations({
                                                 </td>
 
                                                 {/* Owner Column */}
-                                                <td className="py-2.5 px-3">
+                                                <td className="py-2 px-3">
                                                     {org.owner ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="size-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-foreground shrink-0 border border-border">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            <div className="size-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-foreground shrink-0 border border-border">
                                                                 {org.owner.name.charAt(0).toUpperCase()}
                                                             </div>
-                                                            <div className="min-w-0 max-w-[150px]">
-                                                                <div className="text-xs font-semibold text-foreground truncate">
+                                                            <div className="min-w-0">
+                                                                <div className="text-xs font-medium text-foreground truncate max-w-[120px] leading-tight">
                                                                     {org.owner.name}
                                                                 </div>
-                                                                <div className="text-[11px] text-muted-foreground truncate" title={org.owner.email}>
+                                                                <div className="text-[10px] text-muted-foreground truncate max-w-[120px] leading-tight mt-0.5" title={org.owner.email}>
                                                                     {org.owner.email}
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-xs text-muted-foreground italic">None assigned</span>
+                                                        <span className="text-[11px] text-muted-foreground italic">None assigned</span>
                                                     )}
                                                 </td>
 
                                                 {/* Plan & Quota Column */}
-                                                <td className="py-2.5 px-3">
-                                                    <div className="space-y-1">
-                                                        <div className="flex items-center gap-1.5">
+                                                <td className="py-2 px-3">
+                                                    <div className="space-y-0.5">
+                                                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                             {isUnlimited ? (
-                                                                <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-1.5 py-0.5 text-[11px] font-bold text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                                                    <Crown className="size-3" />
-                                                                    Unlimited
+                                                                <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-bold text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap leading-none">
+                                                                    <Crown className="size-2.5 shrink-0" />
+                                                                    <span>Unlimited</span>
                                                                 </span>
                                                             ) : org.max_channels === 1 ? (
-                                                                <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                                                                    <Lock className="size-3" />
-                                                                    Single (1 Max)
+                                                                <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-500/20 whitespace-nowrap leading-none">
+                                                                    <Lock className="size-2.5 shrink-0" />
+                                                                    <span>Single (1)</span>
                                                                 </span>
                                                             ) : (
-                                                                <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                                                    <Sparkles className="size-3" />
-                                                                    Multi ({org.max_channels} Max)
+                                                                <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap leading-none">
+                                                                    <Sparkles className="size-2.5 shrink-0" />
+                                                                    <span>Multi ({org.max_channels})</span>
                                                                 </span>
                                                             )}
-                                                            <span className="text-[10px] text-muted-foreground capitalize">
+                                                            <span className="text-[10px] text-muted-foreground capitalize truncate">
                                                                 ({org.subscription_plan})
                                                             </span>
                                                         </div>
 
                                                         {/* Usage Progress bar */}
-                                                        <div className="w-28 space-y-0.5">
-                                                            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                                        <div className="w-20 sm:w-24 space-y-0.5">
+                                                            <div className="flex items-center justify-between text-[9px] text-muted-foreground leading-none">
                                                                 <span>Used</span>
                                                                 <span className="font-semibold text-foreground">
                                                                     {org.channels_count} / {isUnlimited ? '∞' : org.max_channels}
                                                                 </span>
                                                             </div>
-                                                            <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                                            <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
                                                                 <div
                                                                     className={`h-full rounded-full transition-all ${
                                                                         isAtLimit
@@ -373,23 +396,23 @@ export default function AdminOrganizations({
                                                 </td>
 
                                                 {/* Connected Numbers List */}
-                                                <td className="py-2.5 px-3">
+                                                <td className="py-2 px-3">
                                                     {org.channels.length === 0 ? (
                                                         <span className="text-xs text-muted-foreground italic">
                                                             No numbers
                                                         </span>
                                                     ) : (
-                                                        <div className="flex items-center gap-1 flex-wrap">
+                                                        <div className="flex items-center gap-1 whitespace-nowrap">
                                                             <span
-                                                                className="inline-flex items-center gap-1 text-[11px] font-mono bg-muted/80 px-1.5 py-0.5 rounded border border-border text-foreground shadow-2xs"
+                                                                className="inline-flex items-center gap-1 text-[11px] font-mono bg-muted/80 px-1.5 py-0.5 rounded border border-border text-foreground whitespace-nowrap shadow-2xs"
                                                                 title={`Name: ${org.channels[0].name} | Phone ID: ${org.channels[0].phone_number_id}`}
                                                             >
-                                                                <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                                                                <span>{org.channels[0].phone_number || org.channels[0].name}</span>
+                                                                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                                                <span className="whitespace-nowrap">{org.channels[0].phone_number || org.channels[0].name}</span>
                                                             </span>
                                                             {org.channels.length > 1 && (
                                                                 <span
-                                                                    className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20"
+                                                                    className="text-[10px] font-semibold bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20 shrink-0"
                                                                     title={org.channels.slice(1).map((c) => c.phone_number || c.name).join(', ')}
                                                                 >
                                                                     +{org.channels.length - 1}
@@ -400,45 +423,60 @@ export default function AdminOrganizations({
                                                 </td>
 
                                                 {/* Status Column */}
-                                                <td className="py-2.5 px-3">
+                                                <td className="py-2 px-3 whitespace-nowrap">
                                                     {org.status === 'active' ? (
-                                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                                            <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                                                            <span className="size-1.5 rounded-full bg-emerald-500" />
                                                             <span>Active</span>
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
-                                                            <span className="size-1.5 rounded-full bg-rose-500"></span>
+                                                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                                                            <span className="size-1.5 rounded-full bg-rose-500" />
                                                             <span>Suspended</span>
                                                         </span>
                                                     )}
                                                 </td>
 
                                                 {/* Actions Column */}
-                                                <td className="py-2.5 px-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1.5">
+                                                <td className="py-2 px-3 text-right whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                                                         <Button
                                                             size="sm"
                                                             variant="default"
                                                             onClick={() => openEditModal(org)}
-                                                            className="h-7.5 px-2.5 text-xs font-semibold gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+                                                            className="h-7 px-2 text-xs font-semibold gap-1 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
                                                         >
                                                             <Sliders className="size-3" />
                                                             <span>Set Quota</span>
                                                         </Button>
 
-                                                        {!isCurrent && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleSwitchWorkspace(org.id)}
-                                                                className="h-7.5 px-2 text-xs font-medium gap-1 text-muted-foreground hover:text-foreground border-border"
-                                                                title="Switch into this client's workspace"
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            asChild
+                                                            className="h-7 px-2 text-xs font-medium gap-1 text-muted-foreground hover:text-foreground border-border hover:bg-muted"
+                                                            title={isCurrent ? "Open current workspace in new tab" : "Switch and open workspace in new tab"}
+                                                        >
+                                                            <a
+                                                                href={`/admin/organizations/${org.id}/switch`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
                                                             >
                                                                 <ArrowRightLeft className="size-3 text-primary" />
-                                                                <span>Switch</span>
-                                                            </Button>
-                                                        )}
+                                                                <span>{isCurrent ? 'Open' : 'Switch'}</span>
+                                                                <ExternalLink className="size-2.5 text-muted-foreground" />
+                                                            </a>
+                                                        </Button>
+
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => openDeleteOrgModal(org)}
+                                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10"
+                                                            title="Delete Workspace"
+                                                        >
+                                                            <Trash2 className="size-3.5" />
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -453,116 +491,36 @@ export default function AdminOrganizations({
 
             {/* Set WhatsApp Quota Limit Modal Dialog */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="max-w-md p-6">
-                    <DialogHeader>
-                        <div className="size-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 mb-2">
-                            <Sliders className="size-5" />
+                <DialogContent className="max-w-sm p-4 gap-3">
+                    <DialogHeader className="pb-1">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
+                                <Sliders className="size-4" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-sm font-bold text-foreground">
+                                    Configure WhatsApp Quota
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground truncate max-w-[250px]">
+                                    Workspace: <strong className="text-foreground">{selectedOrg?.name}</strong>
+                                </DialogDescription>
+                            </div>
                         </div>
-                        <DialogTitle className="text-lg font-bold">
-                            Configure WhatsApp Quota Limit
-                        </DialogTitle>
-                        <DialogDescription className="text-xs">
-                            Select single or multiple WhatsApp numbers allowed for{' '}
-                            <strong className="text-foreground">{selectedOrg?.name}</strong>.
-                        </DialogDescription>
                     </DialogHeader>
 
                     {selectedOrg && (
-                        <form onSubmit={handleSaveLimit} className="space-y-4 pt-2">
-                            {/* Preset Buttons */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
-                                    Quick Presets
-                                </Label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFormMaxChannels(1);
-                                            setFormPlan('single');
-                                        }}
-                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all ${
-                                            formMaxChannels === 1
-                                                ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 font-bold ring-2 ring-blue-500/20'
-                                                : 'border-border/70 hover:bg-muted/50 text-foreground'
-                                        }`}
-                                    >
-                                        <span className="text-lg font-extrabold">1</span>
-                                        <span className="text-[11px]">Single Number</span>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFormMaxChannels(2);
-                                            setFormPlan('dual');
-                                        }}
-                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all ${
-                                            formMaxChannels === 2
-                                                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold ring-2 ring-emerald-500/20'
-                                                : 'border-border/70 hover:bg-muted/50 text-foreground'
-                                        }`}
-                                    >
-                                        <span className="text-lg font-extrabold">2</span>
-                                        <span className="text-[11px]">Dual Numbers</span>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFormMaxChannels(5);
-                                            setFormPlan('multi');
-                                        }}
-                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all ${
-                                            formMaxChannels === 5
-                                                ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold ring-2 ring-emerald-500/20'
-                                                : 'border-border/70 hover:bg-muted/50 text-foreground'
-                                        }`}
-                                    >
-                                        <span className="text-lg font-extrabold">5</span>
-                                        <span className="text-[11px]">Multi (5 Nos)</span>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFormMaxChannels(10);
-                                            setFormPlan('enterprise');
-                                        }}
-                                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all ${
-                                            formMaxChannels === 10
-                                                ? 'bg-purple-500/10 border-purple-500 text-purple-600 dark:text-purple-400 font-bold ring-2 ring-purple-500/20'
-                                                : 'border-border/70 hover:bg-muted/50 text-foreground'
-                                        }`}
-                                    >
-                                        <span className="text-lg font-extrabold">10</span>
-                                        <span className="text-[11px]">Enterprise (10)</span>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setFormMaxChannels(0);
-                                            setFormPlan('unlimited');
-                                        }}
-                                        className={`col-span-2 flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all ${
-                                            formMaxChannels === 0
-                                                ? 'bg-purple-500/10 border-purple-500 text-purple-600 dark:text-purple-400 font-bold ring-2 ring-purple-500/20'
-                                                : 'border-border/70 hover:bg-muted/50 text-foreground'
-                                        }`}
-                                    >
-                                        <span className="text-lg font-extrabold">∞</span>
-                                        <span className="text-[11px]">Unlimited Numbers (Master)</span>
-                                    </button>
+                        <form onSubmit={handleSaveLimit} className="space-y-3">
+                            {/* Numbers Quota Limit */}
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <Label htmlFor="max_channels" className="text-xs font-semibold text-foreground">
+                                        WhatsApp Numbers Limit
+                                    </Label>
+                                    <span className="text-[11px] text-muted-foreground font-mono">
+                                        (0 = Unlimited)
+                                    </span>
                                 </div>
-                            </div>
-
-                            {/* Max Allowed Numbers Custom Input */}
-                            <div className="space-y-1.5">
-                                <Label htmlFor="max_channels" className="text-xs font-semibold">
-                                    Custom WhatsApp Numbers Count
-                                </Label>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                     <Input
                                         id="max_channels"
                                         type="number"
@@ -570,70 +528,167 @@ export default function AdminOrganizations({
                                         max="100"
                                         value={formMaxChannels}
                                         onChange={(e) => setFormMaxChannels(parseInt(e.target.value) || 0)}
-                                        className="font-mono text-base font-bold"
+                                        className="font-mono text-sm font-bold h-8 flex-1"
                                         required
                                     />
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                        (0 = Unlimited)
-                                    </span>
+                                    {/* 4 small inline shortcut chips */}
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {[
+                                            { val: 1, label: '1' },
+                                            { val: 2, label: '2' },
+                                            { val: 5, label: '5' },
+                                            { val: 0, label: '∞' },
+                                        ].map((opt) => (
+                                            <button
+                                                key={opt.val}
+                                                type="button"
+                                                onClick={() => setFormMaxChannels(opt.val)}
+                                                className={`size-7 rounded-md text-xs font-bold transition-all border ${
+                                                    formMaxChannels === opt.val
+                                                        ? 'bg-primary text-primary-foreground border-primary shadow-2xs'
+                                                        : 'bg-muted/50 text-muted-foreground border-border/80 hover:bg-muted hover:text-foreground'
+                                                }`}
+                                                title={opt.val === 0 ? 'Unlimited' : `${opt.val} Numbers`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <p className="text-[11px] text-muted-foreground">
+                                <p className="text-[11px] text-muted-foreground leading-tight">
                                     {formMaxChannels === 1
-                                        ? 'Client is strictly locked to 1 WhatsApp number.'
+                                        ? 'Single WhatsApp number allowed.'
                                         : formMaxChannels === 0
-                                        ? 'Client can connect unlimited WhatsApp numbers.'
-                                        : `Client can connect up to ${formMaxChannels} WhatsApp numbers.`}
+                                        ? 'Unlimited numbers allowed.'
+                                        : `Up to ${formMaxChannels} WhatsApp numbers allowed.`}
                                 </p>
                             </div>
 
-                            {/* Subscription Plan Name */}
-                            <div className="space-y-1.5">
-                                <Label htmlFor="subscription_plan" className="text-xs font-semibold">
-                                    Plan Tier Label
-                                </Label>
-                                <Input
-                                    id="subscription_plan"
-                                    type="text"
-                                    value={formPlan}
-                                    onChange={(e) => setFormPlan(e.target.value)}
-                                    placeholder="starter, growth, enterprise..."
-                                />
+                            {/* Plan Tier & Status in 2-column grid */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                    <Label htmlFor="subscription_plan" className="text-xs font-semibold">
+                                        Plan Tier
+                                    </Label>
+                                    <Input
+                                        id="subscription_plan"
+                                        type="text"
+                                        value={formPlan}
+                                        onChange={(e) => setFormPlan(e.target.value)}
+                                        placeholder="starter, growth..."
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label htmlFor="status" className="text-xs font-semibold">
+                                        Status
+                                    </Label>
+                                    <select
+                                        id="status"
+                                        value={formStatus}
+                                        onChange={(e) => setFormStatus(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-2 h-8 text-xs font-medium shadow-2xs"
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="suspended">Suspended</option>
+                                    </select>
+                                </div>
                             </div>
 
-                            {/* Workspace Status */}
-                            <div className="space-y-1.5">
-                                <Label htmlFor="status" className="text-xs font-semibold">
-                                    Workspace Status
-                                </Label>
-                                <select
-                                    id="status"
-                                    value={formStatus}
-                                    onChange={(e) => setFormStatus(e.target.value)}
-                                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-2xs font-medium"
-                                >
-                                    <option value="active">Active (Full Access)</option>
-                                    <option value="suspended">Suspended (Access Disabled)</option>
-                                </select>
-                            </div>
-
-                            <DialogFooter className="pt-3 gap-2">
+                            <DialogFooter className="pt-2 gap-2 border-t border-border/70 mt-2">
                                 <Button
                                     type="button"
                                     variant="outline"
                                     onClick={() => setIsEditModalOpen(false)}
                                     disabled={isSubmitting}
+                                    className="h-8 text-xs px-3"
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
+                                    className="h-8 text-xs px-3.5 font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-2xs"
                                 >
-                                    {isSubmitting ? 'Saving Changes...' : 'Save Limit Changes'}
+                                    {isSubmitting ? 'Saving...' : 'Save Limit Changes'}
                                 </Button>
                             </DialogFooter>
                         </form>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Client Workspace Confirmation Modal */}
+            <Dialog open={!!deleteOrgTarget} onOpenChange={(open) => !open && setDeleteOrgTarget(null)}>
+                <DialogContent className="max-w-md p-5 gap-4">
+                    <DialogHeader className="pb-1">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-8 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0 border border-rose-500/20">
+                                <Trash2 className="size-4" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-base font-bold text-foreground">
+                                    Delete Client Workspace
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground">
+                                    Confirm workspace removal.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    {deleteOrgTarget && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg bg-muted/60 border border-border/80 p-3 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Workspace Name:</span>
+                                    <span className="font-semibold text-foreground">{deleteOrgTarget.name}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Slug / URL:</span>
+                                    <span className="font-mono text-foreground">/{deleteOrgTarget.slug}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Account Owner:</span>
+                                    <span className="text-foreground">
+                                        {deleteOrgTarget.owner ? deleteOrgTarget.owner.name : 'None assigned'}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between pt-1 border-t border-border/60">
+                                    <span className="text-muted-foreground">WhatsApp Numbers:</span>
+                                    <span className="text-foreground font-semibold">
+                                        {deleteOrgTarget.channels_count} connected
+                                    </span>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5">
+                                ⚠️ Are you sure you want to delete this workspace? All connected WhatsApp numbers and team access for this workspace will be deleted.
+                            </p>
+
+                            <DialogFooter className="gap-2 pt-2 border-t border-border/70 mt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setDeleteOrgTarget(null)}
+                                    disabled={isDeletingOrg}
+                                    className="h-8 text-xs px-3"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={isDeletingOrg}
+                                    onClick={confirmDeleteOrg}
+                                    className="h-8 text-xs px-3.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-2xs gap-1.5"
+                                >
+                                    <Trash2 className="size-3.5" />
+                                    <span>{isDeletingOrg ? 'Deleting...' : 'Yes, Delete Workspace'}</span>
+                                </Button>
+                            </DialogFooter>
+                        </div>
                     )}
                 </DialogContent>
             </Dialog>

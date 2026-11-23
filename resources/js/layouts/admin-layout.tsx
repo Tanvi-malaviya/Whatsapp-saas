@@ -6,16 +6,10 @@ import {
     Smartphone,
     Users,
     Settings,
-    ShieldAlert,
     Crown,
-    ArrowLeft,
     LogOut,
     Menu,
     X,
-    Radio,
-    Sparkles,
-    CheckCircle2,
-    Sliders,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
@@ -76,7 +70,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
 
     return (
-        <div className="min-h-screen bg-background flex flex-col md:flex-row text-foreground antialiased">
+        <div className="min-h-screen md:h-screen md:overflow-hidden bg-background flex flex-col md:flex-row text-foreground antialiased">
             {/* Mobile Header */}
             <div className="md:hidden flex items-center justify-between p-3 border-b border-border bg-card">
                 <div className="flex items-center gap-2">
@@ -100,7 +94,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
             {/* Admin Dedicated Sidebar */}
             <aside
-                className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border/80 flex flex-col transition-transform duration-200 md:static md:translate-x-0 ${
+                className={`fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border/80 flex flex-col transition-transform duration-200 md:static md:translate-x-0 md:h-full shrink-0 ${
                     mobileOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}
             >
@@ -130,19 +124,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     </Button>
                 </div>
 
-                {/* Return to App Button */}
-                <div className="px-3 pt-3">
-                    <Link
-                        href="/dashboard"
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-all border border-border/60 group"
-                    >
-                        <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform text-primary" />
-                        <span>Exit to Workspace App</span>
-                    </Link>
-                </div>
-
                 {/* Navigation Menu */}
-                <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                <div className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
                     <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                         Administration
                     </div>
@@ -220,29 +203,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             )}
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-                {/* Desktop Top Bar */}
-                <header className="hidden md:flex items-center justify-between h-14 px-6 border-b border-border/70 bg-card/60 backdrop-blur-xs sticky top-0 z-20">
-                    <div className="flex items-center gap-2.5">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
-                            <ShieldAlert className="size-3" />
-                            SUPER ADMIN PORTAL
-                        </span>
-                        <span className="text-xs text-muted-foreground/60">•</span>
-                        <span className="text-xs text-muted-foreground font-mono">
-                            {typeof window !== 'undefined' ? window.location.host : ''}
-                        </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                            <span className="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>System Active</span>
-                        </span>
-                    </div>
-                </header>
-
-                <div className="flex-1 p-4 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto">
+            <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
+                <div className="flex-1 p-3.5 sm:p-4 lg:p-5 max-w-7xl w-full mx-auto">
                     {children}
                 </div>
             </main>

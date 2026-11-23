@@ -294,7 +294,7 @@ class AdminController extends Controller
             $user->switchOrganization($org);
         }
 
-        return redirect()->route('whatsapp.connect')->with('success', "Switched workspace to {$org->name}");
+        return redirect()->route('dashboard')->with('success', "Switched workspace to {$org->name}");
     }
 
     /**
@@ -412,6 +412,107 @@ class AdminController extends Controller
     }
 
     /**
+     * Update User Credentials (Name, Email, Password, Super Admin)
+     */
+    public function updateUser(Request $request, int $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $targetUser = User::findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $targetUser->id],
+            'password' => ['nullable', 'string', 'min:6'],
+            'is_super_admin' => ['nullable', 'boolean'],
+        ]);
+
+        $updateData = [
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'email_verified_at' => $targetUser->email_verified_at ?: now(),
+        ];
+
+        if (!empty($validated['password'])) {
+            $updateData['password'] = Hash::make($validated['password']);
+        }
+
+        if (Schema::hasColumn('users', 'is_super_admin')) {
+            // Prevent demoting primary owner ID 1
+            if ($targetUser->id === 1) {
+                $updateData['is_super_admin'] = true;
+            } else {
+                $updateData['is_super_admin'] = (bool) $request->input('is_super_admin', false);
+            }
+        }
+
+        $targetUser->update($updateData);
+
+        return back()->with('success', "Credentials for '{$targetUser->name}' ({$targetUser->email}) updated successfully!");
+    }
+
+    /**
+     * Delete a User Account
+     */
+    public function destroyUser(Request $request, int $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $targetUser = User::findOrFail($id);
+
+        // Protect primary super admin ID 1
+        if ($targetUser->id === 1) {
+            return back()->with('error', 'Primary Super Administrator (ID 1) cannot be deleted.');
+        }
+
+        // Prevent super admin from deleting themselves
+        if ($request->user() && $request->user()->id === $targetUser->id) {
+            return back()->with('error', 'You cannot delete your own account while logged in.');
+        }
+
+        $userName = $targetUser->name;
+        $userEmail = $targetUser->email;
+
+        // Auto clean up workspaces where this user was the only member
+        $userOrgs = $targetUser->organizations()->get();
+        foreach ($userOrgs as $org) {
+            if ($org->users()->count() <= 1) {
+                $org->channels()->delete();
+                $org->delete();
+            }
+        }
+
+        // Detach from remaining organizations
+        $targetUser->organizations()->detach();
+
+        // Delete user
+        $targetUser->delete();
+
+        return back()->with('success', "User '{$userName}' ({$userEmail}) has been deleted successfully.");
+    }
+
+    /**
+     * Delete an Organization / Client Workspace
+     */
+    public function destroyOrganization(Request $request, string $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $org = Organization::findOrFail($id);
+
+        // Delete channels
+        $org->channels()->delete();
+
+        // Detach all users
+        $org->users()->detach();
+
+        // Soft delete the organization
+        $org->delete();
+
+        return back()->with('success', "Workspace '{$org->name}' has been deleted successfully.");
+    }
+
+    /**
      * Toggle Super Admin Privileges for a User
      */
     public function toggleSuperAdmin(Request $request, int $id): RedirectResponse
@@ -447,12 +548,49 @@ class AdminController extends Controller
                 'app_id' => env('META_APP_ID', '1079349601748656'),
                 'config_id' => env('META_CONFIG_ID', '1835889181059188'),
                 'webhook_url' => url('/webhooks/meta'),
-                'verify_token' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
+                'verify_token' => env('META_VERIFY_TOKEN') ?: config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
                 'graph_version' => 'v22.0',
                 'php_version' => PHP_VERSION,
                 'laravel_version' => app()->version(),
                 'environment' => config('app.env'),
             ],
         ]);
+    }
+
+    /**
+     * Save Meta API Credentials & Webhook Settings to .env
+     */
+    public function updateSettings(Request $request): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'app_id' => 'required|string|max:100',
+            'config_id' => 'required|string|max:100',
+            'verify_token' => 'required|string|max:255',
+        ]);
+
+        $envPath = base_path('.env');
+        if (file_exists($envPath)) {
+            $envContent = file_get_contents($envPath);
+
+            $replacements = [
+                'META_APP_ID' => $validated['app_id'],
+                'META_CONFIG_ID' => $validated['config_id'],
+                'META_VERIFY_TOKEN' => $validated['verify_token'],
+            ];
+
+            foreach ($replacements as $key => $value) {
+                if (preg_match("/^{$key}=.*/m", $envContent)) {
+                    $envContent = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $envContent);
+                } else {
+                    $envContent .= "\n{$key}={$value}";
+                }
+            }
+
+            file_put_contents($envPath, $envContent);
+        }
+
+        return back()->with('success', 'Meta Cloud API settings updated and saved successfully.');
     }
 }

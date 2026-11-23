@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     Settings,
     Key,
@@ -10,6 +10,14 @@ import {
     ShieldCheck,
     Server,
     Cpu,
+    Layers,
+    Building2,
+    CheckCircle2,
+    Eye,
+    EyeOff,
+    Radio,
+    Sparkles,
+    Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +40,31 @@ type Props = {
 
 export default function AdminSettings({ settings }: Props) {
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [showVerifyToken, setShowVerifyToken] = useState(false);
+    const [appId, setAppId] = useState(settings.app_id);
+    const [configId, setConfigId] = useState(settings.config_id);
+    const [verifyToken, setVerifyToken] = useState(settings.verify_token);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const hasChanges =
+        appId !== settings.app_id ||
+        configId !== settings.config_id ||
+        verifyToken !== settings.verify_token;
+
+    const handleSaveSettings = () => {
+        setIsSaving(true);
+        router.post(
+            '/admin/settings',
+            {
+                app_id: appId,
+                config_id: configId,
+                verify_token: verifyToken,
+            },
+            {
+                onFinish: () => setIsSaving(false),
+            }
+        );
+    };
 
     const copyToClipboard = (text: string, field: string) => {
         navigator.clipboard.writeText(text);
@@ -43,163 +76,372 @@ export default function AdminSettings({ settings }: Props) {
         <>
             <Head title="Global Settings - Super Admin" />
 
-            <div className="space-y-6 max-w-4xl">
+            <div className="space-y-3.5 w-full">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/70 pb-5">
-                    <div>
-                        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                            <Settings className="size-6 text-primary" />
-                            <span>Global Platform Settings</span>
-                        </h1>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                            System-wide Meta WhatsApp Cloud API credentials, webhook verification, and environment specs.
-                        </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/70">
+                    <div className="flex items-center gap-2.5">
+                        <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            <Settings className="size-4" />
+                        </div>
+                        <div>
+                            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-tight">
+                                Global Platform &amp; API Settings
+                            </h1>
+                            <p className="text-xs text-muted-foreground">
+                                System-wide Meta WhatsApp Cloud API credentials, webhook endpoints &amp; runtime specs
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {hasChanges && (
+                            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1 shrink-0">
+                                <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                Unsaved changes
+                            </span>
+                        )}
+
+                        <Button
+                            size="sm"
+                            disabled={isSaving || !hasChanges}
+                            onClick={handleSaveSettings}
+                            className={`h-8 text-xs font-semibold gap-1.5 shadow-2xs transition-all ${
+                                hasChanges
+                                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                                    : 'bg-muted text-muted-foreground hover:bg-muted/80 opacity-60'
+                            }`}
+                        >
+                            <Save className="size-3.5" />
+                            <span>{isSaving ? 'Saving...' : hasChanges ? 'Save Settings' : 'Saved'}</span>
+                        </Button>
+
+                        <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1.5 py-1">
+                            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Meta API {settings.graph_version}</span>
+                        </Badge>
+
+                        <Button size="sm" variant="outline" asChild className="h-8 text-xs gap-1.5 border-border/80 hover:bg-muted">
+                            <a
+                                href={`https://developers.facebook.com/apps/${appId || settings.app_id}/whatsapp-business/wa-dev-console/`}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                <span>Meta Console</span>
+                                <ExternalLink className="size-3 text-muted-foreground" />
+                            </a>
+                        </Button>
                     </div>
                 </div>
 
-                {/* Meta Developer App Configuration */}
-                <Card className="border-border/70 shadow-2xs">
-                    <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="text-base font-bold flex items-center gap-2">
-                                <Key className="size-4 text-emerald-600" />
-                                <span>Official Meta Cloud API App</span>
-                            </CardTitle>
-                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-mono">
-                                {settings.graph_version}
-                            </Badge>
-                        </div>
-                        <CardDescription>
-                            Meta for Developers App credentials used by the 1-Click Embedded Signup wizard for all clients.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4 pt-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Meta App ID (Client ID)</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        readOnly
-                                        value={settings.app_id}
-                                        className="font-mono text-xs bg-muted/50"
-                                    />
-                                    <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="size-9 shrink-0"
-                                        onClick={() => copyToClipboard(settings.app_id, 'appid')}
-                                    >
-                                        {copiedField === 'appid' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-                                    </Button>
+                {/* 2-Column Responsive Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+                    {/* Left Column: Meta Cloud API & Webhook (7 Columns) */}
+                    <div className="lg:col-span-7 space-y-3.5">
+                        {/* Meta Developer App Configuration */}
+                        <Card className="border-border/70 shadow-2xs">
+                            <CardHeader className="p-4 pb-2">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                        <Key className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                        <span>Official Meta Cloud API App</span>
+                                    </CardTitle>
+                                    <Badge variant="outline" className="text-[10px] bg-muted font-mono">
+                                        Embedded Signup
+                                    </Badge>
                                 </div>
-                            </div>
+                                <CardDescription className="text-xs">
+                                    Meta for Developers App credentials used by the 1-Click Embedded Signup wizard for all clients.
+                                </CardDescription>
+                            </CardHeader>
 
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Embedded Signup Config ID</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        readOnly
-                                        value={settings.config_id}
-                                        className="font-mono text-xs bg-muted/50"
-                                    />
-                                    <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="size-9 shrink-0"
-                                        onClick={() => copyToClipboard(settings.config_id, 'configid')}
-                                    >
-                                        {copiedField === 'configid' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-                                    </Button>
+                            <CardContent className="p-4 pt-1 space-y-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* App ID */}
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-xs font-semibold text-foreground">Meta App ID (Client ID)</Label>
+                                            {copiedField === 'appid' && (
+                                                <span className="text-[10px] text-emerald-600 font-medium">Copied!</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <Input
+                                                value={appId}
+                                                onChange={(e) => setAppId(e.target.value)}
+                                                className="font-mono text-xs bg-background h-8 border-border/80"
+                                                placeholder="Meta App ID"
+                                            />
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="size-8 shrink-0 hover:bg-muted"
+                                                title="Copy App ID"
+                                                onClick={() => copyToClipboard(appId, 'appid')}
+                                            >
+                                                {copiedField === 'appid' ? (
+                                                    <Check className="size-3.5 text-emerald-600" />
+                                                ) : (
+                                                    <Copy className="size-3.5 text-muted-foreground" />
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* Config ID */}
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-xs font-semibold text-foreground">Embedded Signup Config ID</Label>
+                                            {copiedField === 'configid' && (
+                                                <span className="text-[10px] text-emerald-600 font-medium">Copied!</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <Input
+                                                value={configId}
+                                                onChange={(e) => setConfigId(e.target.value)}
+                                                className="font-mono text-xs bg-background h-8 border-border/80"
+                                                placeholder="Config ID"
+                                            />
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="size-8 shrink-0 hover:bg-muted"
+                                                title="Copy Config ID"
+                                                onClick={() => copyToClipboard(configId, 'configid')}
+                                            >
+                                                {copiedField === 'configid' ? (
+                                                    <Check className="size-3.5 text-emerald-600" />
+                                                ) : (
+                                                    <Copy className="size-3.5 text-muted-foreground" />
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
+                            </CardContent>
+                        </Card>
 
                         {/* Webhook Settings */}
-                        <div className="space-y-1.5 pt-2">
-                            <Label className="text-xs font-semibold">Global Webhook Callback URL</Label>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    readOnly
-                                    value={settings.webhook_url}
-                                    className="font-mono text-xs bg-muted/50"
-                                />
-                                <Button
-                                    size="icon"
-                                    variant="outline"
-                                    className="size-9 shrink-0"
-                                    onClick={() => copyToClipboard(settings.webhook_url, 'whurl')}
-                                >
-                                    {copiedField === 'whurl' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-                                </Button>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                Configure this endpoint in Meta Developer Dashboard &gt; WhatsApp &gt; Configuration &gt; Webhook Callback URL.
-                            </p>
-                        </div>
+                        <Card className="border-border/70 shadow-2xs">
+                            <CardHeader className="p-4 pb-2">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                        <Globe className="size-4 text-blue-600 dark:text-blue-400" />
+                                        <span>Global Webhook Callback &amp; Verification</span>
+                                    </CardTitle>
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                                        <Radio className="size-2.5 animate-pulse" />
+                                        Listening
+                                    </span>
+                                </div>
+                                <CardDescription className="text-xs">
+                                    Configure these exact webhook values in Meta Developer Console &gt; WhatsApp &gt; Configuration.
+                                </CardDescription>
+                            </CardHeader>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Webhook Verify Token</Label>
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    readOnly
-                                    value={settings.verify_token}
-                                    className="font-mono text-xs bg-muted/50"
-                                />
-                                <Button
-                                    size="icon"
-                                    variant="outline"
-                                    className="size-9 shrink-0"
-                                    onClick={() => copyToClipboard(settings.verify_token, 'token')}
-                                >
-                                    {copiedField === 'token' ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
-                                </Button>
-                            </div>
-                        </div>
+                            <CardContent className="p-4 pt-1 space-y-3">
+                                {/* Callback URL */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold text-foreground">Webhook Callback URL</Label>
+                                        {copiedField === 'whurl' && (
+                                            <span className="text-[10px] text-emerald-600 font-medium">Copied!</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Input
+                                            readOnly
+                                            value={settings.webhook_url}
+                                            className="font-mono text-xs bg-muted/40 h-8 border-border/80"
+                                        />
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            className="size-8 shrink-0 hover:bg-muted"
+                                            title="Copy Webhook URL"
+                                            onClick={() => copyToClipboard(settings.webhook_url, 'whurl')}
+                                        >
+                                            {copiedField === 'whurl' ? (
+                                                <Check className="size-3.5 text-emerald-600" />
+                                            ) : (
+                                                <Copy className="size-3.5 text-muted-foreground" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
 
-                        <div className="pt-2 flex items-center justify-end">
-                            <Button size="sm" variant="outline" asChild className="h-8 text-xs gap-1.5">
-                                <a
-                                    href="https://developers.facebook.com/apps/1079349601748656/whatsapp-business/wa-dev-console/"
-                                    target="_blank"
-                                    rel="noreferrer"
-                                >
-                                    <span>Open Meta Developer Console</span>
-                                    <ExternalLink className="size-3" />
-                                </a>
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                                {/* Verify Token */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold text-foreground">Webhook Verify Token</Label>
+                                        {copiedField === 'token' && (
+                                            <span className="text-[10px] text-emerald-600 font-medium">Copied!</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="relative flex-1">
+                                            <Input
+                                                type={showVerifyToken ? 'text' : 'password'}
+                                                value={verifyToken}
+                                                onChange={(e) => setVerifyToken(e.target.value)}
+                                                className="font-mono text-xs bg-background h-8 pr-8 border-border/80"
+                                                placeholder="Webhook verify token"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowVerifyToken(!showVerifyToken)}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                                                tabIndex={-1}
+                                            >
+                                                {showVerifyToken ? (
+                                                    <EyeOff className="size-3.5" />
+                                                ) : (
+                                                    <Eye className="size-3.5" />
+                                                )}
+                                            </button>
+                                        </div>
+                                        <Button
+                                            size="icon"
+                                            variant="outline"
+                                            className="size-8 shrink-0 hover:bg-muted"
+                                            title="Copy Verify Token"
+                                            onClick={() => copyToClipboard(verifyToken, 'token')}
+                                        >
+                                            {copiedField === 'token' ? (
+                                                <Check className="size-3.5 text-emerald-600" />
+                                            ) : (
+                                                <Copy className="size-3.5 text-muted-foreground" />
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
 
-                {/* Server & Environment Info */}
-                <Card className="border-border/70 shadow-2xs">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base font-bold flex items-center gap-2">
-                            <Server className="size-4 text-blue-600" />
-                            <span>System &amp; Server Environment</span>
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 pt-1">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <div className="p-3 rounded-lg border border-border/60 bg-muted/30">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">PHP Version</span>
-                                <div className="text-sm font-bold font-mono text-foreground mt-0.5">{settings.php_version}</div>
-                            </div>
-                            <div className="p-3 rounded-lg border border-border/60 bg-muted/30">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">Laravel Framework</span>
-                                <div className="text-sm font-bold font-mono text-foreground mt-0.5">v{settings.laravel_version}</div>
-                            </div>
-                            <div className="p-3 rounded-lg border border-border/60 bg-muted/30">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">Environment</span>
-                                <div className="text-sm font-bold capitalize text-emerald-600 mt-0.5">{settings.environment}</div>
-                            </div>
-                            <div className="p-3 rounded-lg border border-border/60 bg-muted/30">
-                                <span className="text-[10px] uppercase font-bold text-muted-foreground">Multi-Tenancy</span>
-                                <div className="text-sm font-bold text-primary mt-0.5">Org Context</div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                                {/* Subscribed Events */}
+                                <div className="pt-1 border-t border-border/60">
+                                    <div className="text-[11px] font-semibold text-muted-foreground mb-1.5">
+                                        Required Webhook Field Subscriptions:
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {['messages', 'message_template_status_update', 'phone_number_name_update', 'account_update'].map((f) => (
+                                            <span
+                                                key={f}
+                                                className="inline-flex items-center gap-1 text-[10px] font-mono bg-muted px-2 py-0.5 rounded-md border border-border/70 text-foreground"
+                                            >
+                                                <Check className="size-2.5 text-emerald-600 shrink-0" />
+                                                <span>{f}</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Right Column: Server Environment & System Status (5 Columns) */}
+                    <div className="lg:col-span-5 space-y-3.5">
+                        {/* Server & Environment Info */}
+                        <Card className="border-border/70 shadow-2xs">
+                            <CardHeader className="p-4 pb-2">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                        <Server className="size-4 text-purple-600 dark:text-purple-400" />
+                                        <span>System &amp; Server Environment</span>
+                                    </CardTitle>
+                                    <Badge
+                                        variant="outline"
+                                        className={`text-[10px] font-semibold uppercase ${
+                                            settings.environment === 'production'
+                                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                                        }`}
+                                    >
+                                        {settings.environment}
+                                    </Badge>
+                                </div>
+                            </CardHeader>
+
+                            <CardContent className="p-4 pt-1 space-y-2.5">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="p-2.5 rounded-lg border border-border/70 bg-muted/30">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <Cpu className="size-3 text-indigo-500" />
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">PHP Version</span>
+                                        </div>
+                                        <div className="text-xs font-bold font-mono text-foreground mt-1">
+                                            {settings.php_version}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-2.5 rounded-lg border border-border/70 bg-muted/30">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <Layers className="size-3 text-rose-500" />
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">Laravel</span>
+                                        </div>
+                                        <div className="text-xs font-bold font-mono text-foreground mt-1">
+                                            v{settings.laravel_version}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-2.5 rounded-lg border border-border/70 bg-muted/30">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <Building2 className="size-3 text-emerald-500" />
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">Multi-Tenancy</span>
+                                        </div>
+                                        <div className="text-xs font-bold text-foreground mt-1 truncate">
+                                            TenantContext
+                                        </div>
+                                    </div>
+
+                                    <div className="p-2.5 rounded-lg border border-border/70 bg-muted/30">
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <ShieldCheck className="size-3 text-blue-500" />
+                                            <span className="text-[10px] uppercase font-bold tracking-wider">Security</span>
+                                        </div>
+                                        <div className="text-xs font-bold text-foreground mt-1 truncate">
+                                            Super Admin Protected
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Integration Readiness Checklist */}
+                        <Card className="border-border/70 shadow-2xs">
+                            <CardHeader className="p-4 pb-2">
+                                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                    <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span>Platform Readiness Checklist</span>
+                                </CardTitle>
+                            </CardHeader>
+
+                            <CardContent className="p-4 pt-1 space-y-2">
+                                {[
+                                    { title: 'Embedded Signup Wizard', desc: '1-click client WhatsApp onboarding active' },
+                                    { title: 'Meta Cloud API v22.0', desc: 'Official Graph API endpoint connected' },
+                                    { title: 'Multi-Tenant Quota System', desc: 'Channel limits enforced per client workspace' },
+                                    { title: 'Real-time Webhook Ingestion', desc: 'Incoming messages and delivery receipts synced' },
+                                ].map((item, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-start gap-2 p-2 rounded-md bg-muted/30 border border-border/60"
+                                    >
+                                        <div className="size-4 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                                            <Check className="size-2.5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-semibold text-foreground leading-tight">
+                                                {item.title}
+                                            </div>
+                                            <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                                                {item.desc}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
             </div>
         </>
     );

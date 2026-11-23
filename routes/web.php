@@ -46,12 +46,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard.index');
             Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
             Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
-            Route::post('organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::match(['get', 'post'], 'organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::delete('organizations/{id}', [\App\Http\Controllers\AdminController::class, 'destroyOrganization'])->name('organizations.destroy');
             Route::get('channels', [\App\Http\Controllers\AdminController::class, 'channels'])->name('channels');
             Route::get('users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
             Route::post('users', [\App\Http\Controllers\AdminController::class, 'storeUser'])->name('users.store');
+            Route::put('users/{id}', [\App\Http\Controllers\AdminController::class, 'updateUser'])->name('users.update');
+            Route::delete('users/{id}', [\App\Http\Controllers\AdminController::class, 'destroyUser'])->name('users.destroy');
             Route::post('users/{id}/toggle-admin', [\App\Http\Controllers\AdminController::class, 'toggleSuperAdmin'])->name('users.toggle-admin');
             Route::get('settings', [\App\Http\Controllers\AdminController::class, 'settings'])->name('settings');
+            Route::post('settings', [\App\Http\Controllers\AdminController::class, 'updateSettings'])->name('settings.update');
         });
 
     // Bot Flows, Auto Responder & AI Agent
