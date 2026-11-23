@@ -47,12 +47,18 @@ type Props = {
     channels?: Channel[];
     defaultWebhookUrl?: string;
     defaultVerifyToken?: string;
+    maxChannels?: number;
+    channelsCount?: number;
+    canAddMore?: boolean;
 };
 
 export default function WhatsAppConnect({
     channels = [],
     defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
     defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+    maxChannels = 1,
+    channelsCount = 0,
+    canAddMore = true,
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
@@ -207,6 +213,11 @@ export default function WhatsAppConnect({
     }, []);
 
     const launchDirectMetaWizard = () => {
+        if (!canAddMore) {
+            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
+            return;
+        }
+
         const appId = '1079349601748656';
         const configId = '1835889181059188';
 
@@ -253,6 +264,11 @@ export default function WhatsAppConnect({
     };
 
     const handleAddNewChannel = () => {
+        if (!canAddMore) {
+            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
+            return;
+        }
+
         setIsEditing(false);
         const existing = channels[0];
         setForm({
@@ -392,6 +408,21 @@ export default function WhatsAppConnect({
                                     <span className="size-1.5 rounded-full bg-primary animate-pulse" />
                                     Meta Cloud v22.0
                                 </span>
+                                {maxChannels <= 0 ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                                        <Sparkles className="size-2.5" /> Unlimited Numbers Plan
+                                    </span>
+                                ) : (
+                                    <span
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                                            canAddMore
+                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                                : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold'
+                                        }`}
+                                    >
+                                        Quota: {channelsCount}/{maxChannels} Used {maxChannels === 1 ? '(Single Number Plan)' : '(Multi-Number Plan)'}
+                                    </span>
+                                )}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 Manage registered phone numbers, webhook events, and Cloud API tokens.
@@ -436,6 +467,16 @@ export default function WhatsAppConnect({
                         </Button>
                     </div>
                 </div>
+
+                {/* Quota limit warning alert if limit reached */}
+                {!canAddMore && (
+                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs shadow-2xs">
+                        <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span>
+                            <strong>WhatsApp Number Limit Reached:</strong> Your current workspace plan allows a maximum of <strong>{maxChannels}</strong> WhatsApp number{maxChannels > 1 ? 's' : ''}. To connect additional numbers, please contact support to upgrade your plan.
+                        </span>
+                    </div>
+                )}
 
                 {syncNotice && (
                     <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-xs text-primary font-medium flex items-center justify-between">

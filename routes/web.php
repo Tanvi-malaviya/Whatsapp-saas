@@ -12,6 +12,11 @@ Route::inertia('/terms', 'terms')->name('terms');
 Route::get('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class, 'verify']);
 Route::post('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class, 'receive']);
 
+// Super Admin: Dedicated Separate Authentication Routes (Public access for Admin Login)
+Route::get('admin/login', [\App\Http\Controllers\AdminController::class, 'showLogin'])->name('admin.login');
+Route::post('admin/login', [\App\Http\Controllers\AdminController::class, 'login'])->name('admin.login.submit');
+Route::post('admin/logout', [\App\Http\Controllers\AdminController::class, 'logout'])->name('admin.logout');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
     
@@ -31,6 +36,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Developers redirect to System Logs
     Route::redirect('developers', '/insights/system-logs')->name('developers.index');
+
+    // Super Admin: Dedicated Standalone Portal (Strict Auth & SuperAdmin Protection)
+    Route::prefix('admin')
+        ->middleware([\App\Http\Middleware\EnsureSuperAdmin::class])
+        ->name('admin.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard');
+            Route::get('dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard.index');
+            Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
+            Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
+            Route::post('organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::get('channels', [\App\Http\Controllers\AdminController::class, 'channels'])->name('channels');
+            Route::get('users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
+            Route::post('users', [\App\Http\Controllers\AdminController::class, 'storeUser'])->name('users.store');
+            Route::post('users/{id}/toggle-admin', [\App\Http\Controllers\AdminController::class, 'toggleSuperAdmin'])->name('users.toggle-admin');
+            Route::get('settings', [\App\Http\Controllers\AdminController::class, 'settings'])->name('settings');
+        });
 
     // Bot Flows, Auto Responder & AI Agent
     Route::redirect('bot', 'flows')->name('bot.index');

@@ -127,10 +127,18 @@ class WhatsAppChannelController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        $org = Organization::find($orgId);
+        $maxChannels = $org ? $org->getMaxChannels() : 1;
+        $channelsCount = $channels->count();
+        $canAddMore = $org ? $org->canAddMoreChannels() : ($channelsCount < 1);
+
         return Inertia::render('whatsapp/connect', [
             'channels' => $channels,
             'defaultWebhookUrl' => url('/webhooks/meta'),
             'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
+            'maxChannels' => $maxChannels,
+            'channelsCount' => $channelsCount,
+            'canAddMore' => $canAddMore,
         ]);
     }
 
@@ -165,6 +173,7 @@ class WhatsAppChannelController extends Controller
     public function quickConnect(Request $request): JsonResponse
     {
         $orgId = $this->resolveTenantId($request);
+        $org = Organization::find($orgId);
         $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
 
         $phoneNumber = trim($request->input('phone_number', ''));
@@ -223,6 +232,11 @@ class WhatsAppChannelController extends Controller
                                             $mpQuality = $mp['quality_rating'] ?? 'GREEN';
 
                                             if ($mpId) {
+                                                $alreadyInDb = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $mpId)->exists();
+                                                if (!$alreadyInDb && $org && !$org->canAddMoreChannels()) {
+                                                    continue;
+                                                }
+
                                                 WhatsAppChannel::updateOrCreate(
                                                     [
                                                         'organization_id' => $orgId,
@@ -310,6 +324,15 @@ class WhatsAppChannelController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Could not automatically retrieve the 15-digit Phone Number ID from Meta. Please enter credentials manually.',
+            ], 422);
+        }
+
+        $isExisting = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
+        if (!$isExisting && $org && !$org->canAddMoreChannels()) {
+            $limit = $org->getMaxChannels();
+            return response()->json([
+                'success' => false,
+                'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
             ], 422);
         }
 
@@ -414,6 +437,21 @@ class WhatsAppChannelController extends Controller
                 'webhook_verified_at' => $verifiedAt,
             ]);
         } else {
+            $org = Organization::find($orgId);
+            $alreadyExists = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
+            if (!$alreadyExists && $org && !$org->canAddMoreChannels()) {
+                $limit = $org->getMaxChannels();
+                if ($request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
+                    ], 422);
+                }
+                return back()->withErrors([
+                    'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
+                ]);
+            }
+
             $existingCount = WhatsAppChannel::where('organization_id', $orgId)->count();
             $isDefault = $existingCount === 0;
 
@@ -548,6 +586,12 @@ class WhatsAppChannelController extends Controller
                         $quality = $mp['quality_rating'] ?? 'GREEN';
 
                         if ($phoneId) {
+                            $alreadyInDb = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
+                            $org = Organization::find($orgId);
+                            if (!$alreadyInDb && $org && !$org->canAddMoreChannels()) {
+                                continue;
+                            }
+
                             WhatsAppChannel::updateOrCreate(
                                 [
                                     'organization_id' => $orgId,
