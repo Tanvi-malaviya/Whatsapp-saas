@@ -274,20 +274,29 @@ class WhatsAppChannelController extends Controller
         }
 
         // If phone_number_id is passed directly, fetch details from Graph API
-        if ($phoneId && $accessToken && empty($phoneNumber)) {
-            try {
-                $pResp = Http::withToken($accessToken)
-                    ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
-                        'fields' => 'display_phone_number,verified_name,quality_rating',
-                    ]);
-                if ($pResp->successful()) {
-                    $pData = $pResp->json();
-                    $phoneNumber = $pData['display_phone_number'] ?? '';
-                    if (!empty($pData['verified_name'])) {
-                        $name = $pData['verified_name'];
+        if ($phoneId && empty($phoneNumber)) {
+            $queryToken = $accessToken 
+                ?: WhatsAppChannel::where('organization_id', $orgId)->whereNotNull('access_token')->where('access_token', '!=', '')->value('access_token')
+                ?: env('META_WHATSAPP_TOKEN', '');
+
+            if ($queryToken) {
+                try {
+                    $pResp = Http::withToken($queryToken)
+                        ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
+                            'fields' => 'display_phone_number,verified_name,quality_rating',
+                        ]);
+                    if ($pResp->successful()) {
+                        $pData = $pResp->json();
+                        $phoneNumber = $pData['display_phone_number'] ?? '';
+                        if (!empty($pData['verified_name'])) {
+                            $name = $pData['verified_name'];
+                        }
+                        if (empty($accessToken)) {
+                            $accessToken = $queryToken;
+                        }
                     }
-                }
-            } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {}
+            }
         }
 
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
