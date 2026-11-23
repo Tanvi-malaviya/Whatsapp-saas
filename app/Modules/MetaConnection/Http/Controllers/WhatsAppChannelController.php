@@ -714,9 +714,12 @@ class WhatsAppChannelController extends Controller
     public function destroy(Request $request, string $id): RedirectResponse
     {
         $orgId = $this->resolveTenantId($request);
-        WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->delete();
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->first();
+        if ($channel) {
+            $channel->forceDelete();
+        }
 
-        return back()->with('success', 'WhatsApp channel disconnected.');
+        return redirect()->route('whatsapp.connect')->with('success', 'WhatsApp channel disconnected.');
     }
 
     public function setDefault(Request $request, string $id): RedirectResponse
