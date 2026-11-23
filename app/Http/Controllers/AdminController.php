@@ -11,8 +11,10 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -543,13 +545,18 @@ class AdminController extends Controller
     {
         $this->ensureSuperAdmin($request);
 
+        $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
+        $configId = Cache::get('meta_config_id') ?: env('META_CONFIG_ID', '1835889181059188');
+        $permanentToken = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        $verifyToken = Cache::get('meta_verify_token') ?: env('META_VERIFY_TOKEN') ?: config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b');
+
         return Inertia::render('admin/settings', [
             'settings' => [
-                'app_id' => env('META_APP_ID', '1079349601748656'),
-                'config_id' => env('META_CONFIG_ID', '1835889181059188'),
-                'permanent_token' => env('META_WHATSAPP_TOKEN', ''),
+                'app_id' => $appId,
+                'config_id' => $configId,
+                'permanent_token' => $permanentToken,
                 'webhook_url' => url('/webhooks/meta'),
-                'verify_token' => env('META_VERIFY_TOKEN') ?: config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
+                'verify_token' => $verifyToken,
                 'graph_version' => 'v22.0',
                 'php_version' => PHP_VERSION,
                 'laravel_version' => app()->version(),
@@ -559,7 +566,7 @@ class AdminController extends Controller
     }
 
     /**
-     * Save Meta API Credentials & Webhook Settings to .env
+     * Save Meta API Credentials & Webhook Settings
      */
     public function updateSettings(Request $request): RedirectResponse
     {
@@ -572,28 +579,80 @@ class AdminController extends Controller
             'permanent_token' => 'nullable|string',
         ]);
 
-        $envPath = base_path('.env');
-        if (file_exists($envPath)) {
-            $envContent = file_get_contents($envPath);
+        $appId = trim($validated['app_id']);
+        $configId = trim($validated['config_id']);
+        $verifyToken = trim($validated['verify_token']);
+        $permanentToken = trim($validated['permanent_token'] ?? '');
 
-            $replacements = [
-                'META_APP_ID' => $validated['app_id'],
-                'META_CONFIG_ID' => $validated['config_id'],
-                'META_VERIFY_TOKEN' => $validated['verify_token'],
-                'META_WHATSAPP_TOKEN' => $validated['permanent_token'] ?? '',
-            ];
-
-            foreach ($replacements as $key => $value) {
-                if (preg_match("/^{$key}=.*/m", $envContent)) {
-                    $envContent = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $envContent);
-                } else {
-                    $envContent .= "\n{$key}={$value}";
-                }
-            }
-
-            file_put_contents($envPath, $envContent);
+        // 1. Store reliably in persistent cache / database
+        Cache::forever('meta_app_id', $appId);
+        Cache::forever('meta_config_id', $configId);
+        Cache::forever('meta_verify_token', $verifyToken);
+        if ($permanentToken !== '') {
+            Cache::forever('meta_whatsapp_token', $permanentToken);
         }
 
-        return back()->with('success', 'Meta Cloud API settings updated and saved successfully.');
+        // 2. Safely attempt to write to .env (ignore permission errors on Linux server)
+        try {
+            $envPath = base_path('.env');
+            if (file_exists($envPath) && is_writable($envPath)) {
+                $envContent = file_get_contents($envPath);
+
+                $replacements = [
+                    'META_APP_ID' => $appId,
+                    'META_CONFIG_ID' => $configId,
+                    'META_VERIFY_TOKEN' => $verifyToken,
+                ];
+                if ($permanentToken !== '') {
+                    $replacements['META_WHATSAPP_TOKEN'] = $permanentToken;
+                }
+
+                foreach ($replacements as $key => $value) {
+                    if (preg_match("/^{$key}=.*/m", $envContent)) {
+                        $envContent = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $envContent);
+                    } else {
+                        $envContent .= "\n{$key}={$value}";
+                    }
+                }
+
+                file_put_contents($envPath, $envContent);
+            }
+        } catch (\Throwable $e) {
+            // Non-critical if .env is read-only
+        }
+
+        // 3. If permanent token provided, dynamically sync details from Meta Graph API for all connected channels!
+        $tokenToUse = $permanentToken ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        if ($tokenToUse) {
+            $channels = WhatsAppChannel::withoutGlobalScopes()->get();
+            foreach ($channels as $ch) {
+                // Update access token on channels if missing
+                if (empty($ch->access_token)) {
+                    $ch->update(['access_token' => $tokenToUse]);
+                }
+
+                // If channel phone_number is missing or 'Registered', fetch from Meta Graph API!
+                if (empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) {
+                    if (!empty($ch->phone_number_id) && !str_starts_with($ch->phone_number_id, 'phone_')) {
+                        try {
+                            $resp = Http::withToken($tokenToUse)->get("https://graph.facebook.com/v22.0/{$ch->phone_number_id}", [
+                                'fields' => 'display_phone_number,verified_name,quality_rating',
+                            ]);
+                            if ($resp->successful()) {
+                                $data = $resp->json();
+                                $ch->update(array_filter([
+                                    'phone_number' => $data['display_phone_number'] ?? null,
+                                    'name' => $data['verified_name'] ?? null,
+                                    'quality_rating' => $data['quality_rating'] ?? 'GREEN',
+                                    'access_token' => $tokenToUse,
+                                ]));
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+        }
+
+        return redirect()->route('admin.settings')->with('success', 'Meta Cloud API settings updated and saved successfully.');
     }
 }

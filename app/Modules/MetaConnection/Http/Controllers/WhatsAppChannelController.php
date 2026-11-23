@@ -9,6 +9,7 @@ use App\Shared\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,7 +31,7 @@ class WhatsAppChannelController extends Controller
         // Automatically connect if redirected from Meta Embedded Signup popup with OAuth code
         if ($request->has('code')) {
             $code = $request->query('code');
-            $appId = env('META_APP_ID', '1079349601748656');
+            $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
             $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
             $origin = $request->getSchemeAndHttpHost();
             $redirectUri = "{$origin}/whatsapp/connect";
@@ -100,7 +101,7 @@ class WhatsAppChannelController extends Controller
             $phoneNumber = trim($request->query('phone_number', ''));
             $queryName = trim($request->query('name', ''));
             $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-            $accessToken = $existing?->access_token ?: env('META_WHATSAPP_TOKEN', '');
+            $accessToken = $existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
 
             // Try to fetch real display_phone_number and verified_name from Graph API if token available
             if ($accessToken && empty($phoneNumber)) {
@@ -161,6 +162,35 @@ class WhatsAppChannelController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // Dynamically fetch phone number and verified name from Meta Graph API for any channels missing them
+        $globalToken = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        foreach ($channels as $ch) {
+            $tok = $ch->access_token ?: $globalToken;
+            if ((empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) && !empty($ch->phone_number_id) && !str_starts_with($ch->phone_number_id, 'phone_') && $tok) {
+                try {
+                    $pResp = Http::withToken($tok)->timeout(4)->get("https://graph.facebook.com/v22.0/{$ch->phone_number_id}", [
+                        'fields' => 'display_phone_number,verified_name,quality_rating',
+                    ]);
+                    if ($pResp->successful()) {
+                        $pData = $pResp->json();
+                        if (!empty($pData['display_phone_number'])) {
+                            $ch->phone_number = $pData['display_phone_number'];
+                        }
+                        if (!empty($pData['verified_name'])) {
+                            $ch->name = $pData['verified_name'];
+                        }
+                        if (!empty($pData['quality_rating'])) {
+                            $ch->quality_rating = $pData['quality_rating'];
+                        }
+                        if (empty($ch->access_token)) {
+                            $ch->access_token = $tok;
+                        }
+                        $ch->save();
+                    }
+                } catch (\Throwable $e) {}
+            }
+        }
+
         $org = Organization::find($orgId);
         $maxChannels = $org ? $org->getMaxChannels() : 1;
         $channelsCount = $channels->count();
@@ -199,8 +229,8 @@ class WhatsAppChannelController extends Controller
             'existingChannel' => $existing,
             'defaultWebhookUrl' => url('/webhooks/meta'),
             'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
-            'metaAppId' => env('META_APP_ID', '1079349601748656'),
-            'metaConfigId' => env('META_CONFIG_ID', '1835889181059188'),
+            'metaAppId' => Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656'),
+            'metaConfigId' => Cache::get('meta_config_id') ?: env('META_CONFIG_ID', '1835889181059188'),
         ]);
     }
 
@@ -311,6 +341,7 @@ class WhatsAppChannelController extends Controller
         if ($phoneId && empty($phoneNumber)) {
             $queryToken = $accessToken 
                 ?: WhatsAppChannel::where('organization_id', $orgId)->whereNotNull('access_token')->where('access_token', '!=', '')->value('access_token')
+                ?: Cache::get('meta_whatsapp_token')
                 ?: env('META_WHATSAPP_TOKEN', '');
 
             if ($queryToken) {
@@ -414,6 +445,32 @@ class WhatsAppChannelController extends Controller
             ]
         );
 
+        // Also query Meta Graph API directly for any channel missing its phone number
+        $missingChannels = WhatsAppChannel::where('organization_id', $orgId)
+            ->whereNotNull('phone_number_id')
+            ->where('phone_number_id', 'not like', 'phone_%')
+            ->get();
+        foreach ($missingChannels as $mCh) {
+            $useTok = $mCh->access_token ?: $token ?: $globalTok;
+            if ($useTok && (empty($mCh->phone_number) || str_contains($mCh->phone_number, 'Registered'))) {
+                try {
+                    $pResp = Http::withToken($useTok)->timeout(5)->get("https://graph.facebook.com/v22.0/{$mCh->phone_number_id}", [
+                        'fields' => 'display_phone_number,verified_name,quality_rating',
+                    ]);
+                    if ($pResp->successful()) {
+                        $pData = $pResp->json();
+                        $mCh->update(array_filter([
+                            'phone_number' => $pData['display_phone_number'] ?? null,
+                            'name' => $pData['verified_name'] ?? null,
+                            'quality_rating' => $pData['quality_rating'] ?? 'GREEN',
+                            'access_token' => $useTok,
+                        ]));
+                        $added++;
+                    }
+                } catch (\Throwable $e) {}
+            }
+        }
+
         // Clean up only the old legacy dummy placeholder channel
         WhatsAppChannel::where('organization_id', $orgId)
             ->where('phone_number_id', 'phone_9104081291')
@@ -475,7 +532,7 @@ class WhatsAppChannelController extends Controller
 
         $phoneId = $phoneId ?: ('phone_' . ($cleanPhone ?: uniqid()));
         $wabaId = trim($request->input('waba_id', '')) ?: ($existing?->waba_id ?: '934553439246885');
-        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
+        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', ''));
 
         $quality = 'GREEN';
         $limit = 'TIER_1K';
@@ -572,12 +629,12 @@ class WhatsAppChannelController extends Controller
         $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
 
         $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: env('META_WABA_ID', '934553439246885'));
-        $token = $request->input('access_token') ?: ($existing?->access_token ?: env('META_WHATSAPP_TOKEN', ''));
+        $token = $request->input('access_token') ?: ($existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', ''));
 
-        if (!$token || !$wabaId) {
+        if (!$token && !$wabaId) {
             return response()->json([
                 'success' => false,
-                'message' => 'No access token or WABA ID configured.',
+                'message' => 'No access token or WABA ID configured. Please configure Permanent Access Token in Admin Settings.',
             ], 422);
         }
 
@@ -603,6 +660,9 @@ class WhatsAppChannelController extends Controller
     private function autoSyncFromMeta(string $orgId, ?string $wabaId = null, ?string $token = null): int
     {
         $added = 0;
+        $globalTok = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        $token = $token ?: $globalTok;
+
         $channels = WhatsAppChannel::where('organization_id', $orgId)
             ->whereNotNull('access_token')
             ->where('access_token', '!=', '')
@@ -619,7 +679,7 @@ class WhatsAppChannelController extends Controller
             $wabaPairs[$wabaId] = $token;
         }
 
-        $appId = env('META_APP_ID', '1079349601748656');
+        $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
         $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
 
         // Auto-discover all other WABAs (like Tuoora) linked to any stored access tokens
@@ -704,6 +764,32 @@ class WhatsAppChannelController extends Controller
                     }
                 }
             } catch (\Throwable $e) {}
+        }
+
+        // Also query Meta Graph API directly for any channel missing its phone number
+        $missingChannels = WhatsAppChannel::where('organization_id', $orgId)
+            ->whereNotNull('phone_number_id')
+            ->where('phone_number_id', 'not like', 'phone_%')
+            ->get();
+        foreach ($missingChannels as $mCh) {
+            $useTok = $mCh->access_token ?: $token ?: $globalTok;
+            if ($useTok && (empty($mCh->phone_number) || str_contains($mCh->phone_number, 'Registered'))) {
+                try {
+                    $pResp = Http::withToken($useTok)->timeout(5)->get("https://graph.facebook.com/v22.0/{$mCh->phone_number_id}", [
+                        'fields' => 'display_phone_number,verified_name,quality_rating',
+                    ]);
+                    if ($pResp->successful()) {
+                        $pData = $pResp->json();
+                        $mCh->update(array_filter([
+                            'phone_number' => $pData['display_phone_number'] ?? null,
+                            'name' => $pData['verified_name'] ?? null,
+                            'quality_rating' => $pData['quality_rating'] ?? 'GREEN',
+                            'access_token' => $useTok,
+                        ]));
+                        $added++;
+                    }
+                } catch (\Throwable $e) {}
+            }
         }
 
         // Clean up only the old legacy dummy placeholder channel
