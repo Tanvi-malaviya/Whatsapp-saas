@@ -289,8 +289,8 @@ class WhatsAppChannelController extends Controller
                                                     ]
                                                 );
 
-                                                // If phoneId is not yet set or matches this phone, track it
-                                                if (!$phoneId || (!str_contains($mpPhone, '9104081291') && str_contains($phoneNumber, '9104081291'))) {
+                                                // If phoneId is not yet set, track the first discovered phone
+                                                if (!$phoneId) {
                                                     $phoneId = $mpId;
                                                     $phoneNumber = $mpPhone;
                                                     $name = $mpName;
@@ -440,13 +440,17 @@ class WhatsAppChannelController extends Controller
 
         $channel = null;
         if ($channelId) {
-            $channel = WhatsAppChannel::where('organization_id', $orgId)->find($channelId);
+            $channel = WhatsAppChannel::withoutGlobalScopes()->find($channelId);
         }
         if (!$channel && $phoneId) {
-            $channel = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
+            $channel = WhatsAppChannel::withoutGlobalScopes()->where('phone_number_id', $phoneId)->first();
         }
 
-        $existing = $channel ?: WhatsAppChannel::where('organization_id', $orgId)->first();
+        if ($channel) {
+            $orgId = $channel->organization_id;
+        }
+
+        $existing = $channel ?: WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $orgId)->first();
 
         $phoneNumber = trim($request->input('phone_number', ''));
         $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
