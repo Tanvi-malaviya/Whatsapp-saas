@@ -27,12 +27,36 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'current_organization_id'])]
+#[Fillable(['name', 'email', 'password', 'current_organization_id', 'is_super_admin', 'email_verified_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'two_factor_confirmed_at' => 'datetime',
+            'is_super_admin' => 'boolean',
+        ];
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        if ($this->is_super_admin) {
+            return true;
+        }
+
+        // Primary master user is super admin
+        if ($this->id === 1) {
+            return true;
+        }
+
+        return false;
+    }
 
     public function organizations(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
@@ -67,19 +91,5 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function isAdminOf(\App\Modules\Foundation\Models\Organization $organization): bool
     {
         return in_array($this->roleIn($organization), ['Owner', 'Admin']);
-    }
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'two_factor_confirmed_at' => 'datetime',
-        ];
     }
 }

@@ -40,7 +40,19 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $request->user(),
+                'isSuperAdmin' => $request->user()?->isSuperAdmin() ?? false,
             ],
+            'tenant' => function () use ($request) {
+                $user = $request->user();
+                $currentOrg = $user?->currentOrganization
+                    ?? \App\Shared\TenantContext::get()
+                    ?? \App\Modules\Foundation\Models\Organization::first();
+                return [
+                    'current' => $currentOrg,
+                    'organizations' => $user?->organizations ?? ($currentOrg ? [$currentOrg] : []),
+                    'role' => $user && $currentOrg ? $user->roleIn($currentOrg) : 'Owner',
+                ];
+            },
             'whatsapp' => function () use ($request) {
                 $orgId = $request->user()?->current_organization_id
                     ?? \App\Shared\TenantContext::id()

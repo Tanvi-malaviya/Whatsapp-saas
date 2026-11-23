@@ -21,16 +21,43 @@ class Organization extends Model
         'timezone',
         'currency',
         'subscription_plan',
+        'max_channels',
         'metadata',
         'status',
     ];
 
     protected $casts = [
+        'max_channels' => 'integer',
         'metadata' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
+
+    public function channels(): HasMany
+    {
+        return $this->hasMany(\App\Modules\MetaConnection\Models\WhatsAppChannel::class, 'organization_id');
+    }
+
+    public function getMaxChannels(): int
+    {
+        if (array_key_exists('max_channels', $this->attributes) && $this->attributes['max_channels'] !== null) {
+            return (int) $this->attributes['max_channels'];
+        }
+
+        return $this->metadata['max_channels'] ?? 1;
+    }
+
+    public function canAddMoreChannels(): bool
+    {
+        $limit = $this->getMaxChannels();
+        if ($limit <= 0) {
+            return true; // 0 or negative represents Unlimited
+        }
+
+        $current = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $this->id)->count();
+        return $current < $limit;
+    }
 
     public function users(): BelongsToMany
     {
