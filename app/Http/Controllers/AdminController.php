@@ -547,6 +547,7 @@ class AdminController extends Controller
             'settings' => [
                 'app_id' => env('META_APP_ID', '1079349601748656'),
                 'config_id' => env('META_CONFIG_ID', '1835889181059188'),
+                'permanent_token' => env('META_WHATSAPP_TOKEN', ''),
                 'webhook_url' => url('/webhooks/meta'),
                 'verify_token' => env('META_VERIFY_TOKEN') ?: config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
                 'graph_version' => 'v22.0',
@@ -568,6 +569,7 @@ class AdminController extends Controller
             'app_id' => 'required|string|max:100',
             'config_id' => 'required|string|max:100',
             'verify_token' => 'required|string|max:255',
+            'permanent_token' => 'nullable|string',
         ]);
 
         $envPath = base_path('.env');
@@ -578,6 +580,7 @@ class AdminController extends Controller
                 'META_APP_ID' => $validated['app_id'],
                 'META_CONFIG_ID' => $validated['config_id'],
                 'META_VERIFY_TOKEN' => $validated['verify_token'],
+                'META_WHATSAPP_TOKEN' => $validated['permanent_token'] ?? '',
             ];
 
             foreach ($replacements as $key => $value) {

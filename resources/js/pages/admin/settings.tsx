@@ -29,6 +29,7 @@ type Props = {
     settings: {
         app_id: string;
         config_id: string;
+        permanent_token?: string;
         webhook_url: string;
         verify_token: string;
         graph_version: string;
@@ -41,15 +42,18 @@ type Props = {
 export default function AdminSettings({ settings }: Props) {
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [showVerifyToken, setShowVerifyToken] = useState(false);
+    const [showPermanentToken, setShowPermanentToken] = useState(false);
     const [appId, setAppId] = useState(settings.app_id);
     const [configId, setConfigId] = useState(settings.config_id);
     const [verifyToken, setVerifyToken] = useState(settings.verify_token);
+    const [permanentToken, setPermanentToken] = useState(settings.permanent_token || '');
     const [isSaving, setIsSaving] = useState(false);
 
     const hasChanges =
         appId !== settings.app_id ||
         configId !== settings.config_id ||
-        verifyToken !== settings.verify_token;
+        verifyToken !== settings.verify_token ||
+        permanentToken !== (settings.permanent_token || '');
 
     const handleSaveSettings = () => {
         setIsSaving(true);
@@ -59,6 +63,7 @@ export default function AdminSettings({ settings }: Props) {
                 app_id: appId,
                 config_id: configId,
                 verify_token: verifyToken,
+                permanent_token: permanentToken,
             },
             {
                 onFinish: () => setIsSaving(false),
@@ -210,6 +215,51 @@ export default function AdminSettings({ settings }: Props) {
                                                 onClick={() => copyToClipboard(configId, 'configid')}
                                             >
                                                 {copiedField === 'configid' ? (
+                                                    <Check className="size-3.5 text-emerald-600" />
+                                                ) : (
+                                                    <Copy className="size-3.5 text-muted-foreground" />
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    {/* Permanent Access Token */}
+                                    <div className="space-y-1 sm:col-span-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                                <span>Permanent Access Token (System User Token)</span>
+                                                <span className="text-[10px] text-muted-foreground font-normal">(Used for dynamic auto-fetching phone numbers &amp; templates)</span>
+                                            </Label>
+                                            {copiedField === 'permtoken' && (
+                                                <span className="text-[10px] text-emerald-600 font-medium">Copied!</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="relative flex-1">
+                                                <Input
+                                                    type={showPermanentToken ? 'text' : 'password'}
+                                                    value={permanentToken}
+                                                    onChange={(e) => setPermanentToken(e.target.value)}
+                                                    placeholder="EAAG... (Paste System User Token from Meta Business Settings)"
+                                                    className="font-mono text-xs pr-8 h-8 border-border/80 focus-visible:ring-primary/20"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPermanentToken(!showPermanentToken)}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                                                    title={showPermanentToken ? 'Hide token' : 'Show token'}
+                                                >
+                                                    {showPermanentToken ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                                                </button>
+                                            </div>
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="size-8 shrink-0 hover:bg-muted"
+                                                title="Copy Permanent Token"
+                                                onClick={() => copyToClipboard(permanentToken, 'permtoken')}
+                                            >
+                                                {copiedField === 'permtoken' ? (
                                                     <Check className="size-3.5 text-emerald-600" />
                                                 ) : (
                                                     <Copy className="size-3.5 text-muted-foreground" />
