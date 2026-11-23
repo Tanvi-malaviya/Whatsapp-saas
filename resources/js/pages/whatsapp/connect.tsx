@@ -338,6 +338,11 @@ export default function WhatsAppConnect({
             onSuccess: () => {
                 setIsModalOpen(false);
                 setIsEditing(false);
+                router.reload();
+            },
+            onError: (errors) => {
+                const msg = Object.values(errors).join(', ') || 'Failed to save WhatsApp number';
+                alert('Save error: ' + msg);
             },
         });
     };
@@ -551,7 +556,20 @@ export default function WhatsAppConnect({
                                                 </span>
                                             </div>
                                             <p className="text-[11px] font-mono text-muted-foreground">
-                                                Phone: <strong className="text-foreground">{ch.phone_number || 'Registered'}</strong> • Phone ID: <span className="font-semibold text-foreground">{ch.phone_number_id}</span> • WABA ID: <span className="font-semibold text-foreground">{ch.waba_id}</span>
+                                                Phone: {ch.phone_number ? (
+                                                    <strong className="text-foreground text-emerald-600 dark:text-emerald-400 font-semibold">{ch.phone_number}</strong>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleEditChannel(ch);
+                                                        }}
+                                                        className="inline-flex items-center text-amber-600 dark:text-amber-400 font-semibold underline hover:text-amber-700 ml-0.5 cursor-pointer"
+                                                    >
+                                                        Not Set (Click to enter number)
+                                                    </button>
+                                                )} • Phone ID: <span className="font-semibold text-foreground">{ch.phone_number_id}</span> • WABA ID: <span className="font-semibold text-foreground">{ch.waba_id}</span>
                                             </p>
                                         </div>
                                     </div>
@@ -720,17 +738,21 @@ export default function WhatsAppConnect({
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        WhatsApp Phone Number *
+                                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                        <span>WhatsApp Phone Number *</span>
+                                        <span className="text-[10px] text-muted-foreground font-normal">(e.g. 9313148565)</span>
                                     </label>
                                     <input
                                         type="text"
                                         required
                                         value={form.phone_number}
                                         onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-                                        placeholder="+91 79978 81665"
+                                        placeholder="e.g. 9313148565 or +91 93131 48565"
                                         className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                                     />
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Enter 10-digit mobile number or full international format (+91...).
+                                    </p>
                                 </div>
                             </div>
 
@@ -763,14 +785,15 @@ export default function WhatsAppConnect({
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">
-                                    Permanent Access Token (System User Token)
+                                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                    <span>Permanent Access Token</span>
+                                    <span className="text-[10px] text-muted-foreground font-normal">(Optional if already connected)</span>
                                 </label>
                                 <textarea
                                     rows={2}
                                     value={form.access_token}
                                     onChange={(e) => setForm({ ...form, access_token: e.target.value })}
-                                    placeholder="EAAO1pPN..."
+                                    placeholder="EAAO1pPN... (Leave blank to keep existing token)"
                                     className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                                 />
                             </div>
