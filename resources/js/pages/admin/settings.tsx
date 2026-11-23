@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, router } from '@inertiajs/react';
 import {
     Settings,
@@ -48,6 +48,14 @@ export default function AdminSettings({ settings }: Props) {
     const [verifyToken, setVerifyToken] = useState(settings.verify_token);
     const [permanentToken, setPermanentToken] = useState(settings.permanent_token || '');
     const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
+
+    useEffect(() => {
+        setAppId(settings.app_id);
+        setConfigId(settings.config_id);
+        setVerifyToken(settings.verify_token);
+        setPermanentToken(settings.permanent_token || '');
+    }, [settings.app_id, settings.config_id, settings.verify_token, settings.permanent_token]);
 
     const hasChanges =
         appId !== settings.app_id ||
@@ -66,6 +74,15 @@ export default function AdminSettings({ settings }: Props) {
                 permanent_token: permanentToken,
             },
             {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setIsSaving(false);
+                    setSaveSuccessNotice(true);
+                    setTimeout(() => setSaveSuccessNotice(false), 5000);
+                },
+                onError: () => {
+                    setIsSaving(false);
+                },
                 onFinish: () => setIsSaving(false),
             }
         );
@@ -137,6 +154,15 @@ export default function AdminSettings({ settings }: Props) {
                         </Button>
                     </div>
                 </div>
+
+                {saveSuccessNotice && (
+                    <div className="flex items-center gap-2 p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg animate-in fade-in">
+                        <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span className="font-medium">
+                            Settings and Meta Permanent Access Token saved successfully! All connected channels have been synced with Meta Graph API.
+                        </span>
+                    </div>
+                )}
 
                 {/* 2-Column Responsive Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
