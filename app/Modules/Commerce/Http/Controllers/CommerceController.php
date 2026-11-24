@@ -481,7 +481,8 @@ class CommerceController extends Controller
                         . ($cleanSenderPhone ? "🛒 *Open WhatsApp Store:* https://wa.me/c/{$cleanSenderPhone}\n\n" : "")
                         . "👉 *To Order:* Reply *ORDER <Item Code>* (e.g. `ORDER {$thumbRetailerId}`) or send your selection here!";
 
-                    $thumbImage = $firstProd?->image_url;
+                    $firstProduct = $products->first() ?? $channelProducts->first();
+                    $thumbImage = $firstProduct?->image_url;
                     if ($thumbImage) {
                         $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
