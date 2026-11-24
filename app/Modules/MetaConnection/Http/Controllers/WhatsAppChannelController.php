@@ -196,6 +196,12 @@ class WhatsAppChannelController extends Controller
                 $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $source->waba_id, 'access_token' => $source->access_token], $phone); $count++;
             }
         }
+        return back()->with('success', "Synced {$count} numbers from Meta. {$skipped} numbers skipped.");
+    }
+
+    public function testConnection(Request $request, string $id)
+    {
+        $channel = WhatsAppChannel::where('organization_id', $this->org()->id)->findOrFail($id);
 
         // If still a placeholder, explain clearly to the user
         if (str_starts_with($channel->phone_number_id, 'phone_')) {
@@ -334,12 +340,5 @@ class WhatsAppChannelController extends Controller
             $channel->update(['is_default' => true]);
         });
         return back()->with('success', 'Default number updated. Existing conversations keep their sender number.');
-    }
-
-    public function testConnection(Request $request, string $id)
-    {
-        $channel = WhatsAppChannel::findOrFail($id);
-        app(MetaApi::class)->phone($channel->phone_number_id, $channel->access_token);
-        return response()->json(['success' => true, 'message' => 'Meta verified the number credentials.']);
     }
 }
