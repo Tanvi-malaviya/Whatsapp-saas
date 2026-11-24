@@ -33,6 +33,7 @@ class CommerceController extends Controller
         }
 
         $products = CommerceProduct::where('organization_id', $orgId)
+            ->with('channel:id,name,phone_number')
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -70,6 +71,7 @@ class CommerceController extends Controller
         $orgId = $this->resolveTenantId($request);
 
         $validated = $request->validate([
+            'channel_id' => 'nullable|string',
             'name' => 'required|string|max:150',
             'retailer_id' => 'nullable|string|max:50',
             'description' => 'nullable|string|max:1000',
@@ -112,8 +114,12 @@ class CommerceController extends Controller
             ? $validated['retailer_id']
             : 'SKU-' . strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $validated['name']), 0, 4)) . '-' . rand(100, 999);
 
+        $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id")
+            ?: ($request->input('meta_catalog_id') ?: 'default_catalog');
+
         CommerceProduct::create([
             'organization_id' => $orgId,
+            'channel_id' => !empty($validated['channel_id']) ? $validated['channel_id'] : null,
             'name' => $validated['name'],
             'retailer_id' => $sku,
             'description' => $validated['description'] ?? '',
@@ -122,7 +128,7 @@ class CommerceController extends Controller
             'image_url' => $imageUrl,
             'category' => $validated['category'] ?? 'General',
             'is_available' => $request->boolean('is_available', true),
-            'meta_catalog_id' => '934553439246885_cat_01',
+            'meta_catalog_id' => $savedCatalogId,
         ]);
 
         return back()->with('success', "Product '{$validated['name']}' added to WhatsApp Catalog!");
@@ -134,6 +140,7 @@ class CommerceController extends Controller
         $product = CommerceProduct::where('organization_id', $orgId)->where('id', $id)->firstOrFail();
 
         $validated = $request->validate([
+            'channel_id' => 'nullable|string',
             'name' => 'required|string|max:150',
             'retailer_id' => 'nullable|string|max:50',
             'description' => 'nullable|string|max:1000',
@@ -144,7 +151,28 @@ class CommerceController extends Controller
             'is_available' => 'nullable|boolean',
         ]);
 
-        $product->update($validated);
+        $updateData = [
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? $product->description,
+            'price' => $validated['price'],
+            'currency' => $validated['currency'] ?? $product->currency,
+            'category' => $validated['category'] ?? $product->category,
+            'is_available' => $request->boolean('is_available', true),
+        ];
+
+        if (array_key_exists('channel_id', $validated)) {
+            $updateData['channel_id'] = !empty($validated['channel_id']) ? $validated['channel_id'] : null;
+        }
+
+        if (!empty($validated['retailer_id'])) {
+            $updateData['retailer_id'] = $validated['retailer_id'];
+        }
+
+        if (!empty($validated['image_url'])) {
+            $updateData['image_url'] = $validated['image_url'];
+        }
+
+        $product->update($updateData);
 
         return back()->with('success', "Product '{$product->name}' updated!");
     }
@@ -197,49 +225,49 @@ class CommerceController extends Controller
         $orgId = $this->resolveTenantId($request);
         $catalogId = trim($request->input('catalog_id') ?? \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id", ''));
 
-        $channelId = $request->input('channel_id');
-        $channel = !empty($channelId)
-            ? WhatsAppChannel::where('organization_id', $orgId)->where('id', $channelId)->first()
-            : WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
-                ?? WhatsAppChannel::where('organization_id', $orgId)->first();
-
-        if (!$channel) {
-            return response()->json(['success' => false, 'message' => 'No active WhatsApp channel found.'], 422);
+        $channels = WhatsAppChannel::where('organization_id', $orgId)->get();
+        if ($channels->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No active WhatsApp channels found.'], 422);
         }
 
         $globalToken = \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-        $token = $channel->access_token ?: $globalToken;
-
         $results = [];
 
-        // 1. Enable WhatsApp Commerce Settings (Catalog Visible + Cart Enabled on WhatsApp)
-        if ($channel->phone_number_id && $token) {
-            try {
-                $visRes = \Illuminate\Support\Facades\Http::withToken($token)
-                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
-                $results['commerce_settings'] = $visRes->successful() ? 'enabled' : ($visRes->json('error.message') ?? $visRes->body());
-            } catch (\Throwable $e) {
-                $results['commerce_settings'] = $e->getMessage();
-            }
-        }
+        foreach ($channels as $channel) {
+            $token = $channel->access_token ?: $globalToken;
+            if (!$token) continue;
 
-        // 2. Link Catalog to WABA (if numeric catalog_id provided)
-        if ($channel->waba_id && is_numeric($catalogId) && $token) {
-            try {
-                $linkRes = \Illuminate\Support\Facades\Http::withToken($token)
-                    ->asForm()
-                    ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
-                        'catalog_id' => $catalogId,
-                    ]);
-                $results['catalog_link'] = $linkRes->successful() ? 'linked' : ($linkRes->json('error.message') ?? $linkRes->body());
-            } catch (\Throwable $e) {
-                $results['catalog_link'] = $e->getMessage();
+            $chKey = $channel->name ?? $channel->phone_number ?? $channel->id;
+
+            // 1. Enable WhatsApp Commerce Settings (Catalog Visible + Cart Enabled on WhatsApp)
+            if ($channel->phone_number_id) {
+                try {
+                    $visRes = \Illuminate\Support\Facades\Http::withToken($token)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
+                    $results[$chKey]['commerce_settings'] = $visRes->successful() ? 'enabled' : ($visRes->json('error.message') ?? $visRes->body());
+                } catch (\Throwable $e) {
+                    $results[$chKey]['commerce_settings'] = $e->getMessage();
+                }
+            }
+
+            // 2. Link Catalog to WABA (if numeric catalog_id provided)
+            if ($channel->waba_id && is_numeric($catalogId)) {
+                try {
+                    $linkRes = \Illuminate\Support\Facades\Http::withToken($token)
+                        ->asForm()
+                        ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
+                            'catalog_id' => $catalogId,
+                        ]);
+                    $results[$chKey]['catalog_link'] = $linkRes->successful() ? 'linked' : ($linkRes->json('error.message') ?? $linkRes->body());
+                } catch (\Throwable $e) {
+                    $results[$chKey]['catalog_link'] = $e->getMessage();
+                }
             }
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'WhatsApp Commerce settings updated and catalog link command sent to Meta!',
+            'message' => 'WhatsApp Commerce settings enabled on all channels & catalog link command sent to Meta!',
             'details' => $results,
         ]);
     }
@@ -333,7 +361,18 @@ class CommerceController extends Controller
             $cleanPhone = '91' . $cleanPhone;
         }
 
-        $firstProduct = CommerceProduct::where('organization_id', $orgId)->first();
+        $productsQuery = CommerceProduct::where('organization_id', $orgId)->where('is_available', true);
+        if ($channel) {
+            $productsQuery->where(function ($q) use ($channel) {
+                $q->where('channel_id', $channel->id)->orWhereNull('channel_id');
+            });
+        }
+        $channelProducts = $productsQuery->get();
+        if ($channelProducts->isEmpty()) {
+            $channelProducts = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
+        }
+
+        $firstProduct = $channelProducts->first();
         $thumbRetailerId = $firstProduct?->retailer_id ?? 'TSHIRT-POLO-BLK';
 
         $bodyText = !empty($validated['body_text'])
@@ -425,8 +464,8 @@ class CommerceController extends Controller
                 } else {
                     \Illuminate\Support\Facades\Log::warning('Meta native catalog message returned error: ' . $nativeRes->body());
 
-                    // Fallback: Send rich catalog showcase cards with all available products
-                    $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->take(6)->get();
+                    // Fallback: Send rich catalog showcase cards with this channel's available products
+                    $products = $channelProducts->take(6);
                     $itemsText = "";
                     foreach ($products as $idx => $p) {
                         $itemsText .= ($idx + 1) . ". *{$p->name}* - ₹" . number_format((float)$p->price, 2) . " (`{$p->retailer_id}`)\n";
@@ -742,7 +781,7 @@ class CommerceController extends Controller
         ]);
     }
 
-    private function seedInitialProducts(string $orgId): void
+    public function seedInitialProducts(string $orgId): void
     {
         $initial = [
             [

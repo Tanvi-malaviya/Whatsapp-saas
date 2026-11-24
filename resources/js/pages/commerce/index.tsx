@@ -39,6 +39,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 type Product = {
     id: string;
+    channel_id?: string | null;
+    channel?: { id: string; name: string; phone_number: string };
     name: string;
     retailer_id: string;
     description: string;
@@ -89,6 +91,7 @@ export default function CommerceIndex({
 }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('ALL');
+    const [channelFilter, setChannelFilter] = useState('ALL');
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -124,6 +127,7 @@ export default function CommerceIndex({
         description: '',
         category: 'General',
         image_url: '',
+        channel_id: '',
         is_available: true,
     });
 
@@ -319,6 +323,7 @@ export default function CommerceIndex({
             price: form.price,
             description: form.description,
             category: form.category,
+            channel_id: form.channel_id || null,
             is_available: form.is_available,
         };
 
@@ -344,6 +349,7 @@ export default function CommerceIndex({
                     description: '',
                     category: 'General',
                     image_url: '',
+                    channel_id: '',
                     is_available: true,
                 });
             },
@@ -372,7 +378,11 @@ export default function CommerceIndex({
             p.retailer_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             p.category.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
-        return matchesSearch && matchesCategory;
+        const matchesChannel =
+            channelFilter === 'ALL' ||
+            (channelFilter === 'SHARED' && !p.channel_id) ||
+            p.channel_id === channelFilter;
+        return matchesSearch && matchesCategory && matchesChannel;
     });
 
     const categories = ['ALL', ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))];
@@ -564,6 +574,42 @@ export default function CommerceIndex({
 
                     {/* ================= TAB 1: PRODUCTS ================= */}
                     <TabsContent value="products" className="space-y-3">
+                        {/* Channel / Number Catalog Filter Pills */}
+                        {channels.length > 0 && (
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-border/40">
+                                <span className="text-[10px] text-muted-foreground font-bold tracking-wider uppercase shrink-0">Store Catalog:</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setChannelFilter('ALL')}
+                                    className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all shrink-0 ${
+                                        channelFilter === 'ALL'
+                                            ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                                            : 'bg-muted/60 text-muted-foreground hover:bg-muted border border-border/40'
+                                    }`}
+                                >
+                                    🌐 All Numbers ({products.length})
+                                </button>
+                                {channels.map((ch) => {
+                                    const count = products.filter((p) => p.channel_id === ch.id).length;
+                                    return (
+                                        <button
+                                            key={ch.id}
+                                            type="button"
+                                            onClick={() => setChannelFilter(ch.id)}
+                                            className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all flex items-center gap-1 shrink-0 ${
+                                                channelFilter === ch.id
+                                                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                                                    : 'bg-muted/60 text-muted-foreground hover:bg-muted border border-border/40'
+                                            }`}
+                                        >
+                                            <span>📱 {ch.name}</span>
+                                            <span className="text-[9px] opacity-80 font-mono">({count})</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         {/* Category Filter Pills */}
                         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
                             {categories.map((cat) => (
@@ -614,8 +660,17 @@ export default function CommerceIndex({
                                                                     className="size-9 rounded-lg object-cover border border-border/80 shrink-0 bg-muted"
                                                                 />
                                                                 <div className="min-w-0">
-                                                                    <div className="font-semibold text-foreground text-xs truncate max-w-[180px] sm:max-w-xs md:max-w-md">
-                                                                        {p.name}
+                                                                    <div className="font-semibold text-foreground text-xs truncate max-w-[180px] sm:max-w-xs md:max-w-md flex items-center gap-1.5 flex-wrap">
+                                                                        <span>{p.name}</span>
+                                                                        {p.channel ? (
+                                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+                                                                                📱 {p.channel.name}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground border border-border/60 shrink-0">
+                                                                                🌐 All Numbers
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                     <span className="text-[10px] font-mono text-muted-foreground">
                                                                         SKU: {p.retailer_id}
@@ -722,9 +777,20 @@ export default function CommerceIndex({
                                                 <span className="text-[9px] font-mono text-muted-foreground uppercase block leading-none">
                                                     SKU: {p.retailer_id}
                                                 </span>
-                                                <h3 className="text-xs font-bold text-foreground line-clamp-1 leading-tight" title={p.name}>
-                                                    {p.name}
-                                                </h3>
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                    <h3 className="text-xs font-bold text-foreground line-clamp-1 leading-tight" title={p.name}>
+                                                        {p.name}
+                                                    </h3>
+                                                    {p.channel ? (
+                                                        <span className="text-[8px] font-semibold px-1 py-0 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                                            📱 {p.channel.name}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[8px] font-medium px-1 py-0 rounded bg-muted text-muted-foreground border border-border/50">
+                                                            🌐 All
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {p.description ? (
                                                     <p className="text-[10px] text-muted-foreground line-clamp-1 leading-snug">
                                                         {p.description}
@@ -1114,6 +1180,24 @@ export default function CommerceIndex({
                             <div className="grid grid-cols-2 gap-3 items-start">
                                 {/* Left Column: Details */}
                                 <div className="space-y-2">
+                                    {channels.length > 0 && (
+                                        <div className="space-y-0.5">
+                                            <Label className="text-[11px] font-semibold text-foreground">Catalog Store / Number</Label>
+                                            <select
+                                                value={form.channel_id}
+                                                onChange={(e) => setForm({ ...form, channel_id: e.target.value })}
+                                                className="w-full h-7.5 rounded-lg border border-input bg-background px-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                            >
+                                                <option value="">🌐 All Numbers (Shared Across Workspace)</option>
+                                                {channels.map((ch) => (
+                                                    <option key={ch.id} value={ch.id}>
+                                                        📱 {ch.name} ({ch.phone_number || 'No Number'})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-0.5">
                                         <Label className="text-[11px] font-semibold text-foreground">Product Name *</Label>
                                         <Input
