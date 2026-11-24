@@ -197,49 +197,49 @@ class CommerceController extends Controller
         $orgId = $this->resolveTenantId($request);
         $catalogId = trim($request->input('catalog_id') ?? \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id", ''));
 
-        $channelId = $request->input('channel_id');
-        $channel = !empty($channelId)
-            ? WhatsAppChannel::where('organization_id', $orgId)->where('id', $channelId)->first()
-            : WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
-                ?? WhatsAppChannel::where('organization_id', $orgId)->first();
-
-        if (!$channel) {
-            return response()->json(['success' => false, 'message' => 'No active WhatsApp channel found.'], 422);
+        $channels = WhatsAppChannel::where('organization_id', $orgId)->get();
+        if ($channels->isEmpty()) {
+            return response()->json(['success' => false, 'message' => 'No active WhatsApp channels found.'], 422);
         }
 
         $globalToken = \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-        $token = $channel->access_token ?: $globalToken;
-
         $results = [];
 
-        // 1. Enable WhatsApp Commerce Settings (Catalog Visible + Cart Enabled on WhatsApp)
-        if ($channel->phone_number_id && $token) {
-            try {
-                $visRes = \Illuminate\Support\Facades\Http::withToken($token)
-                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
-                $results['commerce_settings'] = $visRes->successful() ? 'enabled' : ($visRes->json('error.message') ?? $visRes->body());
-            } catch (\Throwable $e) {
-                $results['commerce_settings'] = $e->getMessage();
-            }
-        }
+        foreach ($channels as $channel) {
+            $token = $channel->access_token ?: $globalToken;
+            if (!$token) continue;
 
-        // 2. Link Catalog to WABA (if numeric catalog_id provided)
-        if ($channel->waba_id && is_numeric($catalogId) && $token) {
-            try {
-                $linkRes = \Illuminate\Support\Facades\Http::withToken($token)
-                    ->asForm()
-                    ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
-                        'catalog_id' => $catalogId,
-                    ]);
-                $results['catalog_link'] = $linkRes->successful() ? 'linked' : ($linkRes->json('error.message') ?? $linkRes->body());
-            } catch (\Throwable $e) {
-                $results['catalog_link'] = $e->getMessage();
+            $chKey = $channel->name ?? $channel->phone_number ?? $channel->id;
+
+            // 1. Enable WhatsApp Commerce Settings (Catalog Visible + Cart Enabled on WhatsApp)
+            if ($channel->phone_number_id) {
+                try {
+                    $visRes = \Illuminate\Support\Facades\Http::withToken($token)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
+                    $results[$chKey]['commerce_settings'] = $visRes->successful() ? 'enabled' : ($visRes->json('error.message') ?? $visRes->body());
+                } catch (\Throwable $e) {
+                    $results[$chKey]['commerce_settings'] = $e->getMessage();
+                }
+            }
+
+            // 2. Link Catalog to WABA (if numeric catalog_id provided)
+            if ($channel->waba_id && is_numeric($catalogId)) {
+                try {
+                    $linkRes = \Illuminate\Support\Facades\Http::withToken($token)
+                        ->asForm()
+                        ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
+                            'catalog_id' => $catalogId,
+                        ]);
+                    $results[$chKey]['catalog_link'] = $linkRes->successful() ? 'linked' : ($linkRes->json('error.message') ?? $linkRes->body());
+                } catch (\Throwable $e) {
+                    $results[$chKey]['catalog_link'] = $e->getMessage();
+                }
             }
         }
 
         return response()->json([
             'success' => true,
-            'message' => 'WhatsApp Commerce settings updated and catalog link command sent to Meta!',
+            'message' => 'WhatsApp Commerce settings enabled on all channels & catalog link command sent to Meta!',
             'details' => $results,
         ]);
     }
@@ -742,7 +742,7 @@ class CommerceController extends Controller
         ]);
     }
 
-    private function seedInitialProducts(string $orgId): void
+    public function seedInitialProducts(string $orgId): void
     {
         $initial = [
             [

@@ -143,8 +143,48 @@ class WhatsAppChannelController extends Controller
                 'app_secret' => ! empty($data['app_secret']) ? $data['app_secret'] : $channel->app_secret,
                 'is_default' => $channel->exists ? $channel->is_default : ! $org->channels()->withoutGlobalScopes()->whereNull('deleted_at')->exists(),
             ])->save();
+
+            // Automatically initialize WhatsApp Commerce Storefront & Catalog for this connected number
+            $this->autoInitializeCommerce($channel);
+
             return $channel;
         });
+    }
+
+    /**
+     * Automatically initialize WhatsApp Commerce Storefront, shopping cart, and catalog for any connected number.
+     */
+    private function autoInitializeCommerce(WhatsAppChannel $channel): void
+    {
+        try {
+            $token = $channel->access_token ?: \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+            if (!$token || !$channel->phone_number_id) {
+                return;
+            }
+
+            // 1. Enable WhatsApp Commerce Settings (Storefront & Cart) on Meta Cloud API
+            \Illuminate\Support\Facades\Http::withToken($token)
+                ->timeout(6)
+                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
+
+            // 2. Ensure initial products exist for this organization
+            if (\App\Modules\Commerce\Models\CommerceProduct::where('organization_id', $channel->organization_id)->count() === 0) {
+                app(\App\Modules\Commerce\Http\Controllers\CommerceController::class)->seedInitialProducts($channel->organization_id);
+            }
+
+            // 3. If an organization Meta Catalog ID exists, link it to this channel's WABA
+            $orgCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$channel->organization_id}_meta_catalog_id");
+            if (!empty($orgCatalogId) && is_numeric($orgCatalogId) && !empty($channel->waba_id)) {
+                \Illuminate\Support\Facades\Http::withToken($token)
+                    ->asForm()
+                    ->timeout(6)
+                    ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
+                        'catalog_id' => $orgCatalogId,
+                    ]);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Auto-initialize commerce for channel {$channel->id} notice: " . $e->getMessage());
+        }
     }
 
     public function syncFromMeta(Request $request)
