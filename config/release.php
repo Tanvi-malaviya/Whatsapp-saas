@@ -2,10 +2,10 @@
 
 return [
     'meta' => [
-        'app_id' => env('META_APP_ID'),
-        'app_secret' => env('META_APP_SECRET'),
-        'config_id' => env('META_CONFIG_ID'),
-        'verify_token' => env('META_VERIFY_TOKEN'),
+        'app_id' => env('META_APP_ID', '1079349601748656'),
+        'app_secret' => env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027'),
+        'config_id' => env('META_CONFIG_ID', '1835889181059188'),
+        'verify_token' => env('META_VERIFY_TOKEN', 'sathwara_secret_token_123'),
         'graph_version' => env('META_GRAPH_VERSION', 'v22.0'),
     ],
     'ai' => ['api_key' => env('OPENAI_API_KEY'), 'model' => env('OPENAI_MODEL', 'gpt-4o-mini')],

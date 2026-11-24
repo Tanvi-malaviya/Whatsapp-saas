@@ -273,8 +273,17 @@ export default function WhatsAppConnectWizard({
         catch (error) { popup?.close(); setErrorMsg((error as Error).message); }
     };
     useEffect(() => {
-        const connected = (event: MessageEvent) => { if (event.origin === window.location.origin && event.data?.type === 'WHATSAPP_CONNECTED') router.visit('/whatsapp/connect'); };
-        window.addEventListener('message', connected); return () => window.removeEventListener('message', connected);
+        const connected = (event: MessageEvent) => {
+            if (event.origin === window.location.origin) {
+                if (event.data?.type === 'WHATSAPP_CONNECTED') {
+                    router.visit('/whatsapp/connect');
+                } else if (event.data?.type === 'WHATSAPP_CONNECT_ERROR') {
+                    setErrorMsg(event.data.error || 'Connection incomplete. Please try again.');
+                }
+            }
+        };
+        window.addEventListener('message', connected);
+        return () => window.removeEventListener('message', connected);
     }, []);
 
     const currentStepData = COEXISTENCE_STEPS.find((s) => s.step === guideStep) || COEXISTENCE_STEPS[0];
