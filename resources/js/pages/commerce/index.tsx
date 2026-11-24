@@ -72,6 +72,9 @@ type Props = {
     catalogMeta: {
         catalog_id: string;
         catalog_name: string;
+        linked_phone?: string;
+        linked_channel_name?: string;
+        linked_waba_id?: string;
         currency: string;
         is_connected: boolean;
         last_synced_at: string;
@@ -94,6 +97,8 @@ export default function CommerceIndex({
     const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
     const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const defaultChan = channels.find((c) => c.is_default) || channels[0];
+    const [selectedSenderChannel, setSelectedSenderChannel] = useState<string>(defaultChan?.id || '');
 
     // Send Catalog & Product to Customer state
     const [isSendCatalogModalOpen, setIsSendCatalogModalOpen] = useState(false);
@@ -173,6 +178,7 @@ export default function CommerceIndex({
                 },
                 body: JSON.stringify({
                     phone: catalogPhone,
+                    channel_id: selectedSenderChannel,
                     body_text: catalogNote,
                 }),
             });
@@ -202,6 +208,7 @@ export default function CommerceIndex({
                 },
                 body: JSON.stringify({
                     product_id: selectedProductForSend.id,
+                    channel_id: selectedSenderChannel,
                     phone: productPhone,
                 }),
             });
@@ -419,10 +426,20 @@ export default function CommerceIndex({
 
                     <div className="px-3.5 py-2 flex items-center justify-between">
                         <div className="min-w-0 pr-1">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Meta Catalog ID</span>
-                            <div className="text-[11px] font-mono font-semibold text-foreground truncate">{catalogMeta.catalog_id}</div>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Linked WhatsApp Channel</span>
+                            <div className="text-[11px] font-semibold text-foreground truncate flex items-center gap-1">
+                                <span>{catalogMeta.linked_phone || catalogMeta.catalog_id}</span>
+                                {catalogMeta.linked_channel_name && (
+                                    <span className="text-[9px] px-1 py-0.2 bg-primary/10 text-primary font-bold rounded">
+                                        {catalogMeta.linked_channel_name}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-[9px] font-mono text-muted-foreground block truncate">
+                                WABA: {catalogMeta.linked_waba_id || catalogMeta.catalog_id}
+                            </span>
                         </div>
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Connected" />
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Connected to Meta Cloud API" />
                     </div>
                 </div>
 
@@ -1322,6 +1339,23 @@ export default function CommerceIndex({
                         </DialogHeader>
 
                         <form onSubmit={handleSendCatalog} className="space-y-3.5 pt-1">
+                            {channels.length > 0 && (
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-semibold text-foreground">Send From WhatsApp Number *</Label>
+                                    <select
+                                        value={selectedSenderChannel}
+                                        onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                        className="w-full h-9 rounded-lg border border-input bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        {channels.map((ch) => (
+                                            <option key={ch.id} value={ch.id}>
+                                                {ch.name} ({ch.phone_number || 'No Number'}) {ch.is_default ? '— Default (Primary)' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-foreground">Customer Phone Number (with Country Code) *</Label>
                                 <Input
@@ -1409,6 +1443,23 @@ export default function CommerceIndex({
                                         <span className="text-[10px] text-muted-foreground font-mono">SKU: {selectedProductForSend.retailer_id}</span>
                                     </div>
                                 </div>
+
+                                {channels.length > 0 && (
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Send From WhatsApp Number *</Label>
+                                        <select
+                                            value={selectedSenderChannel}
+                                            onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                            className="w-full h-9 rounded-lg border border-input bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            {channels.map((ch) => (
+                                                <option key={ch.id} value={ch.id}>
+                                                    {ch.name} ({ch.phone_number || 'No Number'}) {ch.is_default ? '— Default (Primary)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="space-y-1">
                                     <Label className="text-xs font-semibold text-foreground">Customer Phone Number *</Label>

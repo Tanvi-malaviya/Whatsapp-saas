@@ -42,16 +42,24 @@ class CommerceController extends Controller
             ->get();
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)->get(['id', 'name', 'phone_number', 'waba_id', 'is_default']);
+        $defaultChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
+
+        $catalogId = $defaultChannel?->waba_id ?: 'catalog_default';
+        $channelName = $defaultChannel?->name ?: 'WhatsApp Store';
+        $channelPhone = $defaultChannel?->phone_number ?: '';
 
         return Inertia::render('commerce/index', [
             'products' => $products,
             'orders' => $orders,
             'channels' => $channels,
             'catalogMeta' => [
-                'catalog_id' => '934553439246885_cat_01',
-                'catalog_name' => 'DukanHisab Meta Official Catalog',
+                'catalog_id' => $catalogId,
+                'catalog_name' => "{$channelName} Meta Catalog",
+                'linked_phone' => $channelPhone,
+                'linked_channel_name' => $channelName,
+                'linked_waba_id' => $defaultChannel?->waba_id,
                 'currency' => 'INR',
-                'is_connected' => true,
+                'is_connected' => (bool) $defaultChannel,
                 'last_synced_at' => now()->subHours(2)->toIso8601String(),
             ],
         ]);
