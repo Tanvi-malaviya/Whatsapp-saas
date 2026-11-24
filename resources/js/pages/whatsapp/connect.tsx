@@ -571,14 +571,14 @@ export default function WhatsAppConnect({
 
                 {/* Edit Credentials Modal Dialog */}
                 <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="sm:max-w-lg">
+                    <DialogContent className="sm:max-w-md">
                         <DialogHeader>
                             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                 <Smartphone className="size-4 text-primary" />
-                                {isEditing ? `Edit Credentials: ${form.name}` : 'Connect WhatsApp Business Number'}
+                                {isEditing ? `Edit Number: ${form.name}` : 'Connect WhatsApp Business Number'}
                             </DialogTitle>
                             <DialogDescription className="text-xs">
-                                {isEditing ? 'Update your Meta Permanent Access Token, Phone Number ID or WABA ID.' : 'Connect your official WhatsApp Business number via Meta Cloud API credentials.'}
+                                {isEditing ? 'Update your WhatsApp Phone Number, Phone Number ID or WABA ID.' : 'Enter your official WhatsApp Business number details.'}
                             </DialogDescription>
                         </DialogHeader>
 
@@ -645,45 +645,12 @@ export default function WhatsAppConnect({
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                    <span>Permanent Access Token</span>
-                                    <span className="text-[10px] text-muted-foreground font-normal">(Optional if already connected)</span>
-                                </label>
-                                <textarea
-                                    rows={2}
-                                    value={form.access_token}
-                                    onChange={(e) => setForm({ ...form, access_token: e.target.value })}
-                                    placeholder="EAAO1pPN... (Leave blank to keep existing token)"
-                                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                />
-                            </div>
-
-                            <div className="grid gap-2.5 sm:grid-cols-2">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        App Secret (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.app_secret}
-                                        onChange={(e) => setForm({ ...form, app_secret: e.target.value })}
-                                        placeholder="02d9ac..."
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        App ID (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.app_id}
-                                        onChange={(e) => setForm({ ...form, app_id: e.target.value })}
-                                        placeholder="Meta App ID"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
+                            {/* Reassuring Meta Token Notice */}
+                            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                                <ShieldCheck className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span className="text-[11px] font-medium leading-tight">
+                                    Platform Meta App credentials &amp; Permanent Access Token will be applied automatically from Super Admin Settings.
+                                </span>
                             </div>
 
                             <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-border">
