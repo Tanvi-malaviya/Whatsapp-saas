@@ -20,7 +20,19 @@ export function AppSidebarHeader({
     breadcrumbs?: BreadcrumbItemType[];
 }) {
     const { whatsapp, auth } = usePage().props as {
-        whatsapp?: { isConnected: boolean; phoneNumber?: string; name?: string };
+        whatsapp?: {
+            isConnected: boolean;
+            count?: number;
+            phoneNumber?: string;
+            name?: string;
+            channels?: Array<{
+                id: string;
+                name: string;
+                phoneNumber: string;
+                isDefault: boolean;
+                quality: string;
+            }>;
+        };
         auth?: { user?: User };
     };
     const getInitials = useInitials();
@@ -39,7 +51,9 @@ export function AppSidebarHeader({
             <div className="flex items-center gap-2 sm:gap-3">
                 <WhatsAppStatusPill
                     isConnected={whatsapp?.isConnected ?? false}
+                    count={whatsapp?.count ?? (whatsapp?.isConnected ? 1 : 0)}
                     phoneNumber={whatsapp?.phoneNumber}
+                    channels={whatsapp?.channels}
                 />
 
                 {/* Light / Dark Mode Toggle */}
