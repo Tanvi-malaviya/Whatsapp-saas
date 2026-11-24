@@ -472,11 +472,13 @@ class CommerceController extends Controller
                     }
 
                     $storeName = $channel->name ?? 'Sathwara InfoTech Store';
-                    $firstProd = $products->first();
+                    $cleanSenderPhone = preg_replace('/[^0-9]/', '', $channel->phone_number ?? '');
+
                     $catalogCaption = "🛍️ *{$storeName} Catalog*\n\n"
                         . "{$bodyText}\n\n"
                         . "📦 *Available Products:*\n"
                         . $itemsText . "\n"
+                        . ($cleanSenderPhone ? "🛒 *Open WhatsApp Store:* https://wa.me/c/{$cleanSenderPhone}\n\n" : "")
                         . "👉 *To Order:* Reply *ORDER <Item Code>* (e.g. `ORDER {$thumbRetailerId}`) or send your selection here!";
 
                     $thumbImage = $firstProd?->image_url;
@@ -505,31 +507,6 @@ class CommerceController extends Controller
 
                     if ($fallbackRes->successful()) {
                         $sentSuccessfully = true;
-
-                        // Also send individual product image showcase cards for remaining products so every product has its image delivered!
-                        $remaining = $products->slice(1, 4);
-                        foreach ($remaining as $remProd) {
-                            if (!empty($remProd->image_url)) {
-                                $remCaption = "🛍️ *{$remProd->name}*\n"
-                                    . "💰 *Price:* ₹" . number_format((float)$remProd->price, 2) . "\n"
-                                    . "📦 *Item Code:* `{$remProd->retailer_id}`\n\n"
-                                    . ($remProd->description ? "{$remProd->description}\n\n" : "")
-                                    . "👉 *To Order:* Reply *ORDER {$remProd->retailer_id}*";
-                                try {
-                                    \Illuminate\Support\Facades\Http::withToken($token)
-                                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
-                                            'messaging_product' => 'whatsapp',
-                                            'recipient_type' => 'individual',
-                                            'to' => $cleanPhone,
-                                            'type' => 'image',
-                                            'image' => [
-                                                'link' => $remProd->image_url,
-                                                'caption' => $remCaption,
-                                            ],
-                                        ]);
-                                } catch (\Throwable $e) {}
-                            }
-                        }
                     } else {
                         $errData = $fallbackRes->json();
                         $metaError = $errData['error']['message'] ?? $fallbackRes->body();
@@ -569,8 +546,8 @@ class CommerceController extends Controller
         ]);
 
         $successMessage = ($isNativeCatalog ?? false)
-            ? "WhatsApp Interactive Catalog (with View Catalog button) sent to +{$cleanPhone} successfully!"
-            : "Product catalog showcase cards with photos sent to +{$cleanPhone} successfully!";
+            ? "Official WhatsApp Catalog (with 'View catalog' button) delivered to +{$cleanPhone}!"
+            : "Catalog card sent to +{$cleanPhone}! (Note: To show the official green 'View catalog' button, please connect your Catalog in Meta WhatsApp Manager > Account tools > Catalog).";
 
         return response()->json([
             'success' => true,
