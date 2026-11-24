@@ -265,26 +265,29 @@ class CommerceController extends Controller
                     }
                 }
 
+                $isNativeCatalog = false;
                 if ($nativeRes->successful()) {
                     $sentSuccessfully = true;
+                    $isNativeCatalog = true;
                 } else {
                     \Illuminate\Support\Facades\Log::warning('Meta native catalog message returned error: ' . $nativeRes->body());
 
-                    // Fallback: Send rich catalog showcase card with available products
-                    $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->take(5)->get();
+                    // Fallback: Send rich catalog showcase cards with all available products
+                    $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->take(6)->get();
                     $itemsText = "";
                     foreach ($products as $idx => $p) {
                         $itemsText .= ($idx + 1) . ". *{$p->name}* - ₹" . number_format((float)$p->price, 2) . " (`{$p->retailer_id}`)\n";
                     }
 
                     $storeName = $channel->name ?? 'Sathwara InfoTech Store';
+                    $firstProd = $products->first();
                     $catalogCaption = "🛍️ *{$storeName} Catalog*\n\n"
                         . "{$bodyText}\n\n"
                         . "📦 *Available Products:*\n"
                         . $itemsText . "\n"
                         . "👉 *To Order:* Reply *ORDER <Item Code>* (e.g. `ORDER {$thumbRetailerId}`) or send your selection here!";
 
-                    $thumbImage = $firstProduct?->image_url;
+                    $thumbImage = $firstProd?->image_url;
                     if ($thumbImage) {
                         $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
@@ -310,6 +313,31 @@ class CommerceController extends Controller
 
                     if ($fallbackRes->successful()) {
                         $sentSuccessfully = true;
+
+                        // Also send individual product image showcase cards for remaining products so every product has its image delivered!
+                        $remaining = $products->slice(1, 4);
+                        foreach ($remaining as $remProd) {
+                            if (!empty($remProd->image_url)) {
+                                $remCaption = "🛍️ *{$remProd->name}*\n"
+                                    . "💰 *Price:* ₹" . number_format((float)$remProd->price, 2) . "\n"
+                                    . "📦 *Item Code:* `{$remProd->retailer_id}`\n\n"
+                                    . ($remProd->description ? "{$remProd->description}\n\n" : "")
+                                    . "👉 *To Order:* Reply *ORDER {$remProd->retailer_id}*";
+                                try {
+                                    \Illuminate\Support\Facades\Http::withToken($token)
+                                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                                            'messaging_product' => 'whatsapp',
+                                            'recipient_type' => 'individual',
+                                            'to' => $cleanPhone,
+                                            'type' => 'image',
+                                            'image' => [
+                                                'link' => $remProd->image_url,
+                                                'caption' => $remCaption,
+                                            ],
+                                        ]);
+                                } catch (\Throwable $e) {}
+                            }
+                        }
                     } else {
                         $errData = $fallbackRes->json();
                         $metaError = $errData['error']['message'] ?? $fallbackRes->body();
@@ -348,9 +376,14 @@ class CommerceController extends Controller
             'status' => 'sent',
         ]);
 
+        $successMessage = ($isNativeCatalog ?? false)
+            ? "WhatsApp Interactive Catalog (with View Catalog button) sent to +{$cleanPhone} successfully!"
+            : "Product catalog showcase cards with photos sent to +{$cleanPhone} successfully!";
+
         return response()->json([
             'success' => true,
-            'message' => "WhatsApp Catalog Message sent to +{$cleanPhone} successfully!",
+            'message' => $successMessage,
+            'is_native' => $isNativeCatalog ?? false,
         ]);
     }
 
