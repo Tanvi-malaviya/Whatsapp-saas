@@ -300,6 +300,8 @@ class CommerceController extends Controller
             ], 422);
         }
 
+        $msgWamid = ($nativeRes ?? null)?->json('messages.0.id') ?? ($fallbackRes ?? null)?->json('messages.0.id');
+
         // 2. Log in conversation inbox thread
         $conversation = \App\Modules\Messaging\Models\Conversation::firstOrCreate(
             ['organization_id' => $orgId, 'contact_phone' => '+' . $cleanPhone],
@@ -311,6 +313,7 @@ class CommerceController extends Controller
             'direction' => 'outbound',
             'sender_type' => 'user',
             'type' => 'interactive',
+            'wamid' => $msgWamid,
             'content' => "🛍️ Catalog Message Sent: {$bodyText}",
             'status' => 'sent',
         ]);
@@ -432,6 +435,8 @@ class CommerceController extends Controller
             ], 422);
         }
 
+        $msgWamid = ($nativeRes ?? null)?->json('messages.0.id') ?? ($fallbackRes ?? null)?->json('messages.0.id');
+
         $conversation = \App\Modules\Messaging\Models\Conversation::firstOrCreate(
             ['organization_id' => $orgId, 'contact_phone' => '+' . $cleanPhone],
             ['contact_name' => 'Customer', 'status' => 'open']
@@ -442,6 +447,7 @@ class CommerceController extends Controller
             'direction' => 'outbound',
             'sender_type' => 'user',
             'type' => 'interactive',
+            'wamid' => $msgWamid,
             'content' => "🛍️ Product Message Sent: {$product->name} (₹{$product->price})",
             'status' => 'sent',
         ]);

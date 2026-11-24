@@ -93,6 +93,10 @@ class MetaWebhookController extends Controller
                 $statusWamid = $st['id'] ?? null;
                 $newStatus = $st['status'] ?? null; // 'sent', 'delivered', 'read', 'failed'
                 if ($statusWamid && $newStatus) {
+                    $errors = $st['errors'] ?? [];
+                    if (!empty($errors)) {
+                        Log::warning("WhatsApp message delivery failed ({$statusWamid}): " . json_encode($errors));
+                    }
                     Message::where('wamid', $statusWamid)->update(['status' => $newStatus]);
                 }
             }
