@@ -944,26 +944,21 @@ class WhatsAppChannelController extends Controller
                 } catch (\Throwable $e) {}
             }
 
-            // Attempt 6: Verify Access Token validity via /me or /debug_token
+            // Attempt 6: Check if token is valid but lacks asset permission for this phone number
             try {
                 $meCheck = Http::withToken($channel->access_token)
                     ->get("https://graph.facebook.com/v22.0/me");
                 if ($meCheck->successful()) {
-                    $channel->update([
-                        'status' => 'connected',
-                        'webhook_verified_at' => now(),
-                    ]);
                     return response()->json([
-                        'success' => true,
-                        'message' => 'Connection verified with Meta (Access Token Verified)!',
-                        'data' => $meCheck->json(),
-                    ]);
+                        'success' => false,
+                        'message' => 'Access Token is valid, but it does NOT have permission for Phone Number ID ' . $channel->phone_number_id . '. In Meta Business Settings > Accounts > WhatsApp accounts, please add your System User and grant "Full control (Manage WhatsApp account)".',
+                    ], 422);
                 }
             } catch (\Throwable $e) {}
 
             return response()->json([
                 'success' => false,
-                'message' => 'Meta API returned error: ' . ($response->json('error.message') ?? 'Unknown error'),
+                'message' => 'Meta API Error: ' . ($response->json('error.message') ?? 'Unknown error'),
             ], 422);
         } catch (\Throwable $e) {
             return response()->json([

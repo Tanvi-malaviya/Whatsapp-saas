@@ -792,6 +792,25 @@ export default function WhatsAppConnect({
                                 </span>
                             </div>
 
+                            {/* Optional Custom Token for Multi-Portfolio Numbers */}
+                            <details className="text-xs group pt-0.5">
+                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[11px] font-medium flex items-center gap-1 select-none">
+                                    <span>⚙️ Custom Access Token for this number (Optional)</span>
+                                </summary>
+                                <div className="mt-2 space-y-1 p-2.5 rounded-lg border border-border/80 bg-muted/20">
+                                    <textarea
+                                        rows={2}
+                                        value={form.access_token}
+                                        onChange={(e) => setForm({ ...form, access_token: e.target.value })}
+                                        placeholder="EAAO1pPN... (Leave blank to use platform default token)"
+                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                        Only needed if this number belongs to a different Meta Business Portfolio than your default admin token.
+                                    </p>
+                                </div>
+                            </details>
+
                             <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-border">
                                 <Button
                                     type="button"

@@ -100,6 +100,11 @@ export default function CommerceIndex({
     const defaultChan = channels.find((c) => c.is_default) || channels[0];
     const [selectedSenderChannel, setSelectedSenderChannel] = useState<string>(defaultChan?.id || '');
 
+    // Meta Catalog Configuration State
+    const [catalogIdInput, setCatalogIdInput] = useState<string>(catalogMeta.catalog_id || '');
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [isLinkingCatalog, setIsLinkingCatalog] = useState(false);
+
     // Send Catalog & Product to Customer state
     const [isSendCatalogModalOpen, setIsSendCatalogModalOpen] = useState(false);
     const [catalogPhone, setCatalogPhone] = useState('');
@@ -141,6 +146,56 @@ export default function CommerceIndex({
     const handleRemoveImage = () => {
         setImageFile(null);
         setImagePreview(null);
+    };
+
+    const handleSaveCatalogSettings = async () => {
+        if (!catalogIdInput) return;
+        setIsSavingSettings(true);
+        setSyncMessage(null);
+        try {
+            const resp = await fetch('/commerce/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({ catalog_id: catalogIdInput }),
+            });
+            const data = await resp.json();
+            setSyncMessage(data.message || 'Meta Catalog ID saved successfully!');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } catch {
+            setSyncMessage('Failed to save catalog settings.');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
+    const handleLinkCatalogToMeta = async () => {
+        setIsLinkingCatalog(true);
+        setSyncMessage(null);
+        try {
+            const resp = await fetch('/commerce/link-catalog', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({
+                    catalog_id: catalogIdInput,
+                    channel_id: selectedSenderChannel,
+                }),
+            });
+            const data = await resp.json();
+            setSyncMessage(data.message || 'WhatsApp Commerce settings updated and connected to Meta!');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } catch {
+            setSyncMessage('Failed to link catalog to WhatsApp.');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } finally {
+            setIsLinkingCatalog(false);
+        }
     };
 
     const handleSyncCatalog = async () => {
@@ -943,24 +998,51 @@ export default function CommerceIndex({
                     {/* ================= TAB 4: SETTINGS ================= */}
                     <TabsContent value="settings" className="space-y-4">
                         <Card className="border-border/80 bg-card p-6 rounded-xl shadow-xs max-w-2xl space-y-4">
-                            <CardTitle className="text-base font-bold flex items-center gap-2">
-                                <Sliders className="size-4 text-primary" />
-                                Meta Commerce Manager Configuration
+                            <CardTitle className="text-base font-bold flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <Sliders className="size-4 text-primary" />
+                                    Meta Commerce Manager &amp; WhatsApp Catalog
+                                </span>
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    Official WhatsApp Catalog
+                                </span>
                             </CardTitle>
                             <CardDescription className="text-xs">
-                                Configure your Meta Commerce Catalog ID to enable product syncing and WhatsApp native cart submissions.
+                                Configure your Meta Catalog ID to send the official <strong>&quot;🛍️ View Catalog&quot;</strong> in-chat storefront with interactive shopping cart.
                             </CardDescription>
 
                             <div className="space-y-3 pt-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs font-semibold">Meta Catalog ID</Label>
-                                    <Input
-                                        defaultValue={catalogMeta.catalog_id}
-                                        readOnly
-                                        className="h-9 text-xs font-mono bg-muted/40"
-                                    />
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">Meta Catalog ID</Label>
+                                        <a
+                                            href="https://business.facebook.com/commerce_manager"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                                        >
+                                            Find in Meta Commerce Manager &rarr;
+                                        </a>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={catalogIdInput}
+                                            onChange={(e) => setCatalogIdInput(e.target.value)}
+                                            placeholder="e.g. 934553439246885 (15-digit Meta Catalog ID)"
+                                            className="h-9 text-xs font-mono bg-background"
+                                        />
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={isSavingSettings}
+                                            onClick={handleSaveCatalogSettings}
+                                            className="h-9 shrink-0 gap-1 text-xs"
+                                        >
+                                            {isSavingSettings ? 'Saving...' : 'Save ID'}
+                                        </Button>
+                                    </div>
                                     <p className="text-[11px] text-muted-foreground">
-                                        Found in Facebook Business Manager &gt; Commerce Manager &gt; Catalogs.
+                                        Enter your Catalog ID from <em>Facebook Business Manager &gt; Commerce Manager &gt; Catalogs</em>.
                                     </p>
                                 </div>
 
@@ -971,13 +1053,44 @@ export default function CommerceIndex({
 
                                 <div className="space-y-1">
                                     <Label className="text-xs font-semibold">Default Channel for Catalog</Label>
-                                    <select className="h-9 px-3 rounded-lg border border-input bg-background text-xs font-medium w-full">
+                                    <select
+                                        value={selectedSenderChannel}
+                                        onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                        className="h-9 px-3 rounded-lg border border-input bg-background text-xs font-medium w-full"
+                                    >
                                         {channels.map((ch) => (
                                             <option key={ch.id} value={ch.id}>
-                                                {ch.name} ({ch.phone_number})
+                                                {ch.name} ({ch.phone_number || 'No Number'})
                                             </option>
                                         ))}
                                     </select>
+                                </div>
+
+                                {/* Quick Action Buttons for Meta Integration */}
+                                <div className="pt-3 border-t border-border flex flex-col sm:flex-row gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isLinkingCatalog}
+                                        onClick={handleLinkCatalogToMeta}
+                                        className="text-xs h-9 flex-1 gap-1.5 border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                    >
+                                        <Store className="size-3.5" />
+                                        {isLinkingCatalog ? 'Connecting...' : '⚡ 1-Click Enable WhatsApp Storefront'}
+                                    </Button>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isSyncing}
+                                        onClick={handleSyncCatalog}
+                                        className="text-xs h-9 flex-1 gap-1.5"
+                                    >
+                                        <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                                        {isSyncing ? 'Syncing...' : '🔄 Push Products to Meta Catalog'}
+                                    </Button>
                                 </div>
                             </div>
                         </Card>
