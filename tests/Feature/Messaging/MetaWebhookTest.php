@@ -5,6 +5,7 @@ use App\Modules\Foundation\Models\Organization;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\WebhookInbox;
+use App\Modules\MetaConnection\Models\WhatsAppChannel;
 
 test('meta webhook verification responds with challenge code when token matches', function () {
     $challenge = 'challenge_test_code_998877';
@@ -30,6 +31,10 @@ test('meta webhook rejects invalid verify token with 403', function () {
 });
 
 test('meta incoming message creates conversation, records 24h window, and replies with bot rule', function () {
+    \Illuminate\Support\Facades\Http::fake([
+        'graph.facebook.com/*' => \Illuminate\Support\Facades\Http::response(['messages' => [['id' => 'wamid.outbound_123']]], 200),
+    ]);
+
     // 1. Prepare organization
     $org = Organization::create([
         'name' => 'Sathwara InfoTech',
@@ -44,6 +49,17 @@ test('meta incoming message creates conversation, records 24h window, and replie
         'reply_text' => 'Our Bot Starter package is ₹2,999 one-time setup + ₹999/month.',
         'match_type' => 'contains',
         'is_enabled' => true,
+    ]);
+
+    // Connect the receiving WhatsApp channel to the organization
+    WhatsAppChannel::create([
+        'organization_id' => $org->id,
+        'name' => 'Support Line',
+        'phone_number' => '+919876543210',
+        'phone_number_id' => '1431069246745536',
+        'waba_id' => '799788166562792',
+        'access_token' => 'test_token_123',
+        'status' => 'connected',
     ]);
 
     // 3. Simulate Meta Incoming Message Webhook Payload
@@ -72,7 +88,7 @@ test('meta incoming message creates conversation, records 24h window, and replie
                                 [
                                     'from' => '919825012345',
                                     'id' => 'wamid.HBgMOTE5ODI1MDEyMzQ1FQIAEhggMjhCRTRBOTQxQzQ=',
-                                    'timestamp' => '1729600000',
+                                    'timestamp' => (string) time(),
                                     'text' => [
                                         'body' => 'What are the course fees?',
                                     ],
@@ -87,10 +103,23 @@ test('meta incoming message creates conversation, records 24h window, and replie
         ],
     ];
 
-    $response = $this->postJson('/webhooks/meta', $payload);
+    $secret = 'test_webhook_secret_123';
+    \App\Models\PlatformSetting::write('meta_app_secret', $secret);
+    $rawPayload = json_encode($payload);
+    $signature = 'sha256=' . hash_hmac('sha256', $rawPayload, $secret);
+
+    $response = $this->call('POST', '/webhooks/meta', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => $signature,
+    ], $rawPayload);
 
     $response->assertOk();
     $response->assertSee('EVENT_RECEIVED');
+
+    // Process dispatched webhooks synchronously for test verification
+    foreach (WebhookInbox::where('status', 'pending')->get() as $pendingRecord) {
+        app(\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class)->process($pendingRecord->id);
+    }
 
     // 4. Verify raw webhook recorded
     expect(WebhookInbox::where('status', 'processed')->count())->toBeGreaterThan(0);

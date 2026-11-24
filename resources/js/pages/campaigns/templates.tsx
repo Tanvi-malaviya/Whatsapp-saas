@@ -48,6 +48,7 @@ export type TemplateItem = {
     costEstimate?: string;
     header?: string | null;
     headerFormat?: string | null;
+    headerText?: string;
     headerType?: 'TEXT' | 'IMAGE' | 'DOCUMENT';
     headerUrl?: string | null;
     headerMediaId?: string | null;
@@ -69,6 +70,13 @@ interface Props {
         status: string;
         wabaId?: string;
     } | null;
+    channels?: {
+        id: string;
+        name: string;
+        phoneNumber?: string;
+        wabaId?: string;
+        isDefault?: boolean;
+    }[];
     flash?: {
         success?: string;
         error?: string;
@@ -79,6 +87,7 @@ interface Props {
 export default function MessageTemplates({
     initialTemplates = [],
     channel,
+    channels = [],
     flash,
     errors = {},
 }: Props) {
@@ -155,7 +164,7 @@ export default function MessageTemplates({
         setIsSyncing(true);
         router.post(
             '/templates/sync',
-            {},
+            channel?.id ? { channel_id: channel.id } : {},
             {
                 preserveScroll: true,
                 onSuccess: () => {
@@ -210,6 +219,9 @@ export default function MessageTemplates({
         }
 
         const formData = new FormData();
+        if (channel?.id) {
+            formData.append('channel_id', channel.id);
+        }
         formData.append('name', cleanName);
         formData.append('category', newCategory);
         formData.append('language', newLanguage);
@@ -450,7 +462,26 @@ export default function MessageTemplates({
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {channels.length > 0 && (
+                            <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-lg text-xs shadow-2xs">
+                                <Smartphone className="size-3.5 text-[#47b672]" />
+                                <span className="text-[11px] text-muted-foreground font-medium">WhatsApp Number:</span>
+                                <select
+                                    value={channel?.id || ''}
+                                    onChange={(e) => router.get('/templates', { channel_id: e.target.value }, { preserveState: false })}
+                                    className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+                                    aria-label="Filter templates by WhatsApp number"
+                                >
+                                    {channels.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} {c.phoneNumber ? `(${c.phoneNumber})` : ''} {c.isDefault ? '★ Default' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <Button
                             variant="outline"
                             size="sm"

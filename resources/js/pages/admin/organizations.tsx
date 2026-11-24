@@ -59,15 +59,23 @@ type OrgItem = {
         name: string;
         email: string;
     } | null;
+    b2b_agent?: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
+    b2b_agent_id?: number | null;
 };
 
 type Props = {
     organizations: OrgItem[];
+    b2bAgents?: Array<{ id: number; name: string; email: string }>;
     currentOrgId?: string;
 };
 
 export default function AdminOrganizations({
     organizations = [],
+    b2bAgents = [],
     currentOrgId,
 }: Props) {
     const { flash } = usePage().props as any;
@@ -104,6 +112,7 @@ export default function AdminOrganizations({
     const [formMaxChannels, setFormMaxChannels] = useState<number>(1);
     const [formPlan, setFormPlan] = useState<string>('starter');
     const [formStatus, setFormStatus] = useState<string>('active');
+    const [formB2bAgentId, setFormB2bAgentId] = useState<number | null>(null);
 
     // Filter count metrics
     const singleCount = useMemo(() => {
@@ -119,6 +128,7 @@ export default function AdminOrganizations({
         setFormMaxChannels(org.max_channels);
         setFormPlan(org.subscription_plan || 'starter');
         setFormStatus(org.status || 'active');
+        setFormB2bAgentId(org.b2b_agent_id ?? null);
         setIsEditModalOpen(true);
     };
 
@@ -133,6 +143,7 @@ export default function AdminOrganizations({
                 max_channels: Number(formMaxChannels),
                 subscription_plan: formPlan,
                 status: formStatus,
+                b2b_agent_id: formB2bAgentId,
             },
             {
                 onFinish: () => {
@@ -341,6 +352,11 @@ export default function AdminOrganizations({
                                                                 <div className="text-[10px] text-muted-foreground truncate max-w-[120px] leading-tight mt-0.5" title={org.owner.email}>
                                                                     {org.owner.email}
                                                                 </div>
+                                                                {org.b2b_agent && (
+                                                                    <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5 mt-0.5 truncate max-w-[120px]" title={`B2B Partner: ${org.b2b_agent.name}`}>
+                                                                        <span>Partner: {org.b2b_agent.name}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ) : (
@@ -594,6 +610,26 @@ export default function AdminOrganizations({
                                         <option value="suspended">Suspended</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Assigned B2B Partner */}
+                            <div className="space-y-1">
+                                <Label htmlFor="b2b_agent" className="text-xs font-semibold">
+                                    Assigned B2B Partner / Reseller
+                                </Label>
+                                <select
+                                    id="b2b_agent"
+                                    value={formB2bAgentId ?? ''}
+                                    onChange={(e) => setFormB2bAgentId(e.target.value ? Number(e.target.value) : null)}
+                                    className="w-full rounded-md border border-input bg-background px-2 h-8 text-xs font-medium shadow-2xs"
+                                >
+                                    <option value="">None (Direct Platform Customer)</option>
+                                    {b2bAgents.map((agent) => (
+                                        <option key={agent.id} value={agent.id}>
+                                            {agent.name} ({agent.email})
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <DialogFooter className="pt-2 gap-2 border-t border-border/70 mt-2">

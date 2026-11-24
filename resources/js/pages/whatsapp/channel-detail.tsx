@@ -58,8 +58,8 @@ type Props = {
 
 export default function ChannelDetail({
     channel,
-    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
-    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+    defaultWebhookUrl = '',
+    defaultVerifyToken = '',
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current || { name: 'Sathwara InfoTech', slug: 'sathwara-infotech' };

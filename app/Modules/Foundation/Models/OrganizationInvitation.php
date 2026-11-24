@@ -14,6 +14,7 @@ class OrganizationInvitation extends Model
 
     protected $fillable = [
         'organization_id',
+        'channel_access',
         'email',
         'role',
         'token',
@@ -21,7 +22,9 @@ class OrganizationInvitation extends Model
         'accepted_at',
     ];
 
+    protected $hidden = ['token'];
     protected $casts = [
+        'channel_access' => 'array',
         'expires_at' => 'datetime',
         'accepted_at' => 'datetime',
         'created_at' => 'datetime',

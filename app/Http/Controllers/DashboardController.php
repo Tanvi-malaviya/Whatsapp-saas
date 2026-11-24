@@ -19,10 +19,9 @@ class DashboardController extends Controller
     {
         $orgId = TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        return $orgId ? (Organization::find($orgId) ?? Organization::first()) : null;
+        return $orgId ? (Organization::find($orgId)) : null;
     }
 
     public function index(Request $request): Response
@@ -101,7 +100,7 @@ class DashboardController extends Controller
                 return [
                     'id' => (string) $f->id,
                     'name' => $f->name,
-                    'trigger' => $f->trigger_keyword ?: 'First Message',
+                    'trigger' => $f->trigger_keywords ?: 'First Message',
                     'status' => $f->status ?? 'active',
                     'description' => $f->description ?: 'Automated conversational bot flow.',
                 ];
@@ -115,7 +114,7 @@ class DashboardController extends Controller
                 'waba_id' => $channel->waba_id,
                 'status' => $channel->status,
                 'quality' => $channel->quality_rating ?: 'GREEN',
-                'tier' => $channel->tier ?: 'TIER_1K',
+                'tier' => $channel->messaging_limit ?: 'UNKNOWN',
             ] : null,
             'metrics' => [
                 'total_messages' => $totalMessages,

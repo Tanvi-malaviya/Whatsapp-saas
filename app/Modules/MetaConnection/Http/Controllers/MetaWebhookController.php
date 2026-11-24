@@ -3,81 +3,56 @@
 namespace App\Modules\MetaConnection\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Bot\Models\BotRule;
+use App\Jobs\ProcessMetaWebhook;
 use App\Modules\Foundation\Models\Organization;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\WebhookInbox;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\AutomationService;
+use App\Services\MetaApi;
 use App\Shared\PhoneNumber;
 use App\Shared\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 class MetaWebhookController extends Controller
 {
-    /**
-     * Respond to Meta Webhook Verification Handshake (GET /webhooks/meta)
-     */
-    public function verify(Request $request): Response
+    public function verify(Request $request)
     {
-        $mode = $request->input('hub_mode', $request->input('hub.mode', $request->query('hub_mode', $request->query('hub.mode'))));
-        $token = $request->input('hub_verify_token', $request->input('hub.verify_token', $request->query('hub_verify_token', $request->query('hub.verify_token'))));
-        $challenge = $request->input('hub_challenge', $request->input('hub.challenge', $request->query('hub_challenge', $request->query('hub.challenge'))));
-
-        $validTokens = array_values(array_unique(array_filter([
-            config('services.meta.verify_token'),
-            env('META_VERIFY_TOKEN'),
-            '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
-            'sathwara_secret_token_123',
-        ])));
-
-        if ($mode === 'subscribe' && in_array($token, $validTokens, true)) {
-            Log::info('Meta Webhook Handshake successfully verified.', ['token' => $token]);
-            return response((string) $challenge, 200)
-                ->header('Content-Type', 'text/plain; charset=utf-8');
-        }
-
-        Log::warning('Meta Webhook verification failed. Invalid token received.', [
-            'mode' => $mode,
-            'token_received' => $token,
-            'valid_tokens' => $validTokens,
-        ]);
-        return response('Forbidden', 403);
+        $expected = MetaApi::setting('verify_token');
+        $token = $request->input('hub_verify_token', $request->input('hub.verify_token', ''));
+        abort_unless($expected && $request->input('hub_mode', $request->input('hub.mode')) === 'subscribe' && hash_equals($expected, (string) $token), 403);
+        return response((string) $request->input('hub_challenge', $request->input('hub.challenge')), 200)->header('Content-Type', 'text/plain');
     }
 
-    /**
-     * Ingest incoming WhatsApp message webhooks from Meta (POST /webhooks/meta)
-     */
-    public function receive(Request $request): Response
+    public function receive(Request $request)
     {
-        $payload = $request->all();
-
-        // 1. Log raw webhook payload in webhook_inbox
-        $inboxRecord = WebhookInbox::create([
-            'provider' => 'meta',
-            'payload' => $payload,
-            'status' => 'pending',
-        ]);
-
-        try {
-            $this->processPayload($payload, $inboxRecord);
-            $inboxRecord->update(['status' => 'processed']);
-        } catch (\Throwable $e) {
-            Log::error('Error processing Meta Webhook: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $inboxRecord->update([
-                'status' => 'failed',
-                'error' => $e->getMessage(),
-            ]);
+        $secret = MetaApi::setting('app_secret');
+        $signature = $request->header('X-Hub-Signature-256', '');
+        abort_unless($secret && hash_equals('sha256='.hash_hmac('sha256', $request->getContent(), $secret), $signature), 403, 'Invalid webhook signature.');
+        $payload = $request->validate(['object' => 'required|in:whatsapp_business_account', 'entry' => 'required|array']);
+        foreach ($payload['entry'] as $entry) {
+            foreach ($entry['changes'] ?? [] as $change) {
+                $value = $change['value'] ?? [];
+                $phoneId = $value['metadata']['phone_number_id'] ?? null;
+                $channel = $phoneId ? WhatsAppChannel::withoutGlobalScopes()->where('phone_number_id', $phoneId)->where('status', 'connected')->first() : null;
+                // WABA-level template events have no receiving phone ID.
+                if (! $channel && ! $phoneId && ($entry['id'] ?? null)) {
+                    $channel = WhatsAppChannel::withoutGlobalScopes()->where('waba_id', $entry['id'])->first();
+                }
+                if (! $channel) { continue; }
+                $record = WebhookInbox::create(['provider' => 'meta', 'organization_id' => $channel->organization_id,
+                    'phone_number_id' => $phoneId, 'payload' => $change, 'status' => 'pending']);
+                ProcessMetaWebhook::dispatch($record->id)->afterCommit();
+            }
         }
-
-        // Always return HTTP 200 quickly so Meta does not resend the webhook
         return response('EVENT_RECEIVED', 200);
     }
 
-    private function processPayload(array $payload, WebhookInbox $inboxRecord): void
+    public function process(int $recordId): void
     {
         $entry = $payload['entry'][0] ?? null;
         $change = $entry['changes'][0]['value'] ?? null;
@@ -302,182 +277,101 @@ class MetaWebhookController extends Controller
                             }
                         }
                     }
-                }
-
-                if (!$matchedProduct) {
-                    $matchedProduct = $allProducts->first();
-                }
-
-                if ($matchedProduct) {
-                    $newOrder = \App\Modules\Commerce\Models\CommerceOrder::create([
-                        'organization_id' => $org->id,
-                        'order_number' => 'WA-' . rand(10000, 99999),
-                        'customer_name' => $contactName,
-                        'customer_phone' => $normalizedPhone,
-                        'total_amount' => (float)$matchedProduct->price,
-                        'currency' => 'INR',
-                        'status' => 'pending',
-                        'items' => [
-                            [
-                                'name' => $matchedProduct->name,
-                                'qty' => 1,
-                                'price' => (float)$matchedProduct->price,
-                                'retailer_id' => $matchedProduct->retailer_id,
-                            ]
-                        ],
-                        'meta_order_id' => $wamid,
-                        'notes' => 'Placed via WhatsApp Chat Reply: "' . $textBody . '"',
+                    $message->update(['status' => $status['status'], 'metadata' => $meta]);
+                    DB::table('campaign_recipients')->where('wamid', $status['id'])->update([
+                        'status' => $status['status'],
+                        'error' => $errorReason,
+                        'updated_at' => now(),
                     ]);
-
-                    $confirmMsg = "🎉 *Order Received!*\n\n"
-                        . "Order No: *#{$newOrder->order_number}*\n"
-                        . "Item: *{$matchedProduct->name}*\n"
-                        . "Amount: *₹" . number_format((float)$matchedProduct->price, 2) . "*\n\n"
-                        . "Thank you *{$contactName}*! Your order has been placed into our WhatsApp Cart & Orders system. Our team will contact you shortly to confirm your delivery address.";
-
-                    Message::create([
-                        'conversation_id' => $conversation->id,
-                        'organization_id' => $org->id,
-                        'direction' => 'outbound',
-                        'sender_type' => 'bot',
-                        'type' => 'text',
-                        'content' => $confirmMsg,
-                        'status' => 'sent',
-                    ]);
-                    $this->dispatchMetaReply($phoneNumberId, $fromNumber, $confirmMsg);
                 }
             }
-
-            // Match Bot Rules for auto-reply
-            $replyText = $this->matchBotReply($org, $textBody, $conversation);
-
-            if ($replyText) {
-                // Store outbound bot reply
-                Message::create([
-                    'conversation_id' => $conversation->id,
-                    'organization_id' => $org->id,
-                    'direction' => 'outbound',
-                    'sender_type' => 'bot',
-                    'type' => 'text',
-                    'content' => $replyText,
-                    'status' => 'sent',
-                    'meta_cost_paise' => 0, // Free within 24h customer service window
-                ]);
-
-                // If Meta WhatsApp Token is configured, dispatch reply via Meta Graph API
-                $this->dispatchMetaReply($phoneNumberId, $fromNumber, $replyText);
+            if ($channel) {
+                foreach ($value['messages'] ?? [] as $incoming) { $this->incoming($org, $channel, $value, $incoming); }
+                $channel->update(['webhook_verified_at' => now()]);
             }
-        }
-
-        TenantContext::clear();
+            if (($record->payload['field'] ?? '') === 'message_template_status_update') {
+                foreach (WhatsAppChannel::where('organization_id', $org->id)->get() as $ch) { \Illuminate\Support\Facades\Cache::forget('meta_templates_'.$ch->waba_id); }
+            }
+            $record->update(['status' => 'processed', 'error' => null]);
+        } catch (\Throwable $exception) {
+            $record->update(['status' => 'failed', 'error' => mb_substr($exception->getMessage(), 0, 2000)]);
+            throw $exception;
+        } finally { TenantContext::clear(); }
     }
 
-    private function matchBotReply(Organization $org, string $inboundText, ?Conversation $conversation = null): ?string
+    private function incoming(Organization $org, WhatsAppChannel $channel, array $value, array $incoming): void
     {
-        $cleanText = strtoupper(trim($inboundText));
-        if (in_array($cleanText, ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'CANCEL', 'STOPALL'])) {
-            return "You have been unsubscribed from our WhatsApp notifications. You will no longer receive promotional updates. Reply START anytime to re-subscribe.";
-        }
-        if (in_array($cleanText, ['START', 'UNSTOP'])) {
-            return "Thank you! You have successfully re-subscribed to our WhatsApp updates.";
-        }
-
-        $rules = BotRule::where('organization_id', $org->id)
-            ->where('is_enabled', true)
-            ->orderBy('priority', 'asc')
-            ->get();
-
-        foreach ($rules as $rule) {
-            if ($rule->matches($inboundText)) {
-                return $rule->reply_text;
+        $wamid = $incoming['id'] ?? null;
+        if (! $wamid || empty($incoming['from'])) { return; }
+        $phone = (new PhoneNumber($incoming['from']))->getE164();
+        $profile = collect($value['contacts'] ?? [])->firstWhere('wa_id', $incoming['from']);
+        $type = $incoming['type'] ?? 'text';
+        $text = $incoming['text']['body'] ?? $incoming['button']['text'] ?? $incoming['interactive']['button_reply']['id'] ?? $incoming['interactive']['list_reply']['id'] ?? null;
+        $text ??= $incoming[$type]['caption'] ?? match ($type) {
+            'location' => json_encode($incoming['location'] ?? []),
+            'contacts' => json_encode($incoming['contacts'] ?? []),
+            'order' => 'New WhatsApp catalog order',
+            default => ucfirst($type).' received',
+        };
+        $result = DB::transaction(function () use ($org, $channel, $incoming, $phone, $profile, $type, $text, $wamid) {
+            // Serializes duplicate provider deliveries before any bot or order side effects.
+            Organization::whereKey($org->id)->lockForUpdate()->firstOrFail();
+            if (Message::where('wamid', $wamid)->exists()) { return null; }
+            $conversation = Conversation::firstOrCreate([
+                'organization_id' => $org->id, 'channel_phone_number_id' => $channel->phone_number_id, 'contact_phone' => $phone,
+            ], ['channel_id' => $channel->id, 'contact_name' => $profile['profile']['name'] ?? $phone, 'status' => 'open', 'is_opted_in' => true]);
+            $first = ! $conversation->messages()->where('direction', 'inbound')->exists();
+            $sentAt = isset($incoming['timestamp']) ? \Carbon\CarbonImmutable::createFromTimestamp((int) $incoming['timestamp']) : now();
+            $window = $sentAt->addHours(24);
+            $conversation->update([
+                'channel_id' => $channel->id, 'last_message_at' => max($sentAt, $conversation->last_message_at ?? $sentAt),
+                'window_expires_at' => max($window, $conversation->window_expires_at ?? $window),
+                'is_opted_in' => in_array(strtoupper(trim($text)), ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'CANCEL', 'STOPALL']) ? false : (in_array(strtoupper(trim($text)), ['START', 'UNSTOP', 'YES']) ? true : (bool) ($conversation->is_opted_in ?? true)),
+                'unread_count' => $conversation->unread_count + 1,
+            ]);
+            $message = Message::create(['organization_id' => $org->id, 'conversation_id' => $conversation->id,
+                'direction' => 'inbound', 'sender_type' => 'contact', 'sender_id' => $phone,
+                'wamid' => $wamid, 'type' => $type, 'content' => $text, 'status' => 'received']);
+            if ($type === 'order') { $this->order($org, $channel, $incoming, $conversation); }
+            return [$conversation, $message, $first];
+        });
+        if (! $result) { return; }
+        [$conversation, $message, $first] = $result;
+        if (isset($incoming[$type]['id']) && in_array($type, ['image', 'audio', 'video', 'document', 'sticker'])) {
+            $media = Http::withToken($channel->access_token)->timeout(20)->get(MetaApi::base().'/'.$incoming[$type]['id'])->throw()->json();
+            $url = $media['url'] ?? '';
+            $host = parse_url($url, PHP_URL_HOST) ?? '';
+            abort_unless(str_starts_with($url, 'https://') && (str_ends_with($host, '.facebook.com') || str_ends_with($host, '.fbcdn.net') || str_ends_with($host, '.fbsbx.com')), 422, 'Unexpected media host.');
+            $response = Http::withToken($channel->access_token)->timeout(30)->withOptions(['allow_redirects' => false])->get($url)->throw();
+            if (strlen($response->body()) <= 52428800) {
+                $path = 'messages/'.$org->id.'/'.$message->id;
+                Storage::disk('local')->put($path, $response->body());
+                $message->update(['metadata' => ['media_path' => $path, 'mime_type' => $media['mime_type'] ?? 'application/octet-stream', 'filename' => basename($incoming[$type]['filename'] ?? ucfirst($type))]]);
             }
         }
-
-        // 2. Check Bot Flows
-        $flows = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)
-            ->where('status', 'active')
-            ->get();
-
-        $cleanedInbound = strtolower(trim($inboundText));
-
-        // 2a. Check if this inbound message is an answer to a previous follow-up question!
-        if ($conversation) {
-            $lastOutbound = Message::where('conversation_id', $conversation->id)
-                ->where('direction', 'outbound')
-                ->latest()
-                ->first();
-
-            if ($lastOutbound && str_contains($lastOutbound->content, '❓')) {
-                foreach ($flows as $flow) {
-                    if (! empty($flow->options) && is_array($flow->options)) {
-                        foreach ($flow->options as $opt) {
-                            if (! empty($opt['followup_question']) && str_contains($lastOutbound->content, $opt['followup_question'])) {
-                                return ! empty($opt['followup_reply'])
-                                    ? $opt['followup_reply']
-                                    : "✅ Thank you! We have received your response. Our team will review it and contact you shortly.\n\nReply MENU anytime to see options again.";
-                            }
-                        }
-                    }
-                }
+        if ($org->isSubscriptionActive() && $conversation->is_opted_in && $conversation->isWindowOpen() && ! $conversation->assigned_user_id && $type !== 'order') {
+            $reply = app(AutomationService::class)->reply($org, $conversation, $text, $first);
+            if ($reply) {
+                $out = Message::create(['organization_id' => $org->id, 'conversation_id' => $conversation->id,
+                    'direction' => 'outbound', 'sender_type' => 'bot', 'type' => 'text', 'content' => $reply, 'status' => 'queued']);
+                \App\Jobs\SendWhatsAppMessage::dispatch($out->id, ['to' => preg_replace('/\D/', '', $phone), 'type' => 'text', 'text' => ['body' => $reply]]);
             }
         }
-
-        // 2b. If user replied with a numeric option (1, 2, 3...)
-        if (is_numeric($cleanedInbound) && (int) $cleanedInbound >= 1 && (int) $cleanedInbound <= 10) {
-            foreach ($flows as $flow) {
-                if (! empty($flow->options) && is_array($flow->options)) {
-                    foreach ($flow->options as $opt) {
-                        if (($opt['id'] ?? '') === $cleanedInbound) {
-                            $flow->increment('execution_count');
-                            $reply = $opt['reply_text'] ?? '';
-                            if (($opt['action_type'] ?? '') === 'followup' && ! empty($opt['followup_question'])) {
-                                $reply .= "\n\n❓ " . $opt['followup_question'];
-                            }
-                            return $reply;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2c. If user inbound message matches flow trigger keywords
-        foreach ($flows as $flow) {
-            $keywords = array_map('trim', explode(',', strtolower($flow->trigger_keywords ?? '')));
-            foreach ($keywords as $kw) {
-                if (! empty($kw) && (str_contains($cleanedInbound, $kw) || $cleanedInbound === $kw)) {
-                    $flow->increment('execution_count');
-                    return $flow->greeting_message;
-                }
-            }
-        }
-
-        return null;
     }
 
-    private function dispatchMetaReply(?string $phoneNumberId, string $toPhone, string $message): void
+    private function order(Organization $org, WhatsAppChannel $channel, array $incoming, Conversation $conversation): void
     {
-        $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first() ?? WhatsAppChannel::first();
-        $token = env('META_WHATSAPP_TOKEN') ?: $channel?->access_token;
-        $phoneId = $phoneNumberId ?? $channel?->phone_number_id ?? env('META_PHONE_NUMBER_ID');
-
-        if (! $token || ! $phoneId) {
-            return;
+        $items = []; $total = 0; $currency = $org->currency ?: 'INR';
+        foreach ($incoming['order']['product_items'] ?? [] as $item) {
+            $product = \App\Modules\Commerce\Models\CommerceProduct::where('retailer_id', $item['product_retailer_id'] ?? '')->first();
+            $quantity = max(1, (int) ($item['quantity'] ?? 1)); $price = (float) ($item['item_price'] ?? 0);
+            $currency = $item['currency'] ?? $currency;
+            $items[] = ['name' => $product?->name ?? $item['product_retailer_id'], 'retailer_id' => $item['product_retailer_id'], 'qty' => $quantity, 'price' => $price]; $total += $quantity * $price;
         }
-
-        try {
-            Http::withToken($token)
-                ->post("https://graph.facebook.com/v21.0/{$phoneId}/messages", [
-                    'messaging_product' => 'whatsapp',
-                    'recipient_type' => 'individual',
-                    'to' => $toPhone,
-                    'type' => 'text',
-                    'text' => [
-                        'preview_url' => false,
-                        'body' => $message,
-                    ],
-                ]);
-        } catch (\Throwable $e) {
-            Log::warning('Failed sending WhatsApp reply via Meta API: ' . $e->getMessage());
-        }
+        \App\Modules\Commerce\Models\CommerceOrder::firstOrCreate(['organization_id' => $org->id, 'meta_order_id' => $incoming['id']], [
+            'order_number' => 'WA-'.strtoupper(\Illuminate\Support\Str::random(12)), 'customer_name' => $conversation->contact_name,
+            'customer_phone' => $conversation->contact_phone, 'total_amount' => $total, 'currency' => $currency,
+            'status' => 'pending', 'items' => $items, 'notes' => $incoming['order']['text'] ?? null,
+        ]);
     }
 }

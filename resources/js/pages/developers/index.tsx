@@ -46,9 +46,9 @@ export default function Developers({ channels = [] }: Props) {
     const [msgType, setMsgType] = useState<'template' | 'text'>('template');
     const [selectedTemplate, setSelectedTemplate] = useState('due_reminder_en');
 
-    const webhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook';
-    const verifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b';
-    const apiKey = 'sk_live_sat_9a8f27b401e9d8c3f281e04';
+    const webhookUrl = typeof window !== 'undefined' ? `${window.location.origin}/webhooks/meta` : '/webhooks/meta';
+    const verifyToken = 'Configured in Admin Settings';
+    const apiKey = 'Generate from Team & API settings';
 
     const copyToClipboard = (text: string, field: string) => {
         navigator.clipboard.writeText(text);

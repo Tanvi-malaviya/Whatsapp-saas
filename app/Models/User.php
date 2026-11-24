@@ -27,7 +27,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'current_organization_id', 'is_super_admin', 'email_verified_at'])]
+#[Fillable(['name', 'email', 'password', 'current_organization_id', 'is_super_admin', 'email_verified_at', 'referral_code', 'referred_by_id', 'is_b2b_agent'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
 {
@@ -41,27 +41,43 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_super_admin' => 'boolean',
+            'is_b2b_agent' => 'boolean',
         ];
     }
 
     public function isSuperAdmin(): bool
     {
-        if ($this->is_super_admin) {
-            return true;
-        }
+        return (bool) $this->is_super_admin;
+    }
 
-        // Primary master user is super admin
-        if ($this->id === 1) {
-            return true;
-        }
+    public function isB2BAgent(): bool
+    {
+        return (bool) $this->is_b2b_agent;
+    }
 
-        return false;
+    public function generateReferralCode(): string
+    {
+        if (! $this->referral_code) {
+            $code = strtoupper('REF' . substr(md5($this->id . $this->email . microtime()), 0, 8));
+            $this->update(['referral_code' => $code]);
+        }
+        return $this->referral_code;
+    }
+
+    public function referredBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(self::class, 'referred_by_id');
+    }
+
+    public function managedOrganizations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Modules\Foundation\Models\Organization::class, 'b2b_agent_id');
     }
 
     public function organizations(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
     {
         return $this->belongsToMany(\App\Modules\Foundation\Models\Organization::class, 'organization_user')
-            ->withPivot('role')
+            ->withPivot('role', 'channel_access')
             ->withTimestamps();
     }
 

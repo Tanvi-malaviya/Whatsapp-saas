@@ -477,7 +477,7 @@ export default function BotFlows({ flows = [] }: Props) {
                     </div>
                 )}
 
-                {/* Page Header & Stats */}
+                {/* Page Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-2.5">
@@ -490,11 +490,11 @@ export default function BotFlows({ flows = [] }: Props) {
                                         WhatsApp Bot Flows
                                     </h2>
                                     <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                        Visual Automation Tree
+                                        Interactive Menus
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Build multi-step interactive WhatsApp chatbots with buttons, quick replies, and automated lead qualification.
+                                    Automated 24/7 WhatsApp menu bots. Greets customers and provides instant answers to frequent questions.
                                 </p>
                             </div>
                         </div>
@@ -504,11 +504,42 @@ export default function BotFlows({ flows = [] }: Props) {
                         <Button
                             size="sm"
                             onClick={openCreateModal}
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 shadow-sm"
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 shadow-sm font-semibold h-8.5 px-3.5"
                         >
                             <Plus className="size-3.5" />
                             Create New Flow
                         </Button>
+                    </div>
+                </div>
+
+                {/* 3-Step Quick Help Guide */}
+                <div className="rounded-xl border border-[#47b672]/20 bg-[#47b672]/5 p-3.5 sm:p-4 text-xs">
+                    <div className="flex items-center gap-2 font-semibold text-foreground mb-2">
+                        <Sparkles className="size-4 text-[#47b672]" />
+                        <span>How WhatsApp Bot Flows Work in 3 Easy Steps</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-muted-foreground">
+                        <div className="flex items-start gap-2 bg-background/70 p-2.5 rounded-lg border border-border/50">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480] font-bold text-[11px]">1</span>
+                            <div>
+                                <strong className="text-foreground block text-[11px]">Trigger Keyword</strong>
+                                Customer types keywords like <em>hi, menu, price, order</em>.
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2 bg-background/70 p-2.5 rounded-lg border border-border/50">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold text-[11px]">2</span>
+                            <div>
+                                <strong className="text-foreground block text-[11px]">Welcome Greeting &amp; Menu</strong>
+                                Bot automatically sends your welcome greeting with 1, 2, 3 options.
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-2 bg-background/70 p-2.5 rounded-lg border border-border/50">
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 font-bold text-[11px]">3</span>
+                            <div>
+                                <strong className="text-foreground block text-[11px]">Instant Answer or Agent</strong>
+                                Customer replies with an option number to get instant answers or transfer to staff.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -687,18 +718,29 @@ export default function BotFlows({ flows = [] }: Props) {
                     <div className="lg:col-span-7 xl:col-span-8 space-y-5">
                         {selectedFlow ? (
                             <>
-                                {/* Canvas View */}
+                                {/* Clean Flow Details Card */}
                                 <Card className="border-border shadow-2xs">
                                     <CardHeader className="pb-3 border-b border-border/80">
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                             <div>
-                                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                                    <Sliders className="size-4 text-[#47b672]" />
-                                                    Flow Canvas: {selectedFlow.name}
-                                                </CardTitle>
-                                                <CardDescription className="text-xs">
-                                                    Interactive conversation pipeline executed when customer sends matching keywords.
-                                                </CardDescription>
+                                                <div className="flex items-center gap-2">
+                                                    <CardTitle className="text-base font-bold text-foreground">
+                                                        {selectedFlow.name}
+                                                    </CardTitle>
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`text-[10px] font-semibold ${
+                                                            selectedFlow.status === 'active'
+                                                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                                                : 'bg-muted text-muted-foreground'
+                                                        }`}
+                                                    >
+                                                        {selectedFlow.status === 'active' ? '● Active' : '○ Draft'}
+                                                    </Badge>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    Triggered when customer sends: <span className="font-mono font-semibold text-foreground bg-muted px-1.5 py-0.5 rounded">{selectedFlow.trigger_keywords}</span>
+                                                </p>
                                             </div>
 
                                             <div className="flex items-center gap-1.5">
@@ -706,16 +748,16 @@ export default function BotFlows({ flows = [] }: Props) {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => openEditModal(selectedFlow)}
-                                                    className="text-xs h-7 gap-1"
+                                                    className="text-xs h-7 gap-1 font-semibold"
                                                 >
                                                     <Edit3 className="size-3" />
-                                                    Edit
+                                                    Edit Flow
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => handleToggleStatus(selectedFlow)}
-                                                    className={`text-xs h-7 gap-1 ${
+                                                    className={`text-xs h-7 gap-1 font-semibold ${
                                                         selectedFlow.status === 'active'
                                                             ? 'text-amber-600 hover:text-amber-700'
                                                             : 'text-emerald-600 hover:text-emerald-700'
@@ -736,103 +778,53 @@ export default function BotFlows({ flows = [] }: Props) {
                                         </div>
                                     </CardHeader>
 
-                                    <CardContent className="p-4 space-y-3">
-                                        {/* Step 1: Trigger Node */}
-                                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
-                                            <div className="flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400">
-                                                <span className="flex items-center gap-1.5">
-                                                    <Bot className="size-3.5" />
-                                                    STEP 1: Trigger Condition
-                                                </span>
-                                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
-                                                    Keywords Match
-                                                </Badge>
-                                            </div>
-                                            <p className="text-xs text-foreground font-mono bg-background/50 p-1.5 rounded border border-border/50">
-                                                {selectedFlow.trigger_keywords}
-                                            </p>
-                                        </div>
-
-                                        <div className="flex justify-center text-muted-foreground/60">
-                                            <ArrowRight className="size-4 rotate-90" />
-                                        </div>
-
-                                        {/* Step 2: Interactive Greeting & Menu Node */}
-                                        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 space-y-1.5">
-                                            <div className="flex items-center justify-between text-xs font-semibold text-blue-600 dark:text-blue-400">
-                                                <span className="flex items-center gap-1.5">
+                                    <CardContent className="p-4 space-y-4">
+                                        {/* Step 1: Greeting & Menu */}
+                                        <div className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+                                            <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                                                <span className="flex items-center gap-1.5 text-[#47b672]">
                                                     <MessageSquare className="size-3.5" />
-                                                    STEP 2: Automated Greeting &amp; Options Menu
-                                                </span>
-                                                <span className="text-[11px] text-muted-foreground font-normal">
-                                                    {selectedFlow.options?.length || 0} Interactive Options
+                                                    Step 1: Welcome Greeting Sent to Customer
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-foreground whitespace-pre-wrap bg-background/60 p-2 rounded border border-border/50 leading-relaxed font-sans">
+                                            <p className="text-xs text-foreground whitespace-pre-wrap bg-muted/30 p-2.5 rounded-md border border-border/60 leading-relaxed font-sans">
                                                 {selectedFlow.greeting_message}
                                             </p>
                                         </div>
 
-                                        <div className="flex justify-center text-muted-foreground/60">
-                                            <ArrowRight className="size-4 rotate-90" />
-                                        </div>
-
-                                        {/* Step 3: Interactive Branches */}
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center justify-between text-xs font-semibold text-foreground px-1">
-                                                <span>STEP 3: Decision Branches</span>
-                                                <span className="text-[11px] text-muted-foreground font-normal">
-                                                    Automated action per selection
+                                        {/* Step 2: Interactive Menu Options */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between text-xs font-semibold text-foreground px-0.5">
+                                                <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                                                    <Sliders className="size-3.5" />
+                                                    Step 2: Menu Options &amp; Automated Replies ({selectedFlow.options?.length || 0})
                                                 </span>
                                             </div>
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                                {selectedFlow.options?.map((opt, idx) => {
-                                                    const colors = [
-                                                        'border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
-                                                        'border-purple-500/30 bg-purple-500/5 text-purple-700 dark:text-purple-400',
-                                                        'border-sky-500/30 bg-sky-500/5 text-sky-700 dark:text-sky-400',
-                                                        'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400',
-                                                        'border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-400',
-                                                    ];
-                                                    const colorClass = colors[idx % colors.length];
-
-                                                    return (
-                                                        <div
-                                                            key={opt.id}
-                                                            className={`rounded-lg border p-2.5 space-y-1.5 ${colorClass}`}
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-semibold text-xs">
-                                                                    Branch {opt.id}: {opt.label}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                                                {selectedFlow.options?.map((opt, idx) => (
+                                                    <div
+                                                        key={opt.id}
+                                                        className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-semibold text-xs text-foreground flex items-center gap-1">
+                                                                <span className="size-4 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
+                                                                    {opt.id}
                                                                 </span>
-                                                                {opt.action_type === 'human_handoff' && (
-                                                                    <Badge variant="outline" className="text-[9px] bg-purple-500/10 text-purple-600 border-purple-500/20">
-                                                                        Agent Handoff
-                                                                    </Badge>
-                                                                )}
-                                                                {opt.action_type === 'followup' && (
-                                                                    <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
-                                                                        Next Step
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-[11px] text-foreground/80 line-clamp-3 leading-snug">
-                                                                {opt.reply_text}
-                                                            </p>
-                                                            {opt.followup_question && (
-                                                                <p className="text-[10px] text-amber-600 dark:text-amber-400 border-t border-amber-500/20 pt-1 font-medium">
-                                                                    ↳ Q: {opt.followup_question}
-                                                                </p>
-                                                            )}
-                                                            {opt.followup_reply && (
-                                                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 border-t border-emerald-500/20 pt-1 font-medium">
-                                                                    ↳ Ans Reply: {opt.followup_reply}
-                                                                </p>
+                                                                {opt.label}
+                                                            </span>
+                                                            {opt.action_type === 'human_handoff' && (
+                                                                <Badge variant="outline" className="text-[9px] bg-purple-500/10 text-purple-600 border-purple-500/20">
+                                                                    Staff Handoff
+                                                                </Badge>
                                                             )}
                                                         </div>
-                                                    );
-                                                })}
+                                                        <p className="text-xs text-muted-foreground leading-relaxed bg-background/80 p-2 rounded border border-border/50">
+                                                            {opt.reply_text}
+                                                        </p>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     </CardContent>

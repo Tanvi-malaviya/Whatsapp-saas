@@ -17,6 +17,10 @@ class Conversation extends Model
 
     protected $fillable = [
         'organization_id',
+        'channel_id',
+        'contact_id',
+        'unread_count',
+        'bot_state',
         'contact_phone',
         'contact_name',
         'email',
@@ -35,6 +39,8 @@ class Conversation extends Model
     ];
 
     protected $casts = [
+        'unread_count' => 'integer',
+        'bot_state' => 'array',
         'is_opted_in' => 'boolean',
         'deal_value' => 'decimal:2',
         'followup_date' => 'datetime',
@@ -43,6 +49,24 @@ class Conversation extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $conversation) {
+            if (! $conversation->organization_id || ! $conversation->contact_phone) { return; }
+            $values = array_filter(
+                array_intersect_key($conversation->getAttributes(), array_flip(['contact_name','email','city','pipeline_stage','label','is_opted_in','deal_value','followup_date','lead_source','last_message_at'])),
+                fn ($v) => $v !== null
+            );
+            $contact = \App\Modules\Crm\Models\Contact::withoutGlobalScopes()->withTrashed()->firstOrCreate(['organization_id' => $conversation->organization_id, 'contact_phone' => $conversation->contact_phone], $values);
+            $conversation->contact_id = $contact->id;
+            if ($conversation->exists) { $contact->fill($values)->saveQuietly(); }
+            if ($conversation->channel_phone_number_id && ! $conversation->channel_id) {
+                $conversation->channel_id = \App\Modules\MetaConnection\Models\WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $conversation->organization_id)->where('phone_number_id', $conversation->channel_phone_number_id)->value('id');
+            }
+        });
+    }
+    public function contact() { return $this->belongsTo(\App\Modules\Crm\Models\Contact::class); }
 
     public function messages(): HasMany
     {

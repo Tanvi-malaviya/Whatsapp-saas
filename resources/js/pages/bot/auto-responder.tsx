@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
 import {
@@ -45,67 +46,16 @@ export type KeywordRule = {
     enabled: boolean;
 };
 
-const DEFAULT_WELCOME =
-    "👋 Hello {{name}}! Welcome to Sathwara InfoTech.\nHow can we assist you today?\n\n1️⃣ Web & Software Development\n2️⃣ WhatsApp API & Automation\n3️⃣ Talk to Support";
-
-const DEFAULT_AWAY =
-    "🌙 Hi! We are currently outside of business hours (Office hours: Mon-Sat, 9:30 AM - 7:00 PM IST).\n\nWe have received your message and our team will get back to you first thing in the morning! 🌅";
-
-const DEFAULT_RULES: KeywordRule[] = [
-    {
-        id: '1',
-        keyword: 'fees, price, cost, pricing',
-        matchType: 'contains',
-        reply: '💰 Our WhatsApp Bot Cloud API package starts at ₹2,999 one-time setup + ₹999/month for unlimited auto-replies and broadcasts! Would you like a live demo?',
-        enabled: true,
-    },
-    {
-        id: '2',
-        keyword: 'courses, training, learn, admission',
-        matchType: 'contains',
-        reply: '🎓 We offer Full Stack Web Development (PHP/Laravel & React) and WhatsApp API automation training. Batches start every Monday in Ahmedabad!',
-        enabled: true,
-    },
-    {
-        id: '3',
-        keyword: 'human, agent, talk, call, support',
-        matchType: 'contains',
-        reply: '👨‍💼 Sure! We are notifying our support specialist at Sathwara InfoTech. An agent will connect with you here shortly.',
-        enabled: true,
-    },
-    {
-        id: '4',
-        keyword: 'location, address, office, visit',
-        matchType: 'contains',
-        reply: '📍 Our Office: Sathwara InfoTech, Ahmedabad, Gujarat.\n⏰ Working Hours: Monday to Saturday, 9:30 AM to 7:00 PM IST.',
-        enabled: true,
-    },
-];
-
-export default function AutoResponder() {
-    // Welcome & Away States (with localStorage support)
-    const [welcomeEnabled, setWelcomeEnabled] = useState<boolean>(() => {
-        const saved = localStorage.getItem('ar_welcome_enabled');
-        return saved !== null ? JSON.parse(saved) : true;
-    });
-    const [welcomeMessage, setWelcomeMessage] = useState<string>(() => {
-        return localStorage.getItem('ar_welcome_msg') || DEFAULT_WELCOME;
-    });
-
-    const [awayEnabled, setAwayEnabled] = useState<boolean>(() => {
-        const saved = localStorage.getItem('ar_away_enabled');
-        return saved !== null ? JSON.parse(saved) : true;
-    });
-    const [awayMessage, setAwayMessage] = useState<string>(() => {
-        return localStorage.getItem('ar_away_msg') || DEFAULT_AWAY;
-    });
-
-    // Keyword Rules
-    const [rules, setRules] = useState<KeywordRule[]>(() => {
-        const saved = localStorage.getItem('ar_keyword_rules');
-        return saved ? JSON.parse(saved) : DEFAULT_RULES;
-    });
-
+export default function AutoResponder({ settings = {}, initialRules = [] }: { settings?: any; initialRules?: KeywordRule[] }) {
+    const [welcomeEnabled, setWelcomeEnabled] = useState<boolean>(settings.welcome_enabled ?? false);
+    const [welcomeMessage, setWelcomeMessage] = useState<string>(settings.welcome_message ?? 'Hello {{name}}! How can we help?');
+    const [awayEnabled, setAwayEnabled] = useState<boolean>(settings.away_enabled ?? false);
+    const [awayMessage, setAwayMessage] = useState<string>(settings.away_message ?? 'Thanks for your message. Our team will reply during business hours.');
+    const [rules, setRules] = useState<KeywordRule[]>(initialRules);
+    const [opensAt, setOpensAt] = useState(settings.opens_at ?? '09:00');
+    const [closesAt, setClosesAt] = useState(settings.closes_at ?? '17:00');
+    const [businessDays, setBusinessDays] = useState<number[]>(settings.business_days ?? [1,2,3,4,5]);
+    const [isSaving, setIsSaving] = useState(false);
     // UI & Filter states
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused'>('all');
@@ -126,17 +76,7 @@ export default function AutoResponder() {
     // Simulator State
     const [simMessages, setSimMessages] = useState<
         { sender: 'user' | 'bot'; text: string; matchTag?: string }[]
-    >([
-        {
-            sender: 'user',
-            text: 'Hello, what is your price?',
-        },
-        {
-            sender: 'bot',
-            text: DEFAULT_RULES[0].reply,
-            matchTag: 'Rule 1 (price)',
-        },
-    ]);
+    >([]);
     const [simInput, setSimInput] = useState('');
 
     const showToast = (msg: string) => {
@@ -144,15 +84,15 @@ export default function AutoResponder() {
         setTimeout(() => setToastMessage(null), 3000);
     };
 
-    // Save All to localStorage
-    const handleSaveAll = () => {
-        localStorage.setItem('ar_welcome_enabled', JSON.stringify(welcomeEnabled));
-        localStorage.setItem('ar_welcome_msg', welcomeMessage);
-        localStorage.setItem('ar_away_enabled', JSON.stringify(awayEnabled));
-        localStorage.setItem('ar_away_msg', awayMessage);
-        localStorage.setItem('ar_keyword_rules', JSON.stringify(rules));
-        showToast('Auto Responder settings saved successfully!');
+    const persist = async (nextRules = rules) => {
+        setIsSaving(true);
+        try {
+            await api('/auto-responder', 'POST', { welcome_enabled: welcomeEnabled, welcome_message: welcomeMessage, away_enabled: awayEnabled, away_message: awayMessage, opens_at: opensAt, closes_at: closesAt, business_days: businessDays, rules: nextRules });
+            showToast('Auto responder settings saved.'); return true;
+        } catch (error) { showToast((error as Error).message); return false; }
+        finally { setIsSaving(false); }
     };
+    const handleSaveAll = () => { void persist(); };
 
     // Open Add Rule Modal
     const openAddRuleModal = () => {
@@ -197,7 +137,7 @@ export default function AutoResponder() {
                     : r
             );
             setRules(updated);
-            localStorage.setItem('ar_keyword_rules', JSON.stringify(updated));
+            void persist(updated);
             showToast(`Rule updated successfully.`);
         } else {
             const newRule: KeywordRule = {
@@ -209,7 +149,7 @@ export default function AutoResponder() {
             };
             const updated = [newRule, ...rules];
             setRules(updated);
-            localStorage.setItem('ar_keyword_rules', JSON.stringify(updated));
+            void persist(updated);
             showToast(`New keyword rule added.`);
         }
 
@@ -220,7 +160,7 @@ export default function AutoResponder() {
     const handleToggleRule = (id: string) => {
         const updated = rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r));
         setRules(updated);
-        localStorage.setItem('ar_keyword_rules', JSON.stringify(updated));
+        void persist(updated);
     };
 
     // Confirm Delete Rule
@@ -228,7 +168,7 @@ export default function AutoResponder() {
         if (!deletingRule) return;
         const updated = rules.filter((r) => r.id !== deletingRule.id);
         setRules(updated);
-        localStorage.setItem('ar_keyword_rules', JSON.stringify(updated));
+        void persist(updated);
         showToast('Keyword rule removed.');
         setDeletingRule(null);
     };
@@ -296,7 +236,7 @@ export default function AutoResponder() {
                     ...updated,
                     {
                         sender: 'bot',
-                        text: "🤖 Thanks for contacting Sathwara InfoTech! We couldn't find an automatic keyword match, but our team will review your message shortly.",
+                        text: 'No saved keyword or greeting matches this message.',
                         matchTag: 'Default Fallback',
                     },
                 ]);
@@ -305,17 +245,7 @@ export default function AutoResponder() {
     };
 
     const handleRestartSim = () => {
-        setSimMessages([
-            {
-                sender: 'user',
-                text: 'Hi, where is your office?',
-            },
-            {
-                sender: 'bot',
-                text: rules.find((r) => r.keyword.includes('location'))?.reply || DEFAULT_RULES[3].reply,
-                matchTag: 'Matched: "location"',
-            },
-        ]);
+        setSimMessages([]);
         setSimInput('');
     };
 
@@ -387,6 +317,7 @@ export default function AutoResponder() {
                         <Button
                             size="sm"
                             onClick={handleSaveAll}
+                            disabled={isSaving}
                             className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-8 gap-1.5 shadow-sm"
                         >
                             <Save className="size-3.5" />
@@ -529,10 +460,10 @@ export default function AutoResponder() {
                                     </div>
                                     <div>
                                         <CardTitle className="text-sm font-semibold">
-                                            Away / Off-Hours Message (Outside Business Hours)
+                                            Away / Off-Hours Message
                                         </CardTitle>
                                         <CardDescription className="text-[11px] text-muted-foreground">
-                                            Sent when customers reach out outside your working hours.
+                                            Sent when customers reach out outside your business working hours.
                                         </CardDescription>
                                     </div>
                                 </div>
@@ -553,22 +484,71 @@ export default function AutoResponder() {
                                 </button>
                             </div>
                         </CardHeader>
-                        <CardContent className="p-4 pt-2 space-y-2.5">
+                        <CardContent className="p-4 pt-2 space-y-3">
                             <textarea
                                 value={awayMessage}
                                 onChange={(e) => setAwayMessage(e.target.value)}
-                                rows={4}
+                                rows={3}
                                 placeholder="Enter away message..."
                                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none leading-relaxed"
                             />
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-border/60 text-[11px]">
-                                <div className="flex items-center gap-1.5 text-muted-foreground text-[10px]">
-                                    <Clock className="size-3 text-purple-500" />
-                                    <span>Office Hours: Mon-Sat, 9:30 AM - 7:00 PM IST</span>
+
+                            {/* Store Working Hours & Days */}
+                            <div className="rounded-lg bg-muted/40 p-2.5 border border-border/60 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
+                                        <Clock className="size-3 text-purple-500" />
+                                        Store Working Hours (Away message triggers outside this)
+                                    </span>
                                 </div>
-                                <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                                    Auto-Active on Off-Hours
-                                </span>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] text-muted-foreground">Opens:</span>
+                                        <input
+                                            aria-label="Opens at"
+                                            type="time"
+                                            value={opensAt}
+                                            onChange={(e) => setOpensAt(e.target.value)}
+                                            className="rounded border border-input bg-background px-2 py-0.5 text-xs font-mono"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] text-muted-foreground">Closes:</span>
+                                        <input
+                                            aria-label="Closes at"
+                                            type="time"
+                                            value={closesAt}
+                                            onChange={(e) => setClosesAt(e.target.value)}
+                                            className="rounded border border-input bg-background px-2 py-0.5 text-xs font-mono"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                    <span className="text-[11px] text-muted-foreground">Working Days:</span>
+                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => {
+                                        const isSelected = businessDays.includes(i + 1);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={day}
+                                                onClick={() =>
+                                                    setBusinessDays((days) =>
+                                                        days.includes(i + 1)
+                                                            ? days.filter((d) => d !== i + 1)
+                                                            : [...days, i + 1]
+                                                    )
+                                                }
+                                                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                                    isSelected
+                                                        ? 'bg-purple-600 text-white shadow-2xs'
+                                                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                }`}
+                                            >
+                                                {day}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

@@ -245,7 +245,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     <div className="pt-4 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                             <ShieldCheck className="size-3.5 text-emerald-500" />
-                            <span>Meta Verified Cloud Partner</span>
+                            <span>Official WhatsApp Cloud API</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Link href={privacy()} className="hover:text-foreground transition-colors">
@@ -282,10 +282,10 @@ export default function Login({ status, canResetPassword }: Props) {
                     <div className="relative z-10 my-auto py-6 space-y-4 max-w-xl">
                         <div className="space-y-1.5">
                             <h2 className="text-2xl xl:text-3xl font-extrabold tracking-tight text-white leading-tight">
-                                Automate WhatsApp. Drive 98% open rates.
+                                Automate WhatsApp Communications.
                             </h2>
                             <p className="text-xs xl:text-sm text-emerald-100/70">
-                                Send 10,000+ broadcasts in seconds, deploy 24/7 AI response bots, and manage multi-agent chats in one unified workspace.
+                                Send broadcasts with verified templates, deploy 24/7 automated menus, and manage multi-agent chats in one unified workspace.
                             </p>
                         </div>
 
@@ -391,16 +391,15 @@ export default function Login({ status, canResetPassword }: Props) {
                         </div>
                     </div>
 
-                    {/* Bottom Social Proof Bar */}
+                    {/* Bottom Proof Bar */}
                     <div className="relative z-10 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-emerald-200/70">
                         <div className="flex items-center gap-1.5">
-                            <span className="text-amber-400">★★★★★</span>
-                            <span className="text-white/80 font-medium">4.9/5 from 1,200+ brands</span>
+                            <span className="text-emerald-400 font-medium">Official Cloud API Infrastructure</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="text-emerald-400 font-medium">Zero Bans</span>
+                            <span className="text-emerald-400 font-medium">Meta Verified</span>
                             <span>•</span>
-                            <span>99.9% Uptime</span>
+                            <span>High Availability</span>
                         </div>
                     </div>
                 </div>

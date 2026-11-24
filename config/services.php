@@ -36,7 +36,7 @@ return [
     ],
 
      'meta' => [
-        'verify_token' => env('META_VERIFY_TOKEN', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
+        'verify_token' => env('META_VERIFY_TOKEN', ''),
     ],
 
 ];

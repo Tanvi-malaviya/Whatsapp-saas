@@ -128,7 +128,7 @@ export default function Dashboard({
                             <div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-foreground">
-                                        WhatsApp Command Center
+                                        Dashboard
                                     </h1>
                                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
                                         <span className="size-2 rounded-full bg-emerald-500 animate-ping" />

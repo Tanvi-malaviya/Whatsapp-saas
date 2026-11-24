@@ -22,10 +22,9 @@ class InboxController extends Controller
     {
         $orgId = TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        return Organization::find($orgId) ?? Organization::first();
+        return Organization::find($orgId);
     }
 
     protected function getRealThreads($org): array
@@ -49,7 +48,9 @@ class InboxController extends Controller
                 'channel' => $channelObj ? $channelObj->name : 'WhatsApp',
                 'lastMessage' => $lastMsg ? $lastMsg->content : 'No messages',
                 'time' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
-                'unread' => 0,
+                'unread' => $c->unread_count,
+                'channelId' => $channelObj?->id,
+                'assignedUserId' => $c->assigned_user_id,
                 'windowRemaining' => $windowMinutes > 0 ? floor($windowMinutes / 60) . 'h ' . ($windowMinutes % 60) . 'm' : 'Closed',
                 'stage' => $c->pipeline_stage ?: 'New',
                 'label' => $c->label ?: 'Prospect',
@@ -60,6 +61,8 @@ class InboxController extends Controller
                     'text' => $m->content,
                     'time' => $m->created_at ? $m->created_at->timezone('Asia/Kolkata')->format('h:i A') : '',
                     'status' => $m->status ?? 'sent',
+                    'failureReason' => $m->metadata['failure_reason'] ?? null,
+                    'attachment' => ! empty($m->metadata['media_path']) ? ['name' => $m->metadata['filename'] ?? 'Attachment', 'type' => $m->type === 'image' ? 'image' : 'document', 'url' => '/inbox/messages/'.$m->id.'/attachment'] : null,
                 ])->values()->all(),
             ];
         })->values()->all();
@@ -77,6 +80,7 @@ class InboxController extends Controller
             'initialThreads' => $realThreads,
             'channels' => $channels,
             'metaTemplates' => $metaTemplates,
+            'members' => $org->users()->get(['users.id', 'name']),
         ]);
     }
 
@@ -93,227 +97,72 @@ class InboxController extends Controller
 
     public function reply(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'conversation_id' => 'required|string',
-            'type' => 'nullable|string|in:text,template,image,document',
-            'template_name' => 'nullable|string',
-            'template_language' => 'nullable|string',
-            'message' => 'nullable|string',
-            'attachment' => 'nullable|file|max:51200', // Up to 50MB
-            'attachment_name' => 'nullable|string',
-            'attachment_type' => 'nullable|string',
+        $data = $request->validate([
+            'conversation_id' => 'required|uuid', 'type' => 'nullable|in:text,template,image,document',
+            'template_name' => 'nullable|string', 'template_language' => 'nullable|string', 'message' => 'nullable|string|max:4096',
+            'parameters' => 'nullable|array', 'header_url' => 'nullable|url:https', 'header_parameters' => 'nullable|array', 'button_parameters' => 'nullable|array',
+            'attachment' => 'nullable|file|mimes:jpg,jpeg,png,webp,pdf,txt,csv,doc,docx,xls,xlsx,ppt,pptx|max:51200',
         ]);
-
-        $org = $this->resolveOrg($request);
-        $conversation = Conversation::where('organization_id', $org->id)
-            ->where('id', $validated['conversation_id'])
-            ->first();
-
-        if (!$conversation) {
-            return response()->json(['success' => false, 'message' => 'Conversation not found'], 404);
+        $conversation = Conversation::findOrFail($data['conversation_id']);
+        $channel = WhatsAppChannel::where('organization_id', $conversation->organization_id)->where('phone_number_id', $conversation->channel_phone_number_id)->where('status', 'connected')->firstOrFail();
+        $type = $data['type'] ?? 'text'; $text = trim($data['message'] ?? '');
+        $payload = ['to' => preg_replace('/\D/', '', $conversation->contact_phone)]; $metadata = null;
+        if ($type === 'template') {
+            abort_unless($conversation->is_opted_in, 422, 'This contact has opted out.');
+            $template = collect(app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel))->first(fn ($t) => $t['name'] === ($data['template_name'] ?? '') && $t['language'] === ($data['template_language'] ?? ''));
+            abort_unless($template, 422, 'Choose an approved template for this conversation’s number.');
+            $built = app(\App\Services\TemplatePayload::class)->build($template, $data);
+            $payload += ['type' => 'template', 'template' => $built['template']]; $text = $built['content'];
+        } else {
+            abort_unless($conversation->isWindowOpen(), 422, 'The customer-service window is closed. Send an approved template.');
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment'); $mime = $file->getMimeType(); $type = str_starts_with($mime, 'image/') ? 'image' : 'document';
+                $media = Http::withToken($channel->access_token)->timeout(30)->attach('file', $file->getContent(), basename($file->getClientOriginalName()), ['Content-Type' => $mime])->post(\App\Services\MetaApi::base().'/'.$channel->phone_number_id.'/media', ['messaging_product' => 'whatsapp', 'type' => $mime]);
+                abort_unless($media->successful() && $media->json('id'), 422, 'Meta could not upload the attachment.');
+                $payload += ['type' => $type, $type => ['id' => $media->json('id'), ...($text ? ['caption' => $text] : []), ...($type === 'document' ? ['filename' => basename($file->getClientOriginalName())] : [])]];
+                $path = $file->store('messages/'.$conversation->organization_id, 'local');
+                $metadata = ['media_path' => $path, 'mime_type' => $mime, 'filename' => basename($file->getClientOriginalName())];
+                $text = $text ?: basename($file->getClientOriginalName());
+            } else {
+                abort_unless($text !== '', 422, 'Enter a message.');
+                $payload += ['type' => 'text', 'text' => ['body' => $text, 'preview_url' => false]];
+            }
         }
-
-        $isTemplate = ($request->input('type') === 'template') || $request->filled('template_name');
-        $hasAttachment = $request->hasFile('attachment');
-        $uploadedFile = $hasAttachment ? $request->file('attachment') : null;
-        $messageText = trim($request->input('message') ?? '');
-        $attachmentName = $request->input('attachment_name') ?: ($uploadedFile ? $uploadedFile->getClientOriginalName() : null);
-
-        // Store attachment locally if uploaded
-        $storedPath = null;
-        if ($uploadedFile) {
-            $storedPath = $uploadedFile->store('attachments', 'public');
+        $message = Message::create(['organization_id' => $conversation->organization_id, 'conversation_id' => $conversation->id, 'direction' => 'outbound', 'sender_type' => 'agent', 'sender_id' => (string) $request->user()->id, 'type' => $type, 'content' => $text, 'status' => 'queued', 'metadata' => $metadata]);
+        try {
+            $wamid = app(\App\Services\MetaApi::class)->send($channel, $payload);
+            $message->update(['wamid' => $wamid, 'status' => 'sent']);
+        } catch (\Throwable $error) {
+            $meta = $metadata ?? [];
+            $meta['failure_reason'] = $error->getMessage();
+            $message->update(['status' => 'failed', 'metadata' => $meta]);
+            throw $error;
         }
-
-        // Channel resolution
-        $channel = WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected')
-            ->orderBy('is_default', 'desc')
-            ->first();
-
-        // Determine message type and database content
-        $msgType = 'text';
-        $finalContent = $messageText;
-        $templatePayload = null;
-
-        if ($isTemplate) {
-            $msgType = 'template';
-            $templateName = $request->input('template_name', 'dukanhisab_app_launch');
-            $requestedLang = $request->input('template_language');
-            $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
-            $allTemplates = $channel ? $campaignCtrl->getMetaTemplates($channel) : [];
-
-            $matchedTemplate = null;
-            if ($requestedLang) {
-                $matchedTemplate = collect($allTemplates)->first(function ($t) use ($templateName, $requestedLang) {
-                    return $t['name'] === $templateName && ($t['language'] ?? '') === $requestedLang;
-                });
-            }
-
-            if (!$matchedTemplate) {
-                $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
-            }
-
-            if (!$matchedTemplate && !empty($allTemplates)) {
-                $matchedTemplate = $allTemplates[0];
-                $templateName = $matchedTemplate['name'];
-            }
-
-            $templateLanguage = $matchedTemplate['language'] ?? ($requestedLang ?: 'gu');
-            $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? $matchedTemplate['header_format'] ?? null;
-            $templateBodyTemplate = $matchedTemplate['body'] ?? '';
-            $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? ($channel?->metadata['template_media_urls'][$templateName] ?? null);
-            $matchedHeaderMediaId = $matchedTemplate['headerMediaId'] ?? ($channel?->metadata['template_media_ids'][$templateName] ?? null);
-            $contactName = $conversation->contact_name ?: 'Valued Customer';
-            $orgName = $org->name ?? 'DukanHisab Store';
-
-            $tplData = $this->buildTemplateComponentsAndContent(
-                $templateName,
-                $contactName,
-                $orgName,
-                $matchedHeaderFormat,
-                $matchedHeaderUrl,
-                $templateBodyTemplate,
-                $matchedHeaderMediaId
-            );
-
-            $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
-            $templatePayload = [
-                'messaging_product' => 'whatsapp',
-                'recipient_type' => 'individual',
-                'to' => $cleanPhone,
-                'type' => 'template',
-                'template' => [
-                    'name' => $templateName,
-                    'language' => ['code' => $templateLanguage],
-                ],
-            ];
-
-            if (!empty($tplData['components'])) {
-                $templatePayload['template']['components'] = $tplData['components'];
-            }
-
-            $finalContent = $tplData['finalContent'];
-        } elseif ($hasAttachment && $attachmentName) {
-            $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
-            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
-            $msgType = $isImage ? 'image' : 'document';
-            $finalContent = $messageText ? "[{$attachmentName}] {$messageText}" : "📎 {$attachmentName}";
-        }
-
-        // Store outbound agent message in database
-        $msg = Message::create([
-            'conversation_id' => $conversation->id,
-            'organization_id' => $org->id,
-            'direction' => 'outbound',
-            'sender_type' => 'agent',
-            'sender_id' => (string) ($request->user()?->id ?? 'agent'),
-            'type' => $msgType,
-            'content' => $finalContent,
-            'status' => 'sent',
-            'meta_cost_paise' => 0,
-        ]);
-
         $conversation->update(['last_message_at' => now()]);
+        return response()->json(['success' => true, 'message' => ['id' => $message->id, 'sender' => 'agent', 'text' => $text, 'time' => now(TenantContext::timezone())->format('h:i A'), 'status' => 'sent', 'attachment' => $metadata ? ['name' => $metadata['filename'], 'type' => $type, 'url' => '/inbox/messages/'.$message->id.'/attachment'] : null]]);
+    }
 
-        // Attempt live dispatch to Meta Cloud API if channel connected
-        if ($channel && !empty($channel->access_token) && !empty($channel->phone_number_id)) {
-            $cleanPhone = preg_replace('/\D/', '', $conversation->contact_phone);
-            try {
-                if ($isTemplate && $templatePayload) {
-                    $resp = Http::withToken($channel->access_token)
-                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $templatePayload);
-                } elseif ($hasAttachment && $uploadedFile) {
-                    $mime = $uploadedFile->getMimeType() ?: 'application/octet-stream';
-                    $ext = strtolower(pathinfo($attachmentName, PATHINFO_EXTENSION));
-                    $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif']);
-                    $mediaType = $isImage ? 'image' : 'document';
+    public function attachment(string $id)
+    {
+        $message = Message::findOrFail($id); $meta = $message->metadata;
+        abort_unless(! empty($meta['media_path']) && \Illuminate\Support\Facades\Storage::disk('local')->exists($meta['media_path']), 404);
+        return \Illuminate\Support\Facades\Storage::disk('local')->download($meta['media_path'], $meta['filename'] ?? 'attachment', ['X-Content-Type-Options' => 'nosniff']);
+    }
 
-                    // 1. Upload to Meta Media API
-                    $mediaResp = Http::withToken($channel->access_token)
-                        ->attach('file', file_get_contents($uploadedFile->getRealPath()), $attachmentName, ['Content-Type' => $mime])
-                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/media", [
-                            'messaging_product' => 'whatsapp',
-                            'type' => $mime,
-                        ]);
+    public function markRead(Request $request, string $id)
+    {
+        Conversation::findOrFail($id)->update(['unread_count' => 0]); return response()->json(['success' => true]);
+    }
 
-                    $mediaId = $mediaResp->successful() ? $mediaResp->json('id') : null;
-
-                    if ($mediaId) {
-                        // 2. Dispatch real WhatsApp media message (document or image) to recipient phone
-                        $mediaPayload = ['id' => $mediaId];
-                        if (!empty($messageText)) {
-                            $mediaPayload['caption'] = $messageText;
-                        }
-                        if ($mediaType === 'document') {
-                            $mediaPayload['filename'] = $attachmentName;
-                        }
-
-                        $resp = Http::withToken($channel->access_token)
-                            ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
-                                'messaging_product' => 'whatsapp',
-                                'recipient_type' => 'individual',
-                                'to' => $cleanPhone,
-                                'type' => $mediaType,
-                                $mediaType => $mediaPayload,
-                            ]);
-                    } else {
-                        // Fallback to text message if media upload was rejected
-                        $resp = Http::withToken($channel->access_token)
-                            ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
-                                'messaging_product' => 'whatsapp',
-                                'recipient_type' => 'individual',
-                                'to' => $cleanPhone,
-                                'type' => 'text',
-                                'text' => [
-                                    'preview_url' => false,
-                                    'body' => $finalContent,
-                                ],
-                            ]);
-                    }
-                } else {
-                    // Standard text message
-                    $resp = Http::withToken($channel->access_token)
-                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
-                            'messaging_product' => 'whatsapp',
-                            'recipient_type' => 'individual',
-                            'to' => $cleanPhone,
-                            'type' => 'text',
-                            'text' => [
-                                'preview_url' => false,
-                                'body' => $finalContent,
-                            ],
-                        ]);
-                }
-
-                if (isset($resp) && $resp->successful()) {
-                    $wamid = $resp->json('messages.0.id');
-                    if ($wamid) {
-                        $msg->update(['wamid' => $wamid, 'status' => 'sent']);
-                    }
-                } else {
-                    $errBody = isset($resp) ? $resp->body() : 'No response from Meta';
-                    \Illuminate\Support\Facades\Log::error("Meta API error in reply(): {$errBody}");
-                    $msg->update(['status' => 'failed']);
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("Meta API exception in reply(): " . $e->getMessage());
-                $msg->update(['status' => 'failed']);
-            }
-        }
-
-        $freshMsg = $msg->fresh();
-
-        return response()->json([
-            'success' => true,
-            'message' => [
-                'id' => (string) $freshMsg->id,
-                'sender' => 'agent',
-                'text' => $freshMsg->content,
-                'time' => now('Asia/Kolkata')->format('h:i A'),
-                'status' => $freshMsg->status ?? 'sent',
-            ],
-        ]);
+    public function assign(Request $request, string $id)
+    {
+        $data = $request->validate(['assigned_user_id' => 'nullable|integer', 'resume_bot' => 'nullable|boolean']);
+        $conversation = Conversation::findOrFail($id);
+        $userId = $data['assigned_user_id'] ?? null;
+        abort_unless($request->user()->isAdminOf(TenantContext::get()) || $request->user()->isSuperAdmin(), 403);
+        abort_if($userId && ! TenantContext::get()->users()->where('users.id', $userId)->exists(), 422, 'Choose a member of this workspace.');
+        $conversation->update(['assigned_user_id' => $userId, 'bot_state' => $request->boolean('resume_bot') ? null : ['handoff' => true]]);
+        return response()->json(['success' => true]);
     }
 
     public function updateContact(Request $request): JsonResponse
@@ -365,225 +214,20 @@ class InboxController extends Controller
 
     public function startConversation(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'phone' => 'required|string',
-            'name' => 'nullable|string',
-            'message' => 'nullable|string',
-            'type' => 'nullable|string|in:text,template',
-            'template_name' => 'nullable|string',
-            'channel_id' => 'nullable|string',
-        ]);
-
-        $cleanPhone = (new \App\Shared\PhoneNumber($validated['phone']))->getE164();
-        $name = $validated['name'] ?: $cleanPhone;
-        $type = $validated['type'] ?? 'template';
-        $messageText = $validated['message'] ?? '';
-        $templateName = $validated['template_name'] ?? 'due_reminder_en';
-
-        $org = $this->resolveOrg($request);
-        TenantContext::set($org);
-
-        $channelQuery = WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected');
-        if (!empty($validated['channel_id'])) {
-            $channel = (clone $channelQuery)->where('id', $validated['channel_id'])->first();
-        }
-        if (empty($channel)) {
-            $channel = $channelQuery->orderBy('is_default', 'desc')->first();
-        }
-
-        $phoneId = $channel ? $channel->phone_number_id : '1324567864076715';
-        $metaDelivered = false;
-        $metaError = null;
-
-        if ($channel && !empty($channel->access_token) && !empty($channel->phone_number_id)) {
-            $digitsPhone = preg_replace('/\D/', '', $cleanPhone);
-            try {
-                if ($type === 'template') {
-                    $campaignCtrl = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class);
-                    $allTemplates = $campaignCtrl->getMetaTemplates($channel);
-                    $matchedTemplate = collect($allTemplates)->firstWhere('name', $templateName);
-
-                    if (!$matchedTemplate && !empty($allTemplates)) {
-                        $matchedTemplate = $allTemplates[0];
-                        $templateName = $matchedTemplate['name'];
-                    }
-
-                    $templateLanguage = $matchedTemplate['language'] ?? 'en_US';
-                    $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? $matchedTemplate['header_format'] ?? null;
-                    $templateBodyTemplate = $matchedTemplate['body'] ?? '';
-                    $matchedHeaderUrl = $matchedTemplate['headerUrl'] ?? null;
-                    $orgName = $org->name ?? 'DukanHisab Store';
-
-                    $tplData = $this->buildTemplateComponentsAndContent(
-                        $templateName,
-                        $name ?: 'Customer',
-                        $orgName,
-                        $matchedHeaderFormat,
-                        $matchedHeaderUrl,
-                        $templateBodyTemplate
-                    );
-
-                    $payload = [
-                        'messaging_product' => 'whatsapp',
-                        'recipient_type' => 'individual',
-                        'to' => $digitsPhone,
-                        'type' => 'template',
-                        'template' => [
-                            'name' => $templateName,
-                            'language' => ['code' => $templateLanguage],
-                        ],
-                    ];
-
-                    if (!empty($tplData['components'])) {
-                        $payload['template']['components'] = $tplData['components'];
-                    }
-
-                    $savedContent = $tplData['finalContent'];
-                } else {
-                    $payload = [
-                        'messaging_product' => 'whatsapp',
-                        'recipient_type' => 'individual',
-                        'to' => $digitsPhone,
-                        'type' => 'text',
-                        'text' => [
-                            'preview_url' => false,
-                            'body' => $messageText ?: 'Hello from Sathwara WhatsApp SaaS!',
-                        ],
-                    ];
-                    $savedContent = $messageText ?: 'Hello!';
-                }
-
-                $resp = Http::withToken($channel->access_token)
-                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $payload);
-
-                if ($resp->successful()) {
-                    $metaDelivered = true;
-                } else {
-                    $metaError = $resp->json('error.message') ?? 'Meta API error';
-                }
-            } catch (\Throwable $e) {
-                $metaError = $e->getMessage();
-            }
-        }
-
-        // Create or find conversation
-        $conversation = Conversation::firstOrCreate(
-            [
-                'organization_id' => $org->id,
-                'contact_phone' => $cleanPhone,
-            ],
-            [
-                'contact_name' => $name,
-                'channel_phone_number_id' => $phoneId,
-                'status' => 'open',
-                'window_expires_at' => now()->addHours(24),
-                'last_message_at' => now(),
-            ]
-        );
-
-        $conversation->update([
-            'contact_name' => $name,
-            'last_message_at' => now(),
-            'window_expires_at' => now()->addHours(24),
-        ]);
-
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'organization_id' => $org->id,
-            'direction' => 'outbound',
-            'sender_type' => 'agent',
-            'sender_id' => (string) ($request->user()?->id ?? 'agent'),
-            'type' => $type,
-            'content' => $savedContent ?? ($messageText ?: 'Hello!'),
-            'status' => $metaDelivered ? 'sent' : ($metaError ? 'failed' : 'sent'),
-            'meta_cost_paise' => 0,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'conversation_id' => (string) $conversation->id,
-            'message' => $metaDelivered
-                ? "Message dispatched to {$cleanPhone} and chat opened!"
-                : "Chat thread created for {$cleanPhone}." . ($metaError ? " (Meta notice: {$metaError})" : ''),
-            'meta_delivered' => $metaDelivered,
-            'meta_error' => $metaError,
-        ]);
+        $data = $request->validate(['phone' => 'required|string|max:30', 'name' => 'nullable|string|max:100', 'channel_id' => 'required|uuid', 'consent_confirmed' => 'accepted']);
+        $org = $this->resolveOrg($request); $channel = WhatsAppChannel::where('status', 'connected')->findOrFail($data['channel_id']);
+        $phone = (new \App\Shared\PhoneNumber($data['phone']))->getE164();
+        abort_if(\App\Modules\Crm\Models\Contact::where('contact_phone', $phone)->where('is_opted_in', false)->exists(), 422, 'This contact opted out.');
+        $conversation = Conversation::firstOrCreate(['organization_id' => $org->id, 'channel_phone_number_id' => $channel->phone_number_id, 'contact_phone' => $phone], ['channel_id' => $channel->id, 'contact_name' => $data['name'] ?? $phone, 'is_opted_in' => true, 'status' => 'open']);
+        $request->merge(['conversation_id' => $conversation->id]);
+        $this->reply($request);
+        return response()->json(['success' => true, 'conversation_id' => $conversation->id, 'message' => 'Message accepted by Meta.', 'meta_delivered' => true]);
     }
 
     public function simulateInbound(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'phone' => 'required|string',
-            'name' => 'nullable|string',
-            'message' => 'required|string',
-        ]);
-
-        $cleanPhone = (new \App\Shared\PhoneNumber($validated['phone']))->getE164();
-        $name = $validated['name'] ?? 'WhatsApp User';
-        $text = $validated['message'];
-
-        $org = $this->resolveOrg($request);
-        TenantContext::set($org);
-
-        $channel = WhatsAppChannel::where('organization_id', $org->id)->first();
-        $phoneId = $channel ? $channel->phone_number_id : '1324567864076715';
-
-        // Find or create active conversation thread in current org
-        $conversation = Conversation::firstOrCreate(
-            [
-                'organization_id' => $org->id,
-                'contact_phone' => $cleanPhone,
-            ],
-            [
-                'contact_name' => $name,
-                'channel_phone_number_id' => $phoneId,
-                'status' => 'open',
-            ]
-        );
-
-        $conversation->update([
-            'contact_name' => $name,
-            'window_expires_at' => now()->addHours(24),
-            'last_message_at' => now(),
-        ]);
-
-        // Store inbound message
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'organization_id' => $org->id,
-            'direction' => 'inbound',
-            'sender_type' => 'contact',
-            'sender_id' => $cleanPhone,
-            'wamid' => 'wamid.' . uniqid(),
-            'type' => 'text',
-            'content' => $text,
-            'status' => 'received',
-            'meta_cost_paise' => 0,
-        ]);
-
-        // Auto-reply bot if matching
-        $botRule = \App\Modules\Bot\Models\BotRule::where('organization_id', $org->id)
-            ->where('is_enabled', true)
-            ->first();
-
-        if ($botRule && !empty($botRule->reply_text)) {
-            Message::create([
-                'conversation_id' => $conversation->id,
-                'organization_id' => $org->id,
-                'direction' => 'outbound',
-                'sender_type' => 'bot',
-                'type' => 'text',
-                'content' => $botRule->reply_text,
-                'status' => 'sent',
-                'meta_cost_paise' => 0,
-            ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => "Simulated inbound WhatsApp message from {$name} ({$cleanPhone}) processed successfully!",
-        ]);
+        abort_unless(app()->environment('local', 'testing'), 403, 'Simulation is available in development only.');
+        return response()->json(['success' => false, 'message' => 'Use a signed webhook payload to test the complete message flow.'], 422);
     }
 
     public function history(Request $request): Response
@@ -684,127 +328,4 @@ class InboxController extends Controller
         return response()->json(['success' => true, 'message' => 'Stage updated successfully']);
     }
 
-    protected function buildTemplateComponentsAndContent(
-        string $templateName,
-        string $contactName,
-        string $orgName,
-        ?string $matchedHeaderFormat,
-        ?string $matchedHeaderUrl,
-        string $templateBodyTemplate,
-        ?string $matchedHeaderMediaId = null
-    ): array {
-        $components = [];
-        $mediaHeaderUrl = null;
-
-        $headerFormatUpper = strtoupper((string) ($matchedHeaderFormat ?? ''));
-
-        // 1. Add Header component ONLY if template requires MEDIA format (VIDEO, IMAGE, DOCUMENT)
-        if ($headerFormatUpper === 'VIDEO') {
-            if (!empty($matchedHeaderMediaId)) {
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [
-                        [
-                            'type' => 'video',
-                            'video' => [
-                                'id' => $matchedHeaderMediaId,
-                            ],
-                        ],
-                    ],
-                ];
-            } else {
-                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [
-                        [
-                            'type' => 'video',
-                            'video' => [
-                                'link' => $mediaHeaderUrl,
-                            ],
-                        ],
-                    ],
-                ];
-            }
-        } elseif ($headerFormatUpper === 'IMAGE') {
-            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
-            $components[] = [
-                'type' => 'header',
-                'parameters' => [
-                    [
-                        'type' => 'image',
-                        'image' => [
-                            'link' => $mediaHeaderUrl,
-                        ],
-                    ],
-                ],
-            ];
-        } elseif ($headerFormatUpper === 'DOCUMENT') {
-            $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
-            $components[] = [
-                'type' => 'header',
-                'parameters' => [
-                    [
-                        'type' => 'document',
-                        'document' => [
-                            'link' => $mediaHeaderUrl,
-                            'filename' => 'Document_' . date('Ymd') . '.pdf',
-                        ],
-                    ],
-                ],
-            ];
-        }
-
-        // 2. Add Body component parameters ONLY if template contains variable placeholders {{1}}, {{2}}...
-        preg_match_all('/\{\{(\d+)\}\}/', $templateBodyTemplate, $matches);
-        $variableIndices = array_unique($matches[1] ?? []);
-        sort($variableIndices);
-
-        $renderedText = $templateBodyTemplate;
-
-        if (!empty($variableIndices)) {
-            $bodyParams = [];
-            foreach ($variableIndices as $idx) {
-                $val = match ((int) $idx) {
-                    1 => $contactName ?: 'Customer',
-                    2 => $orgName ?: 'DukanHisab Store',
-                    3 => '₹500.00',
-                    4 => date('d/m/Y'),
-                    5 => '₹0.00',
-                    6 => 'INV-' . date('Ymd') . '-01',
-                    default => 'Detail',
-                };
-                $bodyParams[] = ['type' => 'text', 'text' => (string) $val];
-                $renderedText = str_replace('{{' . $idx . '}}', (string) $val, $renderedText);
-            }
-
-            $components[] = [
-                'type' => 'body',
-                'parameters' => $bodyParams,
-            ];
-        }
-
-        // 3. Dynamic URL Button parameters (for templates like due_reminder)
-        if (str_contains($templateName, 'due_reminder')) {
-            $components[] = [
-                'type' => 'button',
-                'sub_type' => 'url',
-                'index' => '0',
-                'parameters' => [
-                    ['type' => 'text', 'text' => 'pay'],
-                ],
-            ];
-        }
-
-        $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
-        $finalContent = !empty($renderedText)
-            ? "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . $renderedText
-            : "[Broadcast Campaign: {$templateName} Template: {$templateName}]\n" . $mediaPrefix . "Template dispatched to {$contactName}.";
-
-        return [
-            'components' => $components,
-            'mediaHeaderUrl' => $mediaHeaderUrl,
-            'finalContent' => $finalContent,
-        ];
-    }
 }
