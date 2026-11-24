@@ -212,11 +212,14 @@ class CommerceController extends Controller
         $sentSuccessfully = false;
         $metaError = null;
 
+        $globalToken = \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        $token = $channel?->access_token ?: $globalToken;
+
         // 1. If active Meta channel credentials exist, dispatch via Meta Cloud API
-        if ($channel && $channel->phone_number_id && $channel->access_token) {
+        if ($channel && $channel->phone_number_id && $token) {
             try {
                 // First attempt: Native Meta Catalog interactive message
-                $nativeRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                $nativeRes = \Illuminate\Support\Facades\Http::withToken($token)
                     ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                         'messaging_product' => 'whatsapp',
                         'recipient_type' => 'individual',
@@ -234,6 +237,33 @@ class CommerceController extends Controller
                             'footer' => ['text' => $channel->name ?? 'Sathwara InfoTech Store'],
                         ],
                     ]);
+
+                // Auto-retry with global token if channel-specific token had permission error
+                if (!$nativeRes->successful() && $globalToken && $token !== $globalToken) {
+                    $retryRes = \Illuminate\Support\Facades\Http::withToken($globalToken)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                            'messaging_product' => 'whatsapp',
+                            'recipient_type' => 'individual',
+                            'to' => $cleanPhone,
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'catalog_message',
+                                'body' => ['text' => $bodyText],
+                                'action' => [
+                                    'name' => 'catalog_message',
+                                    'parameters' => [
+                                        'thumbnail_product_retailer_id' => $thumbRetailerId,
+                                    ],
+                                ],
+                                'footer' => ['text' => $channel->name ?? 'Sathwara InfoTech Store'],
+                            ],
+                        ]);
+                    if ($retryRes->successful()) {
+                        $nativeRes = $retryRes;
+                        $token = $globalToken;
+                        $channel->update(['access_token' => $globalToken]);
+                    }
+                }
 
                 if ($nativeRes->successful()) {
                     $sentSuccessfully = true;
@@ -256,7 +286,7 @@ class CommerceController extends Controller
 
                     $thumbImage = $firstProduct?->image_url;
                     if ($thumbImage) {
-                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                                 'messaging_product' => 'whatsapp',
                                 'recipient_type' => 'individual',
@@ -268,7 +298,7 @@ class CommerceController extends Controller
                                 ],
                             ]);
                     } else {
-                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                                 'messaging_product' => 'whatsapp',
                                 'recipient_type' => 'individual',
@@ -357,10 +387,13 @@ class CommerceController extends Controller
         $sentSuccessfully = false;
         $metaError = null;
 
-        if ($channel && $channel->phone_number_id && $channel->access_token) {
+        $globalToken = \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        $token = $channel?->access_token ?: $globalToken;
+
+        if ($channel && $channel->phone_number_id && $token) {
             try {
                 // First attempt: Native Meta Product interactive message
-                $nativeRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                $nativeRes = \Illuminate\Support\Facades\Http::withToken($token)
                     ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                         'messaging_product' => 'whatsapp',
                         'recipient_type' => 'individual',
@@ -377,6 +410,31 @@ class CommerceController extends Controller
                         ],
                     ]);
 
+                // Auto-retry with global token if channel-specific token had permission error
+                if (!$nativeRes->successful() && $globalToken && $token !== $globalToken) {
+                    $retryRes = \Illuminate\Support\Facades\Http::withToken($globalToken)
+                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
+                            'messaging_product' => 'whatsapp',
+                            'recipient_type' => 'individual',
+                            'to' => $cleanPhone,
+                            'type' => 'interactive',
+                            'interactive' => [
+                                'type' => 'product',
+                                'body' => ['text' => $bodyText],
+                                'footer' => ['text' => $channel->name ?? 'Sathwara InfoTech Store'],
+                                'action' => [
+                                    'catalog_id' => (string)$catalogId,
+                                    'product_retailer_id' => $product->retailer_id,
+                                ],
+                            ],
+                        ]);
+                    if ($retryRes->successful()) {
+                        $nativeRes = $retryRes;
+                        $token = $globalToken;
+                        $channel->update(['access_token' => $globalToken]);
+                    }
+                }
+
                 if ($nativeRes->successful()) {
                     $sentSuccessfully = true;
                 } else {
@@ -391,7 +449,7 @@ class CommerceController extends Controller
                         . "👉 *To Order:* Reply *ORDER {$product->retailer_id}* to confirm purchase directly in WhatsApp!";
 
                     if ($product->image_url) {
-                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                                 'messaging_product' => 'whatsapp',
                                 'recipient_type' => 'individual',
@@ -403,7 +461,7 @@ class CommerceController extends Controller
                                 ],
                             ]);
                     } else {
-                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                        $fallbackRes = \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", [
                                 'messaging_product' => 'whatsapp',
                                 'recipient_type' => 'individual',

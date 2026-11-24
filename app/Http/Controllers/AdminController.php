@@ -626,10 +626,8 @@ class AdminController extends Controller
         if ($tokenToUse) {
             $channels = WhatsAppChannel::withoutGlobalScopes()->get();
             foreach ($channels as $ch) {
-                // Update access token on channels if missing
-                if (empty($ch->access_token)) {
-                    $ch->update(['access_token' => $tokenToUse]);
-                }
+                // Always sync the latest access token to all channels
+                $ch->update(['access_token' => $tokenToUse]);
 
                 // If channel phone_number is missing or 'Registered', fetch from Meta Graph API!
                 if (empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) {
