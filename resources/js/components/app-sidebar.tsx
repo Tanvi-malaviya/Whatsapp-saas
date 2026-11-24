@@ -24,6 +24,7 @@ import {
     Terminal,
     History,
     CheckSquare,
+    Briefcase,
 } from 'lucide-react';
 import {
     Sidebar,
@@ -52,7 +53,7 @@ import { NavUser } from '@/components/nav-user';
 
 export function AppSidebar() {
     const { url } = usePage();
-    const { tenant } = usePage().props as any;
+    const { auth, tenant } = usePage().props as any;
     const { state } = useSidebar();
     const isCollapsed = state === 'collapsed';
     const currentOrg = tenant?.current;
@@ -447,6 +448,38 @@ export function AppSidebar() {
                 </div>
                 <div className="hidden group-data-[collapsible=icon]:block my-1 w-4 h-px bg-border/50 mx-auto" />
                 <SidebarMenu className="space-y-0.5">
+                    {/* B2B Partner Portal */}
+                    {(auth?.isB2BAgent || auth?.isSuperAdmin) && (
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                asChild
+                                isActive={isActive('/agent/dashboard') || isActive('/agent')}
+                                className={isActive('/agent/dashboard') || isActive('/agent') ? activeClass : inactiveClass}
+                                tooltip="Partner Portal"
+                            >
+                                <Link href="/agent/dashboard" prefetch>
+                                    <Briefcase className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span>Partner Portal</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    )}
+
+                    {/* Subscription & Messaging Wallet */}
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isActive('/settings/billing')}
+                            className={isActive('/settings/billing') ? activeClass : inactiveClass}
+                            tooltip="Billing & Wallet"
+                        >
+                            <Link href="/settings/billing" prefetch>
+                                <CreditCard className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                <span>Billing &amp; Wallet</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
                     {/* Team & Roles Management (NEW) */}
                     <SidebarMenuItem>
                         <SidebarMenuButton

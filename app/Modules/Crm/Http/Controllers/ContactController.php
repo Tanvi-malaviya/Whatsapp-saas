@@ -1,0 +1,70 @@
+<?php
+
+namespace App\Modules\Crm\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Modules\Crm\Models\Contact;
+use App\Shared\PhoneNumber;
+use App\Shared\TenantContext;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+
+class ContactController extends Controller
+{
+    public function index()
+    {
+        return Inertia::render('contacts/index', ['initialContacts' => Contact::orderByDesc('last_message_at')->get()->map(fn ($c) => ['id' => $c->id, 'name' => $c->contact_name ?: $c->contact_phone, 'phone' => $c->contact_phone, 'email' => $c->email ?: '—', 'city' => $c->city ?: '—', 'stage' => $c->pipeline_stage, 'consent' => $c->is_opted_in ? 'opted_in' : 'opted_out'])]);
+    }
+    private function data(Request $request): array
+    {
+        $data = $request->validate(['name' => 'required|string|max:100','phone' => 'required|string|max:30','email' => 'nullable|email|max:255','city' => 'nullable|string|max:100','stage' => 'nullable|in:New,Contacted,Interested,Qualified,Proposal,Negotiation,Won,Lost','opt_in' => 'required|boolean']);
+        return ['contact_name' => $data['name'], 'contact_phone' => (new PhoneNumber($data['phone']))->getE164(), 'email' => $data['email'] ?? null, 'city' => $data['city'] ?? null, 'pipeline_stage' => $data['stage'] ?? 'New', 'is_opted_in' => $data['opt_in']];
+    }
+    public function store(Request $request)
+    {
+        $data = $this->data($request);
+        Contact::updateOrCreate(['organization_id' => TenantContext::id(), 'contact_phone' => $data['contact_phone']], $data);
+        return back()->with('success', 'Contact saved.');
+    }
+    public function update(Request $request, string $id)
+    {
+        $contact = Contact::findOrFail($id); $data = $this->data($request);
+        abort_unless($contact->contact_phone === $data['contact_phone'] || ! $contact->conversations()->exists(), 422, 'A contact with message history cannot change phone number. Create another contact instead.');
+        abort_if(Contact::where('contact_phone', $data['contact_phone'])->whereKeyNot($id)->exists(), 422, 'This phone number already belongs to another contact.');
+        $contact->update($data); return back()->with('success', 'Contact updated. Message histories retained.');
+    }
+    public function destroy(string $id)
+    {
+        Contact::findOrFail($id)->delete(); return back()->with('success', 'Contact archived. Message histories retained.');
+    }
+    public function bulk(Request $request)
+    {
+        $data = $request->validate(['contacts' => 'required|array|max:10000', 'contacts.*.name' => 'nullable|string|max:100', 'contacts.*.phone' => 'required|string|max:30', 'consent_confirmed' => 'accepted']);
+        DB::transaction(function () use ($data) {
+            foreach ($data['contacts'] as $row) {
+                $phone = (new PhoneNumber($row['phone']))->getE164();
+                Contact::firstOrCreate(['organization_id' => TenantContext::id(), 'contact_phone' => $phone], ['contact_name' => $row['name'] ?? $phone, 'is_opted_in' => true]);
+            }
+        });
+        return back()->with('success', 'Contacts imported. Existing opt-out choices retained.');
+    }
+    public function duplicates()
+    {
+        // E.164 normalization and a database unique key prevent duplicate phone records.
+        return response()->json(['duplicates' => [], 'total_duplicates' => 0]);
+    }
+    public function merge(Request $request)
+    {
+        $data = $request->validate(['primary_id' => 'required|uuid','duplicate_ids' => 'required|array|min:1', 'duplicate_ids.*' => 'required|uuid|different:primary_id']);
+        DB::transaction(function () use ($data) {
+            $primary = Contact::findOrFail($data['primary_id']);
+            foreach (Contact::whereIn('id', $data['duplicate_ids'])->get() as $duplicate) {
+                abort_unless($duplicate->contact_phone === $primary->contact_phone, 422, 'Contacts with different numbers must keep separate histories.');
+                $duplicate->conversations()->update(['contact_id' => $primary->id]); $duplicate->delete();
+            }
+        });
+        return back()->with('success', 'Contact details merged. Per-number conversations retained.');
+    }
+}

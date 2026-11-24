@@ -1,3 +1,5 @@
+import { api } from '@/lib/api';
+import { TemplateFields, type TemplateValues } from '@/components/template-fields';
 import { useState, useEffect, useRef } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
@@ -68,6 +70,7 @@ type ChatMessage = {
     text: string;
     time: string;
     status?: 'sent' | 'delivered' | 'read' | 'failed' | 'pending';
+    failureReason?: string | null;
     attachment?: {
         name: string;
         size?: string;
@@ -80,6 +83,8 @@ type ChatThread = {
     id: string;
     contactName: string;
     phone: string;
+    channelId?: string;
+    assignedUserId?: number | null;
     channel: string; // e.g. "DukanHisab"
     lastMessage: string;
     time: string;
@@ -94,9 +99,15 @@ interface TeamInboxProps {
     initialThreads?: any[];
     channels?: any[];
     metaTemplates?: any[];
+    members?: any[];
 }
 
-export default function TeamInbox({ initialThreads = [], channels = [], metaTemplates = [] }: TeamInboxProps) {
+export default function TeamInbox({ initialThreads = [], channels = [], metaTemplates: initialTemplates = [], members = [] }: TeamInboxProps) {
+    const [metaTemplates, setMetaTemplates] = useState(initialTemplates);
+    const [directTemplates, setDirectTemplates] = useState(initialTemplates);
+    const [newValues, setNewValues] = useState<TemplateValues>({ parameters: [] });
+    const [directValues, setDirectValues] = useState<TemplateValues>({ parameters: [] });
+    const [consentConfirmed, setConsentConfirmed] = useState(false);
     const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
 
     const initialMsgMap: Record<string, ChatMessage[]> = {};
@@ -164,7 +175,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     const [newChatPhone, setNewChatPhone] = useState('');
     const [newChatName, setNewChatName] = useState('');
     const [newChatMsgType, setNewChatMsgType] = useState<'template' | 'text'>('template');
-    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || 'sale_invoice_en');
+    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || '');
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
@@ -172,12 +183,21 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     // Direct Template Send state for Active Chat
     const [showDirectTemplateModal, setShowDirectTemplateModal] = useState(false);
     const [selectedDirectTemplate, setSelectedDirectTemplate] = useState<any>(
-        metaTemplates.find((t: any) => t.name === 'dukanhisab_app_launch') || metaTemplates[0] || null
+        metaTemplates[0] || null
     );
     const [directTemplateCustomName, setDirectTemplateCustomName] = useState('');
     const [isSendingDirectTemplate, setIsSendingDirectTemplate] = useState(false);
     const [directTemplateStatus, setDirectTemplateStatus] = useState<{ success: boolean; message: string } | null>(null);
 
+    useEffect(() => {
+        if (!newChatChannelId) { setMetaTemplates([]); return; }
+        api(`/channels/${newChatChannelId}/templates`).then(data => { setMetaTemplates(data.templates); setNewChatTemplate(data.templates[0]?.name ?? ''); setNewValues({ parameters: [] }); }).catch(error => setNewChatStatus({ success: false, message: error.message }));
+    }, [newChatChannelId]);
+    useEffect(() => {
+        if (!selectedThread?.id) return;
+        api(`/inbox/conversations/${selectedThread.id}/read`, 'POST').catch(() => {});
+        if (selectedThread.channelId) api(`/channels/${selectedThread.channelId}/templates`).then(data => { setDirectTemplates(data.templates); setSelectedDirectTemplate(data.templates[0] ?? null); setDirectValues({ parameters: [] }); }).catch(() => setDirectTemplates([]));
+    }, [selectedThread?.id]);
     // Prevent outer main window scrollbar on the inbox screen
     useEffect(() => {
         const origHtmlOverflow = document.documentElement.style.overflow;
@@ -389,6 +409,9 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
                 },
                 body: JSON.stringify({
+                    ...newValues,
+                    consent_confirmed: consentConfirmed,
+                    template_language: metaTemplates.find(t => t.name === newChatTemplate)?.language,
                     phone: newChatPhone,
                     name: newChatName,
                     type: newChatMsgType,
@@ -467,8 +490,9 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                 body: JSON.stringify({
                     conversation_id: selectedThread.id,
                     type: 'template',
+                    ...directValues,
                     template_name: templateName,
-                    template_language: selectedDirectTemplate.language || 'gu',
+                    template_language: selectedDirectTemplate.language || 'en_US',
                 }),
             });
 
@@ -1123,7 +1147,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                     <div className="p-2.5 border-t border-border/80 flex items-center justify-between bg-card text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5 truncate">
                             <span className="size-2 rounded-full bg-emerald-500"></span>
-                            <span className="truncate">Active WhatsApp Connected</span>
+                            <span className="truncate">{channels.some(c => c.status === 'connected') ? 'WhatsApp connected' : 'No number connected'}</span>
                         </div>
                         <Button
                             size="sm"
@@ -1496,6 +1520,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                                 return msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>;
                                             })()}
+                                            {msg.status === 'failed' && (
+                                                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-destructive bg-destructive/10 px-2 py-1 rounded-md border border-destructive/20 font-medium">
+                                                    <AlertCircle className="size-3.5 shrink-0 text-destructive" />
+                                                    <span className="leading-tight">{msg.failureReason || 'Failed to send via Meta WhatsApp'}</span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
                                                 {msg.sender === 'agent' && (
@@ -1507,7 +1537,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                                 : msg.status === 'delivered'
                                                                     ? 'Delivered'
                                                                     : msg.status === 'failed'
-                                                                        ? 'Failed to send'
+                                                                        ? (msg.failureReason || 'Failed to send')
                                                                         : 'Sent'
                                                         }
                                                     >
@@ -1516,7 +1546,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                         ) : msg.status === 'delivered' ? (
                                                             <CheckCheck className="size-3.5 text-muted-foreground/70" />
                                                         ) : msg.status === 'failed' ? (
-                                                            <AlertCircle className="size-3.5 text-red-500" />
+                                                            <AlertCircle className="size-3.5 text-destructive" />
                                                         ) : (
                                                             <Check className="size-3.5 text-muted-foreground/70" />
                                                         )}
@@ -1872,6 +1902,8 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         )}
 
                         <form onSubmit={handleStartNewChat} className="space-y-3.5">
+{newChatMsgType === "template" && <TemplateFields template={metaTemplates.find(t => t.name === newChatTemplate)} value={newValues} onChange={setNewValues} />}
+<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> This contact consented to receive messages.</label>
                             {channels.length > 1 && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold">Send From WhatsApp Number *</label>
@@ -1929,7 +1961,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             }`}
                                     >
                                         <div className="font-semibold text-foreground">⚡ Approved Template</div>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">Delivers anytime to any number</p>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">For contacts who consented to receive messages</p>
                                     </button>
 
                                     <button
@@ -1964,10 +1996,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             ))
                                         ) : (
                                             <>
-                                                <option value="sale_invoice_en">sale_invoice_en (Sale Invoice Notification)</option>
-                                                <option value="dukanhisab_app_launch">dukanhisab_app_launch (App Launch)</option>
-                                                <option value="purchase_record_en">purchase_record_en (Purchase Record)</option>
-                                                <option value="supplier_payment_en">supplier_payment_en (Supplier Payment)</option>
+                                                <option value="">No approved templates available</option>
                                             </>
                                         )}
                                     </select>
@@ -2162,7 +2191,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </div>
                                 </div>
 
-                                {/* Customer Tag / Label */}
+                                <label className="block text-xs">Assigned agent<select className="block w-full rounded border bg-background p-2" value={selectedThread?.assignedUserId ?? ''} onChange={async e => { if (!selectedThread) return; try { const userId = e.target.value ? Number(e.target.value) : null; await api(`/inbox/conversations/${selectedThread.id}/assign`, 'POST', { assigned_user_id: userId, resume_bot: userId === null }); setSelectedThread({ ...selectedThread, assignedUserId: userId }); setSaveNotice('Assignment saved.'); } catch (error) { setSaveNotice((error as Error).message); } }}><option value="">Unassigned / resume automation</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>{/* Customer Tag / Label */}
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-foreground">Customer Label / Tag</label>
                                     <select
@@ -2270,25 +2299,25 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Left Column: Selection & Configuration */}
                                 <div className="space-y-3.5">
-                                    {/* Template Selection */}
+                                    <TemplateFields template={selectedDirectTemplate} value={directValues} onChange={setDirectValues} />{/* Template Selection */}
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                                             <span>Select Template</span>
                                             <span className="text-[10px] text-muted-foreground font-normal">
-                                                {metaTemplates.length} available
+                                                {directTemplates.length} available
                                             </span>
                                         </label>
                                         <select
                                             value={(selectedDirectTemplate?.name || '') + '__' + (selectedDirectTemplate?.language || '')}
                                             onChange={(e) => {
                                                 const [tplName, tplLang] = e.target.value.split('__');
-                                                const match = metaTemplates.find((t: any) => t.name === tplName && (t.language || '') === tplLang);
+                                                const match = directTemplates.find((t: any) => t.name === tplName && (t.language || '') === tplLang);
                                                 if (match) setSelectedDirectTemplate(match);
                                             }}
                                             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
                                         >
-                                            {metaTemplates.length > 0 ? (
-                                                metaTemplates.map((tpl: any) => (
+                                            {directTemplates.length > 0 ? (
+                                                directTemplates.map((tpl: any) => (
                                                     <option key={tpl.name + '__' + tpl.language} value={tpl.name + '__' + tpl.language}>
                                                         {tpl.name} ({tpl.language?.toUpperCase() || 'GU'}) - {tpl.category || 'MARKETING'}
                                                     </option>

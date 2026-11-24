@@ -12,10 +12,22 @@ class EnsureTenantContext
 {
     public function handle(Request $request, Closure $next): Response
     {
+        TenantContext::clear();
         $user = $request->user();
+        if ($request->is("admin", "admin/*", "webhooks/*")) { return $next($request); }
 
         if ($user) {
             $org = $user->currentOrganization;
+            $isAuthorizedForOrg = $org && (
+                $user->isSuperAdmin() ||
+                $user->organizations()->whereKey($org->id)->exists() ||
+                ($user->isB2BAgent() && $org->b2b_agent_id === $user->id)
+            );
+
+            if ($org && ! $isAuthorizedForOrg) {
+                $org = null;
+                $user->update(["current_organization_id" => null]);
+            }
 
             if (! $org && $user->organizations()->exists()) {
                 $org = $user->organizations()->first();
@@ -31,10 +43,16 @@ class EnsureTenantContext
                             'id' => $org->id,
                             'name' => $org->name,
                             'slug' => $org->slug,
-                            'role' => $user->roleIn($org),
+                            'role' => ($user->isB2BAgent() && $org->b2b_agent_id === $user->id && ! $user->organizations()->whereKey($org->id)->exists())
+                                ? 'Partner Support'
+                                : $user->roleIn($org),
                             'status' => $org->status,
                             'timezone' => $org->timezone,
+                            'currency' => $org->currency,
+                            'billing_email' => $org->billing_email,
+                            'max_channels' => $org->getMaxChannels(),
                         ],
+                        'isAssisting' => (bool) ($user->isB2BAgent() && $org->b2b_agent_id === $user->id && ! $user->organizations()->whereKey($org->id)->exists()),
                         'all' => fn () => $user->organizations->map(fn ($o) => [
                             'id' => $o->id,
                             'name' => $o->name,

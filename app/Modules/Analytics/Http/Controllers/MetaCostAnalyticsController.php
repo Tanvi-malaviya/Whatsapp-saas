@@ -16,7 +16,6 @@ class MetaCostAnalyticsController extends Controller
     {
         return TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? Organization::first()?->id
             ?? '';
     }
 

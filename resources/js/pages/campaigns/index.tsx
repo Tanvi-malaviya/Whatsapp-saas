@@ -1,3 +1,4 @@
+import { TemplateFields, type TemplateValues } from '@/components/template-fields';
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -20,7 +21,13 @@ import {
     Globe,
     Layers,
     FileText,
+    Pause,
+    Play,
+    XCircle,
+    BarChart2,
+    Wallet as WalletIcon,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,6 +70,10 @@ interface CampaignHistoryItem {
     recipientsCount: number;
     successCount: number;
     failedCount: number;
+    costPaise?: number;
+    costFormatted?: string;
+    category?: string;
+    isPaused?: boolean;
     status: string;
     date: string;
 }
@@ -72,6 +83,7 @@ interface CampaignsPageProps {
     contacts?: ContactItem[];
     recentCampaigns?: CampaignHistoryItem[];
     activeSegmentName?: string | null;
+    channels?: any[];
     autoOpenBroadcast?: boolean;
     channel?: {
         id: string;
@@ -79,6 +91,15 @@ interface CampaignsPageProps {
         phoneNumber?: string;
         status: string;
     } | null;
+    wallet?: {
+        paid_balance_paise: number;
+        promotional_balance_paise: number;
+        total_balance_paise: number;
+        paid_balance_formatted: string;
+        promotional_balance_formatted: string;
+        total_balance_formatted: string;
+    };
+    maxContactsLimit?: number;
 }
 
 export default function CampaignsList({
@@ -88,6 +109,9 @@ export default function CampaignsList({
     activeSegmentName,
     autoOpenBroadcast,
     channel,
+    channels = [],
+    wallet,
+    maxContactsLimit = 2000,
 }: CampaignsPageProps) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
@@ -96,6 +120,12 @@ export default function CampaignsList({
     const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false);
+
+    // Analytics Modal State
+    const [analyticsOpen, setAnalyticsOpen] = useState(false);
+    const [analyticsData, setAnalyticsData] = useState<any>(null);
+    const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+    const [campaignActionBusy, setCampaignActionBusy] = useState<string | null>(null);
 
     // Broadcast Modal State
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -107,6 +137,8 @@ export default function CampaignsList({
     );
     const [manualPhoneInput, setManualPhoneInput] = useState('');
     const [templateParams, setTemplateParams] = useState<string[]>([]);
+    const [extraValues, setExtraValues] = useState<TemplateValues>({ parameters: [] });
+    const [consentConfirmed, setConsentConfirmed] = useState(false);
     const [isSending, setIsSending] = useState(false);
     const [broadcastResult, setBroadcastResult] = useState<{
         success: boolean;
@@ -114,6 +146,57 @@ export default function CampaignsList({
         sent?: number;
         failed?: number;
     } | null>(null);
+
+    const handlePause = async (id: string) => {
+        setCampaignActionBusy(id);
+        try {
+            await api(`/campaigns/${id}/pause`, 'POST');
+            router.reload();
+        } catch (e) {
+            alert((e as Error).message);
+        } finally {
+            setCampaignActionBusy(null);
+        }
+    };
+
+    const handleResume = async (id: string) => {
+        setCampaignActionBusy(id);
+        try {
+            await api(`/campaigns/${id}/resume`, 'POST');
+            router.reload();
+        } catch (e) {
+            alert((e as Error).message);
+        } finally {
+            setCampaignActionBusy(null);
+        }
+    };
+
+    const handleCancel = async (id: string) => {
+        if (!confirm('Are you sure you want to cancel this campaign? Any unsent queued messages will be refunded to your wallet.')) return;
+        setCampaignActionBusy(id);
+        try {
+            await api(`/campaigns/${id}/cancel`, 'POST');
+            router.reload();
+        } catch (e) {
+            alert((e as Error).message);
+        } finally {
+            setCampaignActionBusy(null);
+        }
+    };
+
+    const handleViewAnalytics = async (id: string) => {
+        setLoadingAnalytics(true);
+        setAnalyticsOpen(true);
+        try {
+            const data = await api(`/campaigns/${id}/analytics`, 'GET');
+            setAnalyticsData(data);
+        } catch (e) {
+            alert((e as Error).message);
+            setAnalyticsOpen(false);
+        } finally {
+            setLoadingAnalytics(false);
+        }
+    };
 
     // Filter templates
     const filteredTemplates = templates.filter((tpl) => {
@@ -146,9 +229,7 @@ export default function CampaignsList({
             // Count variables in body
             const matches = target.body.match(/\{\{(\d+)\}\}/g) || [];
             const count = matches.length;
-            const initialParams = target.exampleParams && target.exampleParams.length >= count
-                ? target.exampleParams.slice(0, count)
-                : Array.from({ length: count }, (_, i) => `Value ${i + 1}`);
+            const initialParams = Array.from({ length: count }, (_, i) => '');
             setTemplateParams(initialParams);
         } else {
             setCampaignName(activeSegmentName ? `${activeSegmentName} Broadcast` : 'WhatsApp Broadcast Campaign');
@@ -166,10 +247,12 @@ export default function CampaignsList({
             return;
         }
         if (templates.length === 0) {
-            alert('No approved Meta templates found for this workspace. Please create templates in your WhatsApp Business Manager.');
+            alert('No approved Meta templates found for this number. Please visit the Templates page to create or sync templates from Meta.');
             return;
         }
-        openBroadcastModal();
+        const tpl = selectedTemplate || templates[0];
+        handleSelectTemplateInModal(tpl.name);
+        openBroadcastModal(tpl);
     };
 
     const handleSelectTemplateInModal = (templateName: string) => {
@@ -181,9 +264,7 @@ export default function CampaignsList({
             );
             const matches = found.body.match(/\{\{(\d+)\}\}/g) || [];
             const count = matches.length;
-            const initialParams = found.exampleParams && found.exampleParams.length >= count
-                ? found.exampleParams.slice(0, count)
-                : Array.from({ length: count }, (_, i) => `Value ${i + 1}`);
+            const initialParams = Array.from({ length: count }, (_, i) => '');
             setTemplateParams(initialParams);
         }
     };
@@ -264,6 +345,9 @@ export default function CampaignsList({
                             ?.content || '',
                 },
                 body: JSON.stringify({
+                    channel_id: channel?.id,
+                    consent_confirmed: consentConfirmed,
+                    ...extraValues,
                     template_name: selectedTemplate.name,
                     template_language: selectedTemplate.language,
                     campaign_name: campaignName.trim(),
@@ -305,7 +389,7 @@ export default function CampaignsList({
             <Head title="WhatsApp Broadcasts & Meta Campaigns - Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0">
-                {/* Header */}
+                <label className="block text-sm">Sender number<select aria-label="Sender number" value={channel?.id ?? ''} onChange={e => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })} className="ml-3 rounded border bg-background p-2"><option value="">Select number</option>{channels.map(c => <option value={c.id} key={c.id}>{c.name} · {c.phone_number}</option>)}</select></label>{/* Header */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -397,10 +481,11 @@ export default function CampaignsList({
                                     <thead className="bg-muted/40 border-y border-border/70 text-[11px] uppercase tracking-wider text-muted-foreground">
                                         <tr>
                                             <th className="py-2.5 px-4 font-semibold">Campaign Name</th>
-                                            <th className="py-2.5 px-4 font-semibold">Template</th>
-                                            <th className="py-2.5 px-4 font-semibold">Language</th>
+                                            <th className="py-2.5 px-4 font-semibold">Template &amp; Category</th>
                                             <th className="py-2.5 px-4 font-semibold">Recipients</th>
+                                            <th className="py-2.5 px-4 font-semibold">Cost</th>
                                             <th className="py-2.5 px-4 font-semibold">Status</th>
+                                            <th className="py-2.5 px-4 font-semibold text-center">Actions</th>
                                             <th className="py-2.5 px-4 font-semibold text-right">Date</th>
                                         </tr>
                                     </thead>
@@ -410,11 +495,9 @@ export default function CampaignsList({
                                                 <td className="py-2.5 px-4 font-medium text-foreground">
                                                     {camp.name}
                                                 </td>
-                                                <td className="py-2.5 px-4 font-mono text-[11px] text-muted-foreground">
-                                                    {camp.templateName}
-                                                </td>
-                                                <td className="py-2.5 px-4 text-muted-foreground uppercase text-[10px]">
-                                                    {camp.templateLanguage}
+                                                <td className="py-2.5 px-4">
+                                                    <span className="font-mono text-[11px] text-foreground">{camp.templateName}</span>
+                                                    <div className="text-[10px] text-muted-foreground uppercase">{camp.category || 'MARKETING'} ({camp.templateLanguage})</div>
                                                 </td>
                                                 <td className="py-2.5 px-4 text-foreground font-semibold">
                                                     {camp.successCount} / {camp.recipientsCount}
@@ -424,13 +507,20 @@ export default function CampaignsList({
                                                         </span>
                                                     )}
                                                 </td>
+                                                <td className="py-2.5 px-4 font-medium text-foreground">
+                                                    {camp.costFormatted || `₹${((camp.recipientsCount * 0.88)).toFixed(2)}`}
+                                                </td>
                                                 <td className="py-2.5 px-4">
                                                     <span
                                                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                                             camp.status === 'completed'
                                                                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                                                : camp.status === 'partial'
+                                                                : camp.status === 'paused'
                                                                 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                                                : camp.status === 'cancelled'
+                                                                ? 'bg-muted text-muted-foreground'
+                                                                : camp.status === 'processing' || camp.status === 'queued'
+                                                                ? 'bg-blue-500/10 text-blue-600'
                                                                 : 'bg-destructive/10 text-destructive'
                                                         }`}
                                                     >
@@ -438,13 +528,68 @@ export default function CampaignsList({
                                                             className={`size-1.5 rounded-full ${
                                                                 camp.status === 'completed'
                                                                     ? 'bg-emerald-500'
-                                                                    : camp.status === 'partial'
+                                                                    : camp.status === 'paused'
                                                                     ? 'bg-amber-500'
+                                                                    : camp.status === 'processing' || camp.status === 'queued'
+                                                                    ? 'bg-blue-500 animate-pulse'
                                                                     : 'bg-destructive'
                                                             }`}
                                                         />
-                                                        {camp.status}
+                                                        {camp.isPaused ? 'Paused' : camp.status}
                                                     </span>
+                                                </td>
+                                                <td className="py-2.5 px-4 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        {/* Pause / Resume Controls */}
+                                                        {camp.status !== 'completed' && camp.status !== 'cancelled' && (
+                                                            <>
+                                                                {camp.isPaused || camp.status === 'paused' ? (
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="size-6 text-emerald-600 hover:bg-emerald-500/10"
+                                                                        title="Resume Campaign"
+                                                                        disabled={campaignActionBusy === camp.id}
+                                                                        onClick={() => handleResume(camp.id)}
+                                                                    >
+                                                                        <Play className="size-3" />
+                                                                    </Button>
+                                                                ) : (
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="size-6 text-amber-600 hover:bg-amber-500/10"
+                                                                        title="Pause Campaign"
+                                                                        disabled={campaignActionBusy === camp.id}
+                                                                        onClick={() => handlePause(camp.id)}
+                                                                    >
+                                                                        <Pause className="size-3" />
+                                                                    </Button>
+                                                                )}
+
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    className="size-6 text-destructive hover:bg-destructive/10"
+                                                                    title="Cancel & Refund Campaign"
+                                                                    disabled={campaignActionBusy === camp.id}
+                                                                    onClick={() => handleCancel(camp.id)}
+                                                                >
+                                                                    <XCircle className="size-3" />
+                                                                </Button>
+                                                            </>
+                                                        )}
+
+                                                        <Button
+                                                            size="icon"
+                                                            variant="ghost"
+                                                            className="size-6 text-primary hover:bg-primary/10"
+                                                            title="View Analytics & Failure Reasons"
+                                                            onClick={() => handleViewAnalytics(camp.id)}
+                                                        >
+                                                            <BarChart2 className="size-3" />
+                                                        </Button>
+                                                    </div>
                                                 </td>
                                                 <td className="py-2.5 px-4 text-right text-[11px] text-muted-foreground font-mono">
                                                     {camp.date}
@@ -458,167 +603,68 @@ export default function CampaignsList({
                     </Card>
                 )}
 
-                {/* Templates Section */}
-                {templates.length > 0 ? (
-                    <>
-                        {/* Templates Filter & Search Controls */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border">
-                            <div className="flex flex-wrap items-center gap-2">
-                                {/* Language Filter */}
-                                <div className="flex items-center gap-1 text-xs">
-                                    <span className="text-[11px] text-muted-foreground font-medium mr-1">Language:</span>
-                                    {['all', 'en_US', 'gu', 'hi'].map((lang) => (
-                                        <button
-                                            key={lang}
-                                            type="button"
-                                            onClick={() => setSelectedLanguage(lang)}
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                                                selectedLanguage === lang
-                                                    ? 'bg-primary text-primary-foreground shadow-2xs'
-                                                    : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-                                            }`}
-                                        >
-                                            {lang === 'all'
-                                                ? 'All'
-                                                : lang === 'en_US'
-                                                ? 'English'
-                                                : lang === 'gu'
-                                                ? 'Gujarati'
-                                                : 'Hindi'}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Category Filter */}
-                                <div className="flex items-center gap-1 text-xs ml-0 sm:ml-2">
-                                    <span className="text-[11px] text-muted-foreground font-medium mr-1">Category:</span>
-                                    {['all', 'UTILITY', 'MARKETING'].map((cat) => (
-                                        <button
-                                            key={cat}
-                                            type="button"
-                                            onClick={() => setSelectedCategory(cat)}
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                                                selectedCategory === cat
-                                                    ? 'bg-foreground text-background shadow-2xs'
-                                                    : 'bg-muted/60 text-muted-foreground hover:text-foreground'
-                                            }`}
-                                        >
-                                            {cat === 'all' ? 'All' : cat}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="relative w-full sm:w-64">
-                                <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
-                                <Input
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search templates..."
-                                    className="pl-9 h-8 text-xs bg-background"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Templates Grid */}
-                        <div className="grid gap-3.5 md:grid-cols-2 lg:grid-cols-3">
-                            {filteredTemplates.map((tpl) => (
-                                <Card
-                                    key={tpl.id}
-                                    className="border-border flex flex-col justify-between hover:border-primary/50 transition-colors shadow-2xs"
-                                >
-                                    <CardHeader className="pb-2.5 pt-3.5 px-3.5 sm:px-4">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <Badge variant="outline" className="text-[10px] font-mono uppercase">
-                                                {tpl.category}
-                                            </Badge>
-                                            <div className="flex items-center gap-1.5">
-                                                <Badge variant="secondary" className="text-[10px] uppercase font-mono">
-                                                    {tpl.language}
-                                                </Badge>
-                                                <Badge className="bg-primary/15 text-primary border border-primary/25 text-[10px] hover:bg-primary/20 font-semibold">
-                                                    {tpl.status}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                        <CardTitle className="text-sm font-bold font-mono mt-2 truncate text-foreground">
-                                            {tpl.name}
-                                        </CardTitle>
-                                        <CardDescription className="text-xs">
-                                            Meta Cost Estimate:{' '}
-                                            <strong className="text-foreground">{tpl.costEstimate}</strong>
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3 px-3.5 sm:px-4 pb-3.5">
-                                        <div className="rounded-lg bg-muted/30 p-2.5 text-xs text-muted-foreground leading-relaxed border border-border/50 min-h-24 max-h-36 overflow-y-auto whitespace-pre-wrap">
-                                            {tpl.body}
-                                        </div>
-
-                                        {tpl.buttons && tpl.buttons.length > 0 && (
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                {tpl.buttons.map((btn, idx) => (
-                                                    <span
-                                                        key={idx}
-                                                        className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20"
-                                                    >
-                                                        🔘 {btn}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        <Button
-                                            onClick={() => openBroadcastModal(tpl)}
-                                            size="sm"
-                                            className="w-full text-xs h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-1.5 shadow-2xs"
-                                        >
-                                            <Send className="size-3.5" />
-                                            Broadcast This Template
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-
-                        {filteredTemplates.length === 0 && (
-                            <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-xl border border-dashed border-border">
-                                <FileText className="size-8 text-muted-foreground mb-2" />
-                                <h3 className="text-sm font-semibold text-foreground">No templates matched</h3>
-                                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                                    Try adjusting your search query or language filter to discover available templates.
-                                </p>
-                            </div>
-                        )}
-                    </>
-                ) : channel && channel.status === 'connected' ? (
+                {/* Empty State when no campaigns have been launched yet */}
+                {recentCampaigns.length === 0 && (
                     <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
-                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                            <FileText className="size-7 opacity-60" />
+                        <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                            <Send className="size-7" />
                         </div>
                         <div className="max-w-md space-y-1">
                             <h3 className="text-base font-bold text-foreground">
-                                No Templates Found on Meta
+                                No Broadcast Campaigns Dispatched Yet
                             </h3>
                             <p className="text-xs text-muted-foreground leading-relaxed">
-                                No approved WhatsApp message templates were found in your Meta WABA account for this workspace. Please create or submit templates for approval in your Meta WhatsApp Business Manager.
+                                Broadcast verified WhatsApp templates to your contact list or segment with live delivery status. Templates will be selected when composing your campaign.
                             </p>
                         </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border shadow-2xs space-y-3 my-4">
-                        <div className="size-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                            <Send className="size-7 opacity-60 text-primary" />
-                        </div>
-                        <div className="max-w-md space-y-1">
-                            <h3 className="text-base font-bold text-foreground">
-                                No Broadcast Templates Available
-                            </h3>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                Connect your WhatsApp Business number to start broadcasting campaigns. Click the <strong>"+ New Campaign"</strong> button above to connect.
-                            </p>
-                        </div>
+                        <Button
+                            onClick={handleNewCampaignClick}
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 text-xs font-semibold h-9 shadow-xs mt-2"
+                        >
+                            <Plus className="size-4" />
+                            Create First Broadcast Campaign
+                        </Button>
                     </div>
                 )}
+
+                {/* Broadcast Guide & Quick Link Card */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="border-border shadow-2xs">
+                        <CardHeader className="pb-2 pt-3.5 px-4">
+                            <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                                <FileText className="size-4 text-primary" />
+                                WhatsApp Templates Management
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3.5 text-xs text-muted-foreground space-y-2">
+                            <p>
+                                Templates are selected when you click <strong>New Campaign</strong>. To create new templates, submit them to Meta, or sync approved templates for your WhatsApp number:
+                            </p>
+                            <Button variant="outline" size="sm" asChild className="h-7 text-xs">
+                                <Link href="/templates">
+                                    Open Templates Management &rarr;
+                                </Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-border shadow-2xs">
+                        <CardHeader className="pb-2 pt-3.5 px-4">
+                            <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
+                                <Sparkles className="size-4 text-amber-500" />
+                                Meta Broadcast Rules &amp; Compliance
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3.5 text-xs text-muted-foreground space-y-1.5">
+                            <p>
+                                • Marketing and Utility campaigns must use official Meta-approved templates.
+                            </p>
+                            <p>
+                                • Recipients must have opted in. High opt-out or block rates lower your Meta quality rating.
+                            </p>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
 
             {/* WhatsApp Connect Required Modal */}
@@ -661,6 +707,8 @@ export default function CampaignsList({
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
+<TemplateFields template={selectedTemplate} value={{ ...extraValues, parameters: templateParams }} onChange={v => { setExtraValues(v); setTemplateParams(v.parameters); }} />
+<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> I confirm these recipients consented to receive this broadcast.</label>
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Send className="size-5 text-primary" />
@@ -858,9 +906,58 @@ export default function CampaignsList({
                             </div>
                         </div>
 
+                        {/* Wallet Balance & Cost Estimate Banner */}
+                        <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                                    <WalletIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                                    Estimated Campaign Cost &amp; Wallet
+                                </span>
+                                <span className="font-bold text-foreground">
+                                    ~₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
+                                <div>
+                                    <span>Rate ({selectedTemplate?.category || 'MARKETING'}):</span>{' '}
+                                    <span className="font-medium text-foreground">
+                                        ₹{selectedTemplate?.category === 'UTILITY' ? '0.14' : '0.88'} / msg
+                                    </span>
+                                </div>
+                                <div className="text-right">
+                                    <span>Available Balance:</span>{' '}
+                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                        {wallet?.total_balance_formatted ?? '₹0.00'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Wallet Warning if balance is insufficient */}
+                            {wallet && wallet.total_balance_paise < Math.round(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 14 : 88)) && recipientsCount > 0 && (
+                                <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-700 dark:text-red-300 flex items-center justify-between text-[11px] mt-1">
+                                    <div className="flex items-center gap-1.5">
+                                        <AlertCircle className="size-3.5 shrink-0" />
+                                        <span>Insufficient balance. Required: ₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}</span>
+                                    </div>
+                                    <Link href="/settings/billing" className="font-bold underline ml-2">
+                                        Recharge Wallet &rarr;
+                                    </Link>
+                                </div>
+                            )}
+
+                            {/* Max Contacts Limit Warning */}
+                            {recipientsCount > maxContactsLimit && (
+                                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]">
+                                    <AlertCircle className="size-3.5 shrink-0" />
+                                    <span>Maximum limit is {maxContactsLimit} contacts per campaign. Please deselect some contacts.</span>
+                                </div>
+                            )}
+                        </div>
+
                         <DialogFooter className="flex items-center justify-between pt-3 border-t border-border">
-                            <span className="text-xs text-muted-foreground">
-                                Cost: ~₹{(recipientsCount * 0.11).toFixed(2)}
+                            <span className="text-xs text-muted-foreground font-mono">
+                                {recipientsCount} recipient{recipientsCount === 1 ? '' : 's'} selected
                             </span>
                             <div className="flex items-center gap-2">
                                 <Button
@@ -876,7 +973,12 @@ export default function CampaignsList({
                                 <Button
                                     type="submit"
                                     size="sm"
-                                    disabled={isSending || recipientsCount === 0}
+                                    disabled={
+                                        isSending ||
+                                        recipientsCount === 0 ||
+                                        recipientsCount > maxContactsLimit ||
+                                        (wallet ? wallet.total_balance_paise < Math.round(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 14 : 88)) : false)
+                                    }
                                     className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 px-4 shadow-xs"
                                 >
                                     {isSending ? (
@@ -894,6 +996,117 @@ export default function CampaignsList({
                             </div>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Campaign Analytics Dialog */}
+            <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+                <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <BarChart2 className="size-5 text-primary" />
+                            Campaign Analytics &amp; Delivery Performance
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground">
+                            {analyticsData?.campaign?.name} ({analyticsData?.campaign?.created_at})
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {loadingAnalytics ? (
+                        <div className="py-12 flex flex-col items-center justify-center gap-2">
+                            <Loader2 className="size-6 animate-spin text-primary" />
+                            <span className="text-xs text-muted-foreground">Fetching live campaign delivery analytics...</span>
+                        </div>
+                    ) : analyticsData ? (
+                        <div className="space-y-4 text-xs">
+                            {/* Key Performance Indicators */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div className="p-3 bg-muted/40 rounded-lg border border-border">
+                                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">Total Selected</div>
+                                    <div className="text-xl font-bold text-foreground mt-0.5">{analyticsData.metrics.total_selected}</div>
+                                </div>
+                                <div className="p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                                    <div className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-semibold">Delivered</div>
+                                    <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                        {analyticsData.metrics.delivered + analyticsData.metrics.read}
+                                        <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.delivery_rate}%)</span>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                                    <div className="text-[10px] text-blue-700 dark:text-blue-300 uppercase font-semibold">Read (Seen)</div>
+                                    <div className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                                        {analyticsData.metrics.read}
+                                        <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.read_rate}%)</span>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
+                                    <div className="text-[10px] text-purple-700 dark:text-purple-300 uppercase font-semibold">Customer Replies</div>
+                                    <div className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                                        {analyticsData.metrics.replies}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Secondary Status Breakdown */}
+                            <div className="grid grid-cols-3 gap-2 p-3 bg-card rounded-lg border border-border text-center">
+                                <div>
+                                    <div className="text-[10px] text-muted-foreground">Queued / Sending</div>
+                                    <div className="text-sm font-semibold">{analyticsData.metrics.queued}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] text-muted-foreground">Failed Messages</div>
+                                    <div className="text-sm font-semibold text-destructive">{analyticsData.metrics.failed}</div>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] text-muted-foreground">Campaign Cost</div>
+                                    <div className="text-sm font-semibold">{analyticsData.campaign.cost_formatted}</div>
+                                </div>
+                            </div>
+
+                            {/* Failure Reasons Breakdown if any failed */}
+                            {analyticsData.metrics.failure_reasons && analyticsData.metrics.failure_reasons.length > 0 && (
+                                <div className="space-y-1.5 pt-2">
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5 text-xs text-destructive">
+                                        <AlertCircle className="size-3.5" />
+                                        Failure Reasons &amp; Undelivered Breakdown
+                                    </div>
+                                    <div className="space-y-1 bg-destructive/5 p-2.5 rounded-lg border border-destructive/20 text-[11px]">
+                                        {analyticsData.metrics.failure_reasons.map((fr: any, i: number) => (
+                                            <div key={i} className="flex justify-between items-start gap-2">
+                                                <span className="text-destructive font-mono truncate">{fr.error}</span>
+                                                <Badge variant="outline" className="border-destructive/30 text-destructive text-[10px] shrink-0">
+                                                    {fr.count} msgs
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recent Recipients Log */}
+                            <div className="space-y-1.5 pt-2">
+                                <div className="font-semibold text-foreground text-xs">Recent Recipients Activity</div>
+                                <div className="max-h-40 overflow-y-auto divide-y divide-border/60 border border-border rounded-lg">
+                                    {analyticsData.recipients?.slice(0, 20).map((r: any) => (
+                                        <div key={r.id} className="p-2 flex items-center justify-between text-[11px]">
+                                            <span className="font-mono text-foreground">{r.phone}</span>
+                                            <span
+                                                className={`capitalize px-1.5 py-0.2 rounded-sm text-[9px] font-semibold ${
+                                                    r.status === 'read' || r.status === 'delivered'
+                                                        ? 'bg-emerald-500/10 text-emerald-600'
+                                                        : r.status === 'failed'
+                                                        ? 'bg-destructive/10 text-destructive'
+                                                        : 'bg-muted text-muted-foreground'
+                                                }`}
+                                            >
+                                                {r.status}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
                 </DialogContent>
             </Dialog>
         </>

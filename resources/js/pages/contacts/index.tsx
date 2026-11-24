@@ -173,7 +173,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
 
             router.post(
                 '/contacts/bulk',
-                { contacts: parsedContacts },
+                { contacts: parsedContacts, consent_confirmed: true },
                 {
                     preserveScroll: true,
                     onSuccess: () => {

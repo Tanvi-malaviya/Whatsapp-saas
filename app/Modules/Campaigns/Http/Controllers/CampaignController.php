@@ -3,30 +3,38 @@
 namespace App\Modules\Campaigns\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendCampaignRecipient;
+use App\Models\PlatformSetting;
 use App\Modules\Campaigns\Models\BroadcastCampaign;
 use App\Modules\Foundation\Models\Organization;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\WalletService;
 use App\Shared\PhoneNumber;
 use App\Shared\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CampaignController extends Controller
 {
+    public function __construct(
+        protected WalletService $walletService
+    ) {}
+
     private function resolveOrg(Request $request): Organization
     {
         $orgId = TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        return Organization::find($orgId) ?? Organization::first();
+        return Organization::findOrFail($orgId);
     }
 
     public function getMetaTemplates(?WhatsAppChannel $channel): array
@@ -74,9 +82,8 @@ class CampaignController extends Controller
                             }
                         }
 
-                        // Determine cost estimate based on category
                         $category = strtoupper($tpl['category'] ?? 'UTILITY');
-                        $cost = $category === 'MARKETING' ? '₹0.78 / msg' : '₹0.11 / msg';
+                        $ratePaise = $this->walletService->getRatePerMessage($category);
 
                         $formatted[] = [
                             'id' => (string) ($tpl['id'] ?? $tpl['name']),
@@ -84,7 +91,9 @@ class CampaignController extends Controller
                             'category' => $category,
                             'status' => strtoupper($tpl['status'] ?? 'APPROVED'),
                             'language' => $tpl['language'] ?? 'en_US',
-                            'costEstimate' => $cost,
+                            'costEstimate' => '₹' . number_format($ratePaise / 100, 2) . ' / msg',
+                            'ratePaise' => $ratePaise,
+                            'components' => $tpl['components'] ?? [],
                             'header' => $headerText,
                             'headerFormat' => $headerFormat,
                             'headerUrl' => $channel->metadata['template_media_urls'][$tpl['name']] ?? $headerUrl,
@@ -119,12 +128,13 @@ class CampaignController extends Controller
 
         $channel = WhatsAppChannel::where('organization_id', $org->id)
             ->where('status', 'connected')
-            ->first();
+            ->when($request->filled('channel_id'), fn ($q) => $q->whereKey($request->query('channel_id')))
+            ->orderByDesc('is_default')->first();
 
-        $templates = $this->getMetaTemplates($channel);
+        $templates = array_values(array_filter($this->getMetaTemplates($channel), fn ($t) => $t['status'] === 'APPROVED'));
 
-        // Fetch existing CRM contacts for this workspace so the user can easily select recipients
-        $contactsQuery = Conversation::where('organization_id', $org->id);
+        // Fetch existing CRM contacts for this workspace
+        $contactsQuery = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id);
 
         if ($request->filled('filter_type')) {
             $fType = $request->query('filter_type');
@@ -182,7 +192,7 @@ class CampaignController extends Controller
         // Fetch recent broadcast campaigns
         $recentCampaigns = BroadcastCampaign::where('organization_id', $org->id)
             ->orderByDesc('created_at')
-            ->take(15)
+            ->take(30)
             ->get()
             ->map(fn ($c) => [
                 'id' => (string) $c->id,
@@ -192,6 +202,10 @@ class CampaignController extends Controller
                 'recipientsCount' => $c->recipients_count,
                 'successCount' => $c->success_count,
                 'failedCount' => $c->failed_count,
+                'costPaise' => $c->cost_paise,
+                'costFormatted' => '₹' . number_format($c->cost_paise / 100, 2),
+                'category' => $c->category,
+                'isPaused' => (bool) $c->is_paused,
                 'status' => $c->status,
                 'date' => $c->created_at ? $c->created_at->timezone('Asia/Kolkata')->format('M d, Y h:i A') : 'Just now',
             ])
@@ -199,16 +213,22 @@ class CampaignController extends Controller
             ->all();
 
         $activeSegmentName = $request->query('segment_name');
-        if (!$activeSegmentName && $request->filled('segment_id') && isset($segment)) {
+        if (! $activeSegmentName && $request->filled('segment_id') && isset($segment)) {
             $activeSegmentName = $segment->name;
         }
 
+        $walletBalances = $this->walletService->getBalances($org);
+        $maxContactsLimit = (int) PlatformSetting::read('campaign_max_contacts', 2000);
+
         return Inertia::render('campaigns/index', [
+            'channels' => WhatsAppChannel::where('status', 'connected')->get(['id', 'name', 'phone_number']),
             'templates' => $templates,
             'contacts' => $contacts,
             'recentCampaigns' => $recentCampaigns,
             'activeSegmentName' => $activeSegmentName,
             'autoOpenBroadcast' => $request->boolean('open_broadcast', false),
+            'wallet' => $walletBalances,
+            'maxContactsLimit' => $maxContactsLimit,
             'channel' => $channel ? [
                 'id' => $channel->id,
                 'name' => $channel->name,
@@ -218,290 +238,337 @@ class CampaignController extends Controller
         ]);
     }
 
-    public function broadcast(Request $request): JsonResponse
+    public function estimate(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'template_name' => 'required|string',
-            'template_language' => 'required|string',
-            'campaign_name' => 'nullable|string|max:150',
-            'recipients' => 'required|array|min:1',
-            'recipients.*.phone' => 'required|string',
-            'recipients.*.name' => 'nullable|string',
-            'parameters' => 'nullable|array',
-            'header_url' => 'nullable|string',
+        $data = $request->validate([
+            'recipients_count' => 'required|integer|min:1',
+            'category' => 'nullable|string|in:MARKETING,UTILITY,AUTHENTICATION',
         ]);
 
         $org = $this->resolveOrg($request);
-        TenantContext::set($org);
+        $category = strtoupper($data['category'] ?? 'MARKETING');
+        $count = (int) $data['recipients_count'];
+        $ratePaise = $this->walletService->getRatePerMessage($category);
+        $estimatedCostPaise = $this->walletService->estimateCost($count, $category);
 
-        $channel = WhatsAppChannel::where('organization_id', $org->id)->first()
-            ?? WhatsAppChannel::where('status', 'connected')->first();
+        $wallet = $this->walletService->getOrCreateWallet($org);
+        $totalBalance = $wallet->totalBalancePaise();
 
-        if (! $channel) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No active WhatsApp channel found. Please connect your WhatsApp channel first.',
-            ], 422);
+        return response()->json([
+            'category' => $category,
+            'recipients_count' => $count,
+            'rate_per_message_paise' => $ratePaise,
+            'rate_per_message_formatted' => '₹' . number_format($ratePaise / 100, 2),
+            'estimated_cost_paise' => $estimatedCostPaise,
+            'estimated_cost_formatted' => '₹' . number_format($estimatedCostPaise / 100, 2),
+            'wallet_balance_paise' => $totalBalance,
+            'wallet_balance_formatted' => '₹' . number_format($totalBalance / 100, 2),
+            'has_sufficient_balance' => $totalBalance >= $estimatedCostPaise,
+        ]);
+    }
+
+    public function broadcast(Request $request): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+
+        // 1. Check subscription validity
+        if (! $org->isSubscriptionActive()) {
+            throw ValidationException::withMessages([
+                'subscription' => 'Your subscription has expired or workspace is suspended. Please renew your subscription to dispatch campaigns.',
+            ]);
         }
 
-        $templateName = $validated['template_name'];
-        $templateLanguage = $validated['template_language'];
-        $campaignName = $validated['campaign_name'] ?: ucwords(str_replace('_', ' ', $templateName)) . ' Broadcast';
-        $params = $validated['parameters'] ?? [];
-        $recipients = $validated['recipients'];
+        $maxAllowed = (int) PlatformSetting::read('campaign_max_contacts', 2000);
 
-        $successCount = 0;
-        $failedCount = 0;
-        $errors = [];
+        $data = $request->validate([
+            'channel_id' => 'required|uuid',
+            'template_name' => 'required|string|max:512',
+            'template_language' => 'required|string|max:30',
+            'campaign_name' => 'nullable|string|max:150',
+            'recipients' => 'required|array|min:1|max:' . $maxAllowed,
+            'recipients.*.phone' => 'required|string|max:30',
+            'recipients.*.name' => 'nullable|string|max:100',
+            'parameters' => 'nullable|array',
+            'parameters.*' => 'string|max:2000',
+            'header_url' => 'nullable|url:https|max:2000',
+            'header_parameters' => 'nullable|array',
+            'button_parameters' => 'nullable|array',
+            'consent_confirmed' => 'accepted',
+        ]);
 
-        $allTemplates = $this->getMetaTemplates($channel);
-        $matchedTemplate = collect($allTemplates)->first(function ($t) use ($templateName, $templateLanguage) {
-            return $t['name'] === $templateName && ($t['language'] ?? '') === $templateLanguage;
-        }) ?? collect($allTemplates)->firstWhere('name', $templateName);
-        $templateBodyTemplate = $matchedTemplate['body'] ?? '';
-        $matchedHeaderFormat = $matchedTemplate['headerFormat'] ?? null;
-        $matchedHeaderUrl = $validated['header_url'] ?? ($matchedTemplate['headerUrl'] ?? null);
+        $channel = WhatsAppChannel::where('status', 'connected')->findOrFail($data['channel_id']);
+        $template = collect($this->getMetaTemplates($channel))->first(
+            fn ($t) => $t['name'] === $data['template_name'] && $t['language'] === $data['template_language']
+        );
 
-        foreach ($recipients as $recipient) {
-            $rawPhone = $recipient['phone'] ?? '';
-            $contactName = $recipient['name'] ?? null;
+        if (! $template) {
+            throw ValidationException::withMessages(['template_name' => 'Choose a template from this sender number.']);
+        }
 
-            if (empty($rawPhone)) {
-                $failedCount++;
-                continue;
-            }
+        $category = strtoupper($template['category'] ?? 'MARKETING');
+        $payload = app(\App\Services\TemplatePayload::class)->build($template, $data);
+        $recipients = collect($data['recipients'])->map(
+            fn ($r) => ['phone' => (new PhoneNumber($r['phone']))->getE164(), 'name' => $r['name'] ?? null]
+        )->unique('phone');
 
-            try {
-                $e164Phone = (new PhoneNumber($rawPhone))->getE164();
-                $cleanDigits = preg_replace('/\D/', '', $e164Phone);
-            } catch (\Throwable $e) {
-                $cleanDigits = preg_replace('/\D/', '', $rawPhone);
-                $e164Phone = '+' . $cleanDigits;
-            }
+        if ($recipients->count() > $maxAllowed) {
+            throw ValidationException::withMessages([
+                'recipients' => "Campaign exceeds the maximum allowed limit of {$maxAllowed} contacts.",
+            ]);
+        }
 
-            $metaPayload = [
-                'messaging_product' => 'whatsapp',
-                'to' => $cleanDigits,
-                'type' => 'template',
-                'template' => [
-                    'name' => $templateName,
-                    'language' => ['code' => $templateLanguage],
-                ],
-            ];
+        // Validate opt-out contacts
+        $blocked = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)
+            ->whereIn('contact_phone', $recipients->pluck('phone'))
+            ->where('is_opted_in', false)
+            ->pluck('contact_phone');
 
-            $components = [];
-            $mediaHeaderUrl = null;
+        if ($blocked->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'recipients' => 'Remove ' . $blocked->count() . ' opted-out recipients before sending.',
+            ]);
+        }
 
-            $headerMediaId = $matchedTemplate['headerMediaId'] ?? ($channel->metadata['template_media_ids'][$templateName] ?? null);
-            $mediaHeaderUrl = $matchedHeaderUrl ?: ($channel->metadata['template_media_urls'][$templateName] ?? null);
+        // Calculate cost and validate prepaid wallet balance
+        $estimatedCostPaise = $this->walletService->estimateCost($recipients->count(), $category);
+        $wallet = $this->walletService->getOrCreateWallet($org);
 
-            $headerFormatUpper = strtoupper((string) ($matchedHeaderFormat ?? ''));
+        if (! $wallet->hasSufficientBalance($estimatedCostPaise)) {
+            $avail = '₹' . number_format($wallet->totalBalancePaise() / 100, 2);
+            $req = '₹' . number_format($estimatedCostPaise / 100, 2);
+            throw ValidationException::withMessages([
+                'wallet' => "Insufficient wallet balance (Available: {$avail}, Required: {$req}). Please recharge your wallet to dispatch this campaign.",
+            ]);
+        }
 
-            // 1. Add Header component ONLY if template requires MEDIA format in Meta (VIDEO, IMAGE, DOCUMENT)
-            if ($headerFormatUpper === 'VIDEO') {
-                if ($headerMediaId) {
-                    $components[] = [
-                        'type' => 'header',
-                        'parameters' => [
-                            [
-                                'type' => 'video',
-                                'video' => [
-                                    'id' => $headerMediaId,
-                                ],
-                            ],
-                        ],
-                    ];
-                } else {
-                    $mediaHeaderUrl = $mediaHeaderUrl ?: 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C';
-                    $components[] = [
-                        'type' => 'header',
-                        'parameters' => [
-                            [
-                                'type' => 'video',
-                                'video' => [
-                                    'link' => $mediaHeaderUrl,
-                                ],
-                            ],
-                        ],
-                    ];
-                }
-            } elseif ($headerFormatUpper === 'IMAGE') {
-                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=800';
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [
-                        [
-                            'type' => 'image',
-                            'image' => [
-                                'link' => $mediaHeaderUrl,
-                            ],
-                        ],
-                    ],
-                ];
-            } elseif ($headerFormatUpper === 'DOCUMENT') {
-                $mediaHeaderUrl = $matchedHeaderUrl ?: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => [
-                        [
-                            'type' => 'document',
-                            'document' => [
-                                'link' => $mediaHeaderUrl,
-                                'filename' => 'Invoice_' . date('Ymd') . '.pdf',
-                            ],
-                        ],
-                    ],
-                ];
-            }
+        $campaign = DB::transaction(function () use ($org, $channel, $data, $payload, $recipients, $category, $estimatedCostPaise, $maxAllowed) {
+            $campaign = BroadcastCampaign::create([
+                'organization_id' => $org->id,
+                'channel_id' => $channel->id,
+                'name' => $data['campaign_name'] ?: $data['template_name'],
+                'template_name' => $data['template_name'],
+                'template_language' => $data['template_language'],
+                'recipients_count' => $recipients->count(),
+                'success_count' => 0,
+                'failed_count' => 0,
+                'cost_paise' => $estimatedCostPaise,
+                'category' => $category,
+                'is_paused' => false,
+                'max_contacts_limit' => $maxAllowed,
+                'status' => 'queued',
+                'parameters' => $data['parameters'] ?? [],
+                'payload' => [...$payload, 'category' => $category],
+            ]);
 
-            // 2. Add Body component parameters ONLY if template actually requires body variables {{1}}, {{2}}...
-            preg_match_all('/\{\{(\d+)\}\}/', $templateBodyTemplate, $varMatches);
-            $requiredVarIndices = array_unique($varMatches[1] ?? []);
-            sort($requiredVarIndices);
-
-            $renderedContent = $templateBodyTemplate;
-
-            if (! empty($requiredVarIndices)) {
-                $bodyParams = [];
-                foreach ($requiredVarIndices as $varIdx) {
-                    $intIdx = (int) $varIdx;
-                    $userVal = $params[$intIdx - 1] ?? null;
-                    if (is_array($userVal)) {
-                        $userVal = $userVal['text'] ?? null;
-                    }
-                    $val = (string) ($userVal ?? '');
-
-                    if (empty($val) || $val === '{{name}}' || $val === 'Customer') {
-                        $val = match ($intIdx) {
-                            1 => $contactName ?: 'Valued Customer',
-                            2 => $org->name ?? 'DukanHisab Store',
-                            3 => '₹500.00',
-                            4 => date('d/m/Y'),
-                            5 => '₹0.00',
-                            6 => 'INV-' . date('Ymd') . '-01',
-                            default => 'Info',
-                        };
-                    }
-
-                    $bodyParams[] = ['type' => 'text', 'text' => (string) $val];
-                    $renderedContent = str_replace('{{' . $varIdx . '}}', (string) $val, $renderedContent);
-                }
-
-                $components[] = [
-                    'type' => 'body',
-                    'parameters' => $bodyParams,
-                ];
-            }
-
-            // 3. Dynamic URL Button parameters (for templates like due_reminder)
-            if (str_contains($templateName, 'due_reminder')) {
-                $components[] = [
-                    'type' => 'button',
-                    'sub_type' => 'url',
-                    'index' => '0',
-                    'parameters' => [
-                        ['type' => 'text', 'text' => 'pay'],
-                    ],
-                ];
-            }
-
-            if (! empty($components)) {
-                $metaPayload['template']['components'] = $components;
-            }
-
-            $isDelivered = false;
-
-            if (! empty($channel->access_token) && ! empty($channel->phone_number_id)) {
-                try {
-                    $apiResp = Http::withToken($channel->access_token)
-                        ->timeout(12)
-                        ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $metaPayload);
-
-                    if ($apiResp->successful()) {
-                        $isDelivered = true;
-                        $successCount++;
-                    } else {
-                        $failedCount++;
-                        $errorMsg = $apiResp->json('error.message') ?? 'Meta API error';
-                        $errors[] = $errorMsg;
-                        \Illuminate\Support\Facades\Log::error("Meta WhatsApp Broadcast Error ({$templateName}): " . $errorMsg, [
-                            'payload' => $metaPayload,
-                            'response' => $apiResp->json(),
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    $failedCount++;
-                    $errors[] = $e->getMessage();
-                }
-            } else {
-                // Channel credentials missing
-                $failedCount++;
-            }
-
-            // Create or update conversation thread so this broadcast appears in Live Inbox
-            $conv = Conversation::firstOrCreate(
-                [
-                    'organization_id' => $org->id,
-                    'contact_phone' => $e164Phone,
-                ],
-                [
-                    'contact_name' => $contactName ?: $e164Phone,
-                    'channel_phone_number_id' => $channel->phone_number_id,
-                    'status' => 'open',
-                    'pipeline_stage' => 'New',
-                    'label' => 'Prospect',
+            // Deduct messaging wallet balance atomically
+            $this->walletService->debit(
+                org: $org,
+                amountPaise: $estimatedCostPaise,
+                description: "Campaign dispatch: '{$campaign->name}' ({$recipients->count()} messages, {$category})",
+                referenceId: $campaign->id,
+                metadata: [
+                    'campaign_id' => $campaign->id,
+                    'recipients_count' => $recipients->count(),
+                    'category' => $category,
                 ]
             );
 
-            $conv->update([
-                'last_message_at' => now(),
-                'window_expires_at' => now()->addHours(24),
-            ]);
-
-            // Prepare rendered text for live inbox matching what was sent to customer's WhatsApp
-            $mediaPrefix = $mediaHeaderUrl ? "[Media: {$mediaHeaderUrl}]\n" : '';
-
-            if (! empty($renderedContent)) {
-                $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix . $renderedContent;
-            } else {
-                $savedMessageContent = "[Broadcast Campaign: {$campaignName} Template: {$templateName}]\n" . $mediaPrefix;
+            foreach ($recipients as $recipient) {
+                $id = DB::table('campaign_recipients')->insertGetId([
+                    'campaign_id' => $campaign->id,
+                    ...$recipient,
+                    'status' => 'queued',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                SendCampaignRecipient::dispatch($id)->afterCommit();
             }
 
-            // Save outbound broadcast message in database
-            Message::create([
-                'conversation_id' => $conv->id,
-                'organization_id' => $org->id,
-                'direction' => 'outbound',
-                'sender_type' => 'agent',
-                'sender_id' => (string) ($request->user()?->id ?? 'agent'),
-                'type' => 'template',
-                'content' => $savedMessageContent,
-                'status' => $isDelivered ? 'sent' : 'failed',
-                'meta_cost_paise' => 0,
-            ]);
+            return $campaign;
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Broadcast queued. Delivery results will update in real-time as messages are dispatched.',
+            'campaign_id' => $campaign->id,
+            'cost_paise' => $campaign->cost_paise,
+            'cost_formatted' => '₹' . number_format($campaign->cost_paise / 100, 2),
+            'success_count' => 0,
+            'failed_count' => 0,
+        ]);
+    }
+
+    public function pause(Request $request, string $id): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        if ($campaign->status === 'completed' || $campaign->status === 'cancelled') {
+            abort(422, 'Cannot pause a completed or cancelled campaign.');
         }
 
-        // Store campaign in history
-        $campaign = BroadcastCampaign::create([
-            'organization_id' => $org->id,
-            'name' => $campaignName,
-            'template_name' => $templateName,
-            'template_language' => $templateLanguage,
-            'recipients_count' => count($recipients),
-            'success_count' => $successCount,
-            'failed_count' => $failedCount,
-            'status' => $failedCount === 0 ? 'completed' : ($successCount > 0 ? 'partial' : 'failed'),
-            'parameters' => $params,
+        $campaign->update([
+            'is_paused' => true,
+            'status' => 'paused',
         ]);
 
         return response()->json([
-            'success' => $successCount > 0,
-            'message' => $successCount > 0
-                ? "Broadcast launched successfully! {$successCount} sent" . ($failedCount > 0 ? ", {$failedCount} failed." : '.')
-                : "Broadcast failed to send. " . implode(', ', array_unique($errors)),
-            'campaign_id' => $campaign->id,
-            'success_count' => $successCount,
-            'failed_count' => $failedCount,
+            'success' => true,
+            'message' => 'Campaign paused successfully.',
+        ]);
+    }
+
+    public function resume(Request $request, string $id): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        if ($campaign->status !== 'paused' && ! $campaign->is_paused) {
+            abort(422, 'Campaign is not paused.');
+        }
+
+        $campaign->update([
+            'is_paused' => false,
+            'status' => 'processing',
+        ]);
+
+        // Re-dispatch remaining queued recipients
+        $queuedIds = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->where('status', 'queued')
+            ->pluck('id');
+
+        foreach ($queuedIds as $rId) {
+            SendCampaignRecipient::dispatch($rId);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Campaign resumed. {$queuedIds->count()} queued messages are being processed.",
+        ]);
+    }
+
+    public function cancel(Request $request, string $id): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        if ($campaign->status === 'completed' || $campaign->status === 'cancelled') {
+            abort(422, 'Campaign is already finished or cancelled.');
+        }
+
+        return DB::transaction(function () use ($campaign, $org) {
+            $cancelledCount = DB::table('campaign_recipients')
+                ->where('campaign_id', $campaign->id)
+                ->where('status', 'queued')
+                ->update(['status' => 'cancelled', 'updated_at' => now()]);
+
+            $campaign->update([
+                'status' => 'cancelled',
+                'is_paused' => false,
+            ]);
+
+            // Refund unsent messages back to wallet
+            if ($cancelledCount > 0 && $campaign->cost_paise > 0 && $campaign->recipients_count > 0) {
+                $ratePerMsg = (int) round($campaign->cost_paise / $campaign->recipients_count);
+                $refundPaise = $cancelledCount * $ratePerMsg;
+
+                $this->walletService->refund(
+                    org: $org,
+                    amountPaise: $refundPaise,
+                    description: "Refund for {$cancelledCount} unsent messages from cancelled campaign '{$campaign->name}'",
+                    referenceId: $campaign->id,
+                    metadata: ['campaign_id' => $campaign->id, 'cancelled_count' => $cancelledCount]
+                );
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Campaign cancelled. {$cancelledCount} unsent messages were cancelled and refunded to your wallet.",
+                'cancelled_count' => $cancelledCount,
+            ]);
+        });
+    }
+
+    public function analytics(Request $request, string $id): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        $counts = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $totalSelected = $campaign->recipients_count;
+        $queued = $counts['queued'] ?? 0;
+        $sent = $counts['sent'] ?? 0;
+        $delivered = $counts['delivered'] ?? 0;
+        $read = $counts['read'] ?? 0;
+        $failed = $counts['failed'] ?? 0;
+        $cancelled = $counts['cancelled'] ?? 0;
+
+        $totalDispatched = $sent + $delivered + $read + $failed;
+        $deliveryRate = $totalDispatched > 0 ? round((($delivered + $read) / $totalDispatched) * 100, 1) : 0;
+        $readRate = ($delivered + $read) > 0 ? round(($read / ($delivered + $read)) * 100, 1) : 0;
+
+        // Group failure reasons
+        $failureReasons = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->where('status', 'failed')
+            ->whereNotNull('error')
+            ->selectRaw('error, COUNT(*) as count')
+            ->groupBy('error')
+            ->orderByDesc('count')
+            ->take(10)
+            ->get();
+
+        // Count customer inbound replies
+        $recipientPhones = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->pluck('phone');
+
+        $replies = Message::where('direction', 'inbound')
+            ->where('created_at', '>=', $campaign->created_at)
+            ->whereHas('conversation', fn ($q) => $q->where('organization_id', $org->id)->whereIn('contact_phone', $recipientPhones))
+            ->count();
+
+        // Sample recent recipients
+        $recipients = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->orderByDesc('updated_at')
+            ->take(50)
+            ->get();
+
+        return response()->json([
+            'campaign' => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+                'template_name' => $campaign->template_name,
+                'template_language' => $campaign->template_language,
+                'category' => $campaign->category,
+                'cost_paise' => $campaign->cost_paise,
+                'cost_formatted' => '₹' . number_format($campaign->cost_paise / 100, 2),
+                'status' => $campaign->status,
+                'is_paused' => (bool) $campaign->is_paused,
+                'created_at' => $campaign->created_at->format('d M Y, h:i A'),
+            ],
+            'metrics' => [
+                'total_selected' => $totalSelected,
+                'queued' => $queued,
+                'sent' => $sent,
+                'delivered' => $delivered,
+                'read' => $read,
+                'failed' => $failed,
+                'cancelled' => $cancelled,
+                'replies' => $replies,
+                'delivery_rate' => $deliveryRate,
+                'read_rate' => $readRate,
+                'failure_reasons' => $failureReasons,
+            ],
+            'recipients' => $recipients,
         ]);
     }
 }

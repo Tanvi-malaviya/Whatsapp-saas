@@ -41,22 +41,37 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'isSuperAdmin' => $request->user()?->isSuperAdmin() ?? false,
+                'isB2BAgent' => $request->user()?->isB2BAgent() ?? false,
             ],
             'tenant' => function () use ($request) {
                 $user = $request->user();
                 $currentOrg = $user?->currentOrganization
-                    ?? \App\Shared\TenantContext::get()
-                    ?? \App\Modules\Foundation\Models\Organization::first();
+                    ?? \App\Shared\TenantContext::get();
                 return [
-                    'current' => $currentOrg,
+                    'current' => $currentOrg ? [
+                        'id' => $currentOrg->id,
+                        'name' => $currentOrg->name,
+                        'slug' => $currentOrg->slug,
+                        'status' => $currentOrg->status,
+                        'subscription_plan' => $currentOrg->subscription_plan,
+                        'subscription_expires_at' => $currentOrg->subscription_expires_at?->toIso8601String(),
+                        'days_until_expiry' => $currentOrg->daysUntilExpiry(),
+                        'is_active' => $currentOrg->isSubscriptionActive(),
+                    ] : null,
                     'organizations' => $user?->organizations ?? ($currentOrg ? [$currentOrg] : []),
-                    'role' => $user && $currentOrg ? $user->roleIn($currentOrg) : 'Owner',
+                    'role' => $user && $currentOrg ? $user->roleIn($currentOrg) : null,
                 ];
+            },
+            'wallet' => function () use ($request) {
+                $org = $request->user()?->currentOrganization ?? \App\Shared\TenantContext::get();
+                if (! $org) {
+                    return null;
+                }
+                return app(\App\Services\WalletService::class)->getBalances($org);
             },
             'whatsapp' => function () use ($request) {
                 $orgId = $request->user()?->current_organization_id
-                    ?? \App\Shared\TenantContext::id()
-                    ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+                    ?? \App\Shared\TenantContext::id();
 
                 $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
                     ->where('status', 'connected')

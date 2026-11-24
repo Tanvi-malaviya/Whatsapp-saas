@@ -35,6 +35,16 @@ class CreateNewUser implements CreatesNewUsers
         ]);
         $user->markEmailAsVerified();
 
+        // Handle referral code if provided
+        if (! empty($input['referral_code'])) {
+            $code = strtoupper(trim($input['referral_code']));
+            $referrer = User::where('referral_code', $code)->first();
+            if ($referrer && $referrer->id !== $user->id) {
+                $user->update(['referred_by_id' => $referrer->id]);
+            }
+        }
+        $user->generateReferralCode();
+
         // Auto-create workspace for self-registered user
         $wsName = $input['name'] . "'s Workspace";
         $slug = Str::slug($input['name']) . '-' . rand(100, 999);
@@ -42,7 +52,7 @@ class CreateNewUser implements CreatesNewUsers
         $orgData = [
             'name' => $wsName,
             'slug' => $slug,
-            'subscription_plan' => 'starter',
+            'subscription_plan' => 'annual',
             'status' => 'active',
         ];
 
@@ -51,6 +61,7 @@ class CreateNewUser implements CreatesNewUsers
         }
 
         $org = Organization::create($orgData);
+        $org->getOrCreateWallet();
         $user->organizations()->attach($org->id, ['role' => 'Owner']);
         $user->update(['current_organization_id' => $org->id]);
 

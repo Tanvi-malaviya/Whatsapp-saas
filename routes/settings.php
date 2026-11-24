@@ -9,7 +9,8 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', '/settings/organization');
     Route::redirect('account', '/settings/profile');
 
-    Route::inertia('settings/organization', 'settings/organization')->name('settings.organization');
+    Route::get('settings/organization', [\App\Modules\Foundation\Http\Controllers\OrganizationSettingsController::class, 'index'])->name('settings.organization');
+    Route::put('settings/organization', [\App\Modules\Foundation\Http\Controllers\OrganizationSettingsController::class, 'update']);
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');

@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -47,6 +48,7 @@ type Props = {
     channels?: Channel[];
     defaultWebhookUrl?: string;
     defaultVerifyToken?: string;
+    metaAppId?: string;
     maxChannels?: number;
     channelsCount?: number;
     canAddMore?: boolean;
@@ -54,8 +56,9 @@ type Props = {
 
 export default function WhatsAppConnect({
     channels = [],
-    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
-    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+    defaultWebhookUrl = '',
+    defaultVerifyToken = '',
+    metaAppId = '',
     maxChannels = 1,
     channelsCount = 0,
     canAddMore = true,
@@ -89,10 +92,10 @@ export default function WhatsAppConnect({
 
     // Initialize official Facebook JavaScript SDK for Embedded Signup
     useEffect(() => {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && metaAppId) {
             (window as any).fbAsyncInit = function () {
                 (window as any).FB.init({
-                    appId: '1079349601748656',
+                    appId: metaAppId,
                     cookie: true,
                     xfbml: true,
                     version: 'v22.0',
@@ -108,159 +111,17 @@ export default function WhatsAppConnect({
                 document.body.appendChild(js);
             }
         }
-    }, []);
+    }, [metaAppId]);
 
-    // If opened in a popup from Meta Embedded Signup redirect, notify opener
     useEffect(() => {
-        if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
-            const params = new URLSearchParams(window.location.search);
-            const phoneId = params.get('phone_number_id');
-            const wabaId = params.get('waba_id');
-            const code = params.get('code');
-            if (phoneId || wabaId || code) {
-                try {
-                    window.opener.postMessage(
-                        JSON.stringify({
-                            type: 'WA_EMBEDDED_SIGNUP',
-                            event: 'FINISH',
-                            data: { phone_number_id: phoneId, waba_id: wabaId, code: code },
-                        }),
-                        '*'
-                    );
-                } catch (e) {}
-                window.close();
-            }
-        }
+        const connected = (event: MessageEvent) => { if (event.origin === window.location.origin && event.data?.type === 'WHATSAPP_CONNECTED') router.reload(); };
+        window.addEventListener('message', connected); return () => window.removeEventListener('message', connected);
     }, []);
 
-    const processAutoConnect = async (payload: { code?: string; phone_number_id?: string; waba_id?: string }) => {
-        setIsSyncing(true);
-        setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
-
-        try {
-            const res = await fetch('/channels/quick-connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            const json = await res.json();
-            if (json.success) {
-                setSyncNotice(json.message || 'WhatsApp connected successfully!');
-                router.reload();
-            } else {
-                setSyncNotice(json.message || 'Could not auto-connect');
-            }
-        } catch (e: any) {
-            setSyncNotice('Auto-connect error: ' + e.message);
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
-    // Listen to Meta Embedded Signup finish events in parent window
-    useEffect(() => {
-        const handleMetaEmbeddedSignupMsg = async (event: MessageEvent) => {
-            let data = event.data;
-            if (typeof data === 'string') {
-                try {
-                    data = JSON.parse(data);
-                } catch (e) {
-                    return;
-                }
-            }
-
-            if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') {
-                return;
-            }
-
-            const isFinished =
-                data.event === 'FINISH' ||
-                data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
-                data.phone_number_id ||
-                data.data?.phone_number_id ||
-                data.code ||
-                data.data?.code;
-
-            if (!isFinished) {
-                return;
-            }
-
-            // Close popup window if open
-            if (popupRef.current && !popupRef.current.closed) {
-                try {
-                    popupRef.current.close();
-                } catch (e) {}
-            }
-
-            const payload = data.data || data;
-            const code = payload.code;
-            const phoneId = payload.phone_number_id;
-            const wabaId = payload.waba_id || payload.messaging_account_id || (payload.messaging_account_ids ? payload.messaging_account_ids[0] : null);
-
-            processAutoConnect({
-                code,
-                phone_number_id: phoneId,
-                waba_id: wabaId,
-            });
-        };
-
-        window.addEventListener('message', handleMetaEmbeddedSignupMsg);
-        return () => window.removeEventListener('message', handleMetaEmbeddedSignupMsg);
-    }, []);
-
-    const launchDirectMetaWizard = () => {
-        if (!canAddMore) {
-            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
-            return;
-        }
-
-        const appId = '1079349601748656';
-        const configId = '1835889181059188';
-
-        // Prefer official Facebook JS SDK FB.login for rock-solid popup handling
-        if (typeof window !== 'undefined' && (window as any).FB) {
-            try {
-                (window as any).FB.login(
-                    function (response: any) {
-                        if (response.authResponse && response.authResponse.code) {
-                            processAutoConnect({ code: response.authResponse.code });
-                        }
-                    },
-                    {
-                        config_id: configId,
-                        response_type: 'code',
-                        override_default_response_type: true,
-                        auth_type: 'rerequest',
-                        extras: {
-                            featureType: 'whatsapp_business_app_onboarding',
-                            sessionInfoVersion: '3',
-                        },
-                    }
-                );
-                return;
-            } catch (e) {}
-        }
-
-        // Fallback to direct popup window URL
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://whatsapp.sathwarainfotech.cloud';
-        const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
-
-        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${configId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
-
-        const w = 650;
-        const h = 750;
-        const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
-        const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
-
-        popupRef.current = window.open(
-            onboardUrl,
-            'MetaWhatsAppOnboarding',
-            `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`
-        );
+    const launchDirectMetaWizard = async () => {
+        const popup = window.open('about:blank', 'WhatsAppSignup', 'width=650,height=750');
+        try { const data = await api('/channels/signup', 'POST', {}); if (popup) { popupRef.current = popup; popup.location.href = data.url; } else { window.location.assign(data.url); } }
+        catch (error) { popup?.close(); setSyncNotice((error as Error).message); }
     };
 
     const handleAddNewChannel = () => {
@@ -278,7 +139,7 @@ export default function WhatsAppConnect({
             phone_number_id: '',
             waba_id: '',
             access_token: existing?.access_token || '',
-            app_id: existing?.app_id || '1079349601748656',
+            app_id: existing?.app_id || metaAppId || '',
             app_secret: existing?.app_secret || '',
         });
         setIsModalOpen(true);
@@ -407,11 +268,11 @@ export default function WhatsAppConnect({
                         <div>
                             <div className="flex items-center gap-2">
                                 <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-                                    Connected WhatsApp Channels
+                                    WhatsApp Numbers
                                 </h1>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
                                     <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                                    Meta Cloud v22.0
+                                    WhatsApp Business
                                 </span>
                                 {maxChannels <= 0 ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
@@ -463,12 +324,12 @@ export default function WhatsAppConnect({
                             type="button"
                             variant="secondary"
                             size="sm"
-                            onClick={launchDirectMetaWizard}
+                            onClick={() => router.visit('/whatsapp/connect/setup')}
                             className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1 border border-border/80 shadow-2xs hover:bg-muted"
-                            title="1-Click Connect WhatsApp Number via Official Meta Wizard"
+                            title="1-Click Connect WhatsApp Number via Official Guided setup"
                         >
                             <Sparkles className="size-3.5 text-primary" />
-                            <span>Meta Wizard</span>
+                            <span>Guided setup</span>
                         </Button>
                     </div>
                 </div>
@@ -683,7 +544,7 @@ export default function WhatsAppConnect({
                                 <div className="flex gap-1.5">
                                     <input
                                         readOnly
-                                        value={defaultVerifyToken}
+                                        value={defaultVerifyToken || 'Managed in Platform Settings'}
                                         className="w-full rounded-lg border border-input bg-muted/40 px-2.5 py-1 text-xs text-foreground font-mono"
                                     />
                                     <Button
@@ -732,7 +593,7 @@ export default function WhatsAppConnect({
                                         required
                                         value={form.name}
                                         onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                        placeholder="e.g. DukanHisab or Support"
+                                        placeholder="e.g. Sales or Support"
                                         className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                                     />
                                 </div>

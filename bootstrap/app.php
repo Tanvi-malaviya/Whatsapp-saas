@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             \App\Modules\Foundation\Http\Middleware\EnsureTenantContext::class,
+            \App\Http\Middleware\AuthorizeWorkspace::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
     })

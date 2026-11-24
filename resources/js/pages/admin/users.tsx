@@ -17,6 +17,7 @@ import {
     Eye,
     EyeOff,
     KeyRound,
+    Briefcase,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -37,6 +38,8 @@ type UserItem = {
     name: string;
     email: string;
     is_super_admin: boolean;
+    is_b2b_agent?: boolean;
+    referral_code?: string;
     organizations: Array<{
         id: string;
         name: string;
@@ -351,18 +354,27 @@ export default function AdminUsers({ users = [] }: Props) {
                                                 </div>
                                             </td>
 
-                                            {/* Super Admin status */}
+                                            {/* Super Admin & Partner status */}
                                             <td className="py-2 px-3.5">
-                                                {u.is_super_admin ? (
-                                                    <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[11px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                                                        <Crown className="size-3 text-rose-500" />
-                                                        SUPER ADMIN
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Regular Client
-                                                    </span>
-                                                )}
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    {u.is_super_admin ? (
+                                                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                                            <Crown className="size-2.5 text-rose-500" />
+                                                            SUPER ADMIN
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            Regular Client
+                                                        </span>
+                                                    )}
+
+                                                    {u.is_b2b_agent && (
+                                                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                            <Briefcase className="size-2.5 text-emerald-600" />
+                                                            B2B PARTNER
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
 
                                             {/* Registered */}
@@ -382,6 +394,21 @@ export default function AdminUsers({ users = [] }: Props) {
                                                     >
                                                         <Pencil className="size-3" />
                                                         <span>Edit</span>
+                                                    </Button>
+
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => router.post(`/admin/users/${u.id}/toggle-agent`)}
+                                                        className={`h-7 text-xs font-semibold px-2 gap-1 ${
+                                                            u.is_b2b_agent
+                                                                ? 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20'
+                                                                : 'border-border/80 hover:bg-muted text-muted-foreground'
+                                                        }`}
+                                                        title={u.is_b2b_agent ? 'Revoke Partner Role' : 'Grant Partner Role'}
+                                                    >
+                                                        <Briefcase className="size-3" />
+                                                        <span>{u.is_b2b_agent ? 'Partner' : '+ Partner'}</span>
                                                     </Button>
 
                                                     <Button

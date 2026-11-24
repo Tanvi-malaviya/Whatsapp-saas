@@ -10,6 +10,9 @@ class WebhookInbox extends Model
 
     protected $fillable = [
         'provider',
+        'organization_id',
+        'phone_number_id',
+        'attempts',
         'event_id',
         'payload',
         'status',

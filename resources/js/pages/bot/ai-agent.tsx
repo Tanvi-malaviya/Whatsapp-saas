@@ -1,3 +1,4 @@
+import { api } from '@/lib/api';
 import { useState, useRef, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
 import {
@@ -35,35 +36,14 @@ export type KnowledgeDoc = {
 const DEFAULT_SYSTEM_PROMPT =
     "You are Sathwara InfoTech's Official AI Assistant. You help customers with software solutions, WhatsApp API automation, and business inquiries.\n\nSpeak politely and warmly. Reply in the same language the customer uses (English, Gujarati, or Hindi).\n\nIf the customer asks for a custom quotation or human support, politely offer to connect them with our team.";
 
-export default function AIAgent() {
-    // Persistent state via localStorage
-    const [agentEnabled, setAgentEnabled] = useState<boolean>(() => {
-        const saved = localStorage.getItem('ai_agent_enabled');
-        return saved !== null ? JSON.parse(saved) : true;
-    });
-
-    const [model, setModel] = useState<string>(() => {
-        return localStorage.getItem('ai_agent_model') || 'gpt-4o-mini';
-    });
-
-    const [primaryLanguage, setPrimaryLanguage] = useState<string>(() => {
-        return localStorage.getItem('ai_agent_language') || 'multilingual';
-    });
-
-    const [systemPrompt, setSystemPrompt] = useState<string>(() => {
-        return localStorage.getItem('ai_agent_system_prompt') || DEFAULT_SYSTEM_PROMPT;
-    });
-
-    const [temperature, setTemperature] = useState<string>(() => {
-        return localStorage.getItem('ai_agent_temperature') || '0.4';
-    });
-
-    // Knowledge Base Documents (Start with empty or saved docs - NO dummy data!)
-    const [docs, setDocs] = useState<KnowledgeDoc[]>(() => {
-        const saved = localStorage.getItem('ai_agent_docs');
-        return saved ? JSON.parse(saved) : [];
-    });
-
+export default function AIAgent({ settings = {}, initialDocs = [], providerReady = false }: { settings?: any; initialDocs?: KnowledgeDoc[]; providerReady?: boolean }) {
+    const [agentEnabled, setAgentEnabled] = useState<boolean>(settings.enabled ?? false);
+    const [model, setModel] = useState<string>(settings.model ?? 'gpt-4o-mini');
+    const [primaryLanguage, setPrimaryLanguage] = useState<string>(settings.language ?? 'multilingual');
+    const [systemPrompt, setSystemPrompt] = useState<string>(settings.system_prompt ?? 'Help our customers using the uploaded business documents. Offer human support if information is missing.');
+    const [temperature, setTemperature] = useState<string>(String(settings.temperature ?? '0.4'));
+    const [docs, setDocs] = useState<KnowledgeDoc[]>(initialDocs);
+    const [isSaving, setIsSaving] = useState(false);
     // Chat Sandbox State (Start clean without fake chat history)
     const [chatHistory, setChatHistory] = useState<{ sender: 'user' | 'ai'; text: string }[]>([]);
     const [testQuery, setTestQuery] = useState('');
@@ -77,84 +57,34 @@ export default function AIAgent() {
         setTimeout(() => setToastMessage(null), 3000);
     };
 
-    // Save All Agent Settings to localStorage
-    const handleSave = () => {
-        localStorage.setItem('ai_agent_enabled', JSON.stringify(agentEnabled));
-        localStorage.setItem('ai_agent_model', model);
-        localStorage.setItem('ai_agent_language', primaryLanguage);
-        localStorage.setItem('ai_agent_system_prompt', systemPrompt);
-        localStorage.setItem('ai_agent_temperature', temperature);
-        localStorage.setItem('ai_agent_docs', JSON.stringify(docs));
-        showToast('AI Agent settings saved successfully!');
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await api('/ai-agent', 'POST', { enabled: agentEnabled, model, language: primaryLanguage, system_prompt: systemPrompt, temperature: Number(temperature) });
+            showToast('AI settings saved.');
+        } catch (error) { showToast((error as Error).message); }
+        finally { setIsSaving(false); }
     };
-
-    // Real File Upload Handler
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-
-        const newDocs: KnowledgeDoc[] = [];
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
-            const sizeStr = parseFloat(sizeInMb) >= 1 ? `${sizeInMb} MB` : `${Math.round(file.size / 1024)} KB`;
-
-            newDocs.push({
-                id: `${Date.now()}-${i}`,
-                name: file.name,
-                size: sizeStr,
-                status: 'Indexed',
-            });
-        }
-
-        const updatedDocs = [...docs, ...newDocs];
-        setDocs(updatedDocs);
-        localStorage.setItem('ai_agent_docs', JSON.stringify(updatedDocs));
-        showToast(`${newDocs.length} document(s) added to knowledge base.`);
-
-        // Reset input
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.length) return;
+        const body = new FormData();
+        Array.from(e.target.files).forEach(file => body.append('files[]', file));
+        setIsSaving(true);
+        try { const data = await api('/ai-agent/documents', 'POST', body); setDocs(data.docs); showToast('Documents stored and indexed.'); }
+        catch (error) { showToast((error as Error).message); }
+        finally { setIsSaving(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
     };
-
-    // Delete Document
-    const handleDeleteDoc = (id: string) => {
-        const updated = docs.filter((d) => d.id !== id);
-        setDocs(updated);
-        localStorage.setItem('ai_agent_docs', JSON.stringify(updated));
-        showToast('Document removed from knowledge base.');
+    const handleDeleteDoc = async (id: string) => {
+        try { await api(`/ai-agent/documents/${id}`, 'DELETE'); setDocs(current => current.filter(doc => doc.id !== id)); }
+        catch (error) { showToast((error as Error).message); }
     };
-
-    // Interactive Test Simulator Send Handler
-    const handleSendTest = (e: React.FormEvent) => {
-        e.preventDefault();
-        const q = testQuery.trim();
-        if (!q || isSimulating) return;
-
-        const updated = [...chatHistory, { sender: 'user' as const, text: q }];
-        setChatHistory(updated);
-        setTestQuery('');
-        setIsSimulating(true);
-
-        setTimeout(() => {
-            setIsSimulating(false);
-            const lowerQ = q.toLowerCase();
-            let reply = '';
-
-            if (lowerQ.includes('નમસ્તે') || lowerQ.includes('કેમ છો') || lowerQ.includes('હેલો') || lowerQ.includes('hello') || lowerQ.includes('hi')) {
-                reply = "નમસ્તે! 🙏 સાથવારા ઇન્ફોટેકમાં આપનું સ્વાગત છે. હું આપનો AI આસિસ્ટન્ટ છું. હું આપને કેવી રીતે મદદ કરી શકું?";
-            } else if (lowerQ.includes('ભાવ') || lowerQ.includes('price') || lowerQ.includes('fees') || lowerQ.includes('cost')) {
-                reply = "અમારા WhatsApp API સોલ્યુશન અને કસ્ટમ સોફ્ટવેર ડેવલપમેન્ટ માટે બિઝનેસ રિક્વાયરમેન્ટ મુજબ ફ્લેક્સિબલ પેકેજીસ ઉપલબ્ધ છે. શું આપ ડેમો અથવા કસ્ટમ ક્વોટેશન મેળવવા માંગો છો?";
-            } else if (lowerQ.includes('contact') || lowerQ.includes('નંબર') || lowerQ.includes('call') || lowerQ.includes('સપોર્ટ')) {
-                reply = "ચોક્કસ! તમે અમારા ઓફિશિયલ WhatsApp નંબર +91 63527 09531 પર સીધો સંપર્ક કરી શકો છો અથવા અમારી ટેકનિકલ ટીમ સાથે કનેક્ટ થઈ શકો છો.";
-            } else {
-                reply = `Thank you for your message! As Sathwara InfoTech's AI Agent, I have processed your inquiry based on our configured knowledge base. How else may I assist your business today?`;
-            }
-
-            setChatHistory([...updated, { sender: 'ai' as const, text: reply }]);
-        }, 600);
+    const handleSendTest = async (e: React.FormEvent) => {
+        e.preventDefault(); const question = testQuery.trim(); if (!question || isSimulating) return;
+        const history = [...chatHistory, { sender: 'user' as const, text: question }];
+        setChatHistory(history); setTestQuery(''); setIsSimulating(true);
+        try { const data = await api('/ai-agent/test', 'POST', { question, history: chatHistory.slice(-8) }); setChatHistory([...history, { sender: 'ai', text: data.reply }]); }
+        catch (error) { showToast((error as Error).message); }
+        finally { setIsSimulating(false); }
     };
 
     return (
@@ -166,7 +96,7 @@ export default function AIAgent() {
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileUpload}
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.doc,.docx,.txt,.md,.csv,.json"
                 multiple
                 className="hidden"
             />
@@ -190,13 +120,13 @@ export default function AIAgent() {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        Generative AI WhatsApp Agent
+                                        AI Agent
                                     </h2>
                                     <Badge
                                         variant="outline"
                                         className="text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
                                     >
-                                        Multilingual RAG Engine
+                                        Business knowledge
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -210,6 +140,7 @@ export default function AIAgent() {
                         <Button
                             size="sm"
                             onClick={handleSave}
+                            disabled={isSaving}
                             className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-8 gap-1.5 shadow-sm"
                         >
                             <Save className="size-3.5" />
@@ -278,6 +209,7 @@ export default function AIAgent() {
                     </div>
                 </div>
 
+                {!providerReady && <p role="status" className="rounded-lg border p-3 text-sm">An administrator must add the OpenAI API key in Platform Settings before AI can answer messages.</p>}
                 {/* Main Content Layout: Left 7 cols, Right 5 cols */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                     {/* Left: Configuration & Knowledge Base */}

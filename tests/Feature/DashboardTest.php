@@ -19,6 +19,9 @@ class DashboardTest extends TestCase
     public function test_authenticated_users_can_visit_the_dashboard()
     {
         $user = User::factory()->create();
+        $org = \App\Modules\Foundation\Models\Organization::create(['name' => 'Test Org', 'slug' => 'test-org', 'status' => 'active']);
+        $user->organizations()->attach($org->id, ['role' => 'Owner']);
+        $user->update(['current_organization_id' => $org->id]);
         $this->actingAs($user);
 
         $response = $this->get(route('dashboard'));

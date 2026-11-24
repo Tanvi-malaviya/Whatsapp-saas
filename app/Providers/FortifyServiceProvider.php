@@ -29,6 +29,33 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Fortify::authenticateUsing(function (Request $request) {
+            $user = \App\Models\User::where('email', $request->input('email'))->first();
+            if (! $user || ! \Illuminate\Support\Facades\Hash::check($request->input('password', ''), $user->password)) { return null; }
+            if ($request->is('admin/login') && ! $user->isSuperAdmin()) { return null; }
+            if ($request->is('agent/login') && ! $user->isB2BAgent() && ! $user->isSuperAdmin()) { return null; }
+            return $user;
+        });
+        $this->app->singleton(\Laravel\Fortify\Contracts\LoginResponse::class, function () {
+            return new class implements \Laravel\Fortify\Contracts\LoginResponse {
+                public function toResponse($request) {
+                    $user = $request->user();
+                    if ($user && $user->isSuperAdmin() && $request->is('admin/*')) {
+                        return redirect()->intended('/admin');
+                    }
+                    if ($user && ($user->isB2BAgent() || $user->isSuperAdmin()) && $request->is('agent/*')) {
+                        return redirect()->intended('/agent/dashboard');
+                    }
+                    if ($user && $user->isB2BAgent() && $user->organizations()->count() === 0) {
+                        return redirect()->intended('/agent/dashboard');
+                    }
+                    if ($user && $user->isSuperAdmin()) {
+                        return redirect()->intended('/admin');
+                    }
+                    return redirect()->intended('/dashboard');
+                }
+            };
+        });
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
