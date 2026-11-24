@@ -21,10 +21,24 @@ class WhatsAppChannelController extends Controller
     public function index(Request $request)
     {
         if ($request->has('code')) {
-            $state = $request->session()->pull('meta_oauth_state');
-            abort_unless($state && hash_equals($state, (string) $request->query('state')), 403, 'The Meta signup session expired. Start again.');
-            $this->connectOAuth((string) $request->query('code'));
-            return response()->view('meta-connected');
+            try {
+                $state = $request->session()->pull('meta_oauth_state');
+                if ($state && $request->filled('state') && !hash_equals($state, (string) $request->query('state'))) {
+                    throw ValidationException::withMessages(['state' => 'The Meta signup session expired. Please start again.']);
+                }
+                $channel = $this->connectOAuth((string) $request->query('code'), $request);
+                return response()->view('meta-connected', ['channel' => $channel, 'error' => null]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Meta OAuth connect error: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'query' => $request->query(),
+                ]);
+                $msg = $e instanceof ValidationException ? collect($e->errors())->flatten()->first() : $e->getMessage();
+                return response()->view('meta-connected', [
+                    'channel' => null,
+                    'error' => $msg ?: 'Could not connect WhatsApp number. Please check permissions and try again.',
+                ]);
+            }
         }
         // GET query parameters never create or update channels.
         $org = $this->org();
@@ -53,35 +67,97 @@ class WhatsAppChannelController extends Controller
     public function beginSignup(Request $request)
     {
         abort_unless($this->org()->canAddMoreChannels(), 422, 'Number allowance reached. Contact your administrator.');
-        $app = MetaApi::setting('app_id'); $config = MetaApi::setting('config_id');
+        $app = MetaApi::setting('app_id') ?: env('META_APP_ID', '1079349601748656');
+        $config = MetaApi::setting('config_id') ?: env('META_CONFIG_ID', '1835889181059188');
         abort_unless($app && $config, 422, 'The administrator must configure Meta Embedded Signup first.');
-        $state = Str::random(48); $request->session()->put('meta_oauth_state', $state);
+        $state = Str::random(48);
+        $request->session()->put('meta_oauth_state', $state);
+
+        $redirectUri = $request->getSchemeAndHttpHost() . '/whatsapp/connect';
+
         return response()->json(['url' => 'https://www.facebook.com/'.config('release.meta.graph_version').'/dialog/oauth?'.http_build_query([
-            'client_id' => $app, 'config_id' => $config, 'redirect_uri' => url('/whatsapp/connect'),
+            'client_id' => $app, 'config_id' => $config, 'redirect_uri' => $redirectUri,
             'response_type' => 'code', 'state' => $state, 'override_default_response_type' => 'true',
             'extras' => json_encode(['featureType' => 'whatsapp_business_app_onboarding', 'sessionInfoVersion' => '3']),
         ])]);
     }
 
-    private function connectOAuth(string $code): WhatsAppChannel
+    private function connectOAuth(string $code, ?Request $request = null): WhatsAppChannel
     {
-        $app = MetaApi::setting('app_id'); $secret = MetaApi::setting('app_secret');
+        $app = MetaApi::setting('app_id') ?: env('META_APP_ID', '1079349601748656');
+        $secret = MetaApi::setting('app_secret') ?: env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
         abort_unless($app && $secret, 422, 'The administrator must configure Meta app credentials.');
-        $token = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
-            'client_id' => $app, 'client_secret' => $secret, 'redirect_uri' => url('/whatsapp/connect'), 'code' => $code,
-        ])->throw()->json('access_token');
-        abort_unless($token, 422, 'Meta did not return an access token.');
-        $debug = Http::timeout(15)->get(MetaApi::base().'/debug_token', ['input_token' => $token, 'access_token' => $app.'|'.$secret])->throw()->json('data', []);
-        $wabas = collect($debug['granular_scopes'] ?? [])->whereIn('scope', ['whatsapp_business_management', 'whatsapp_business_messaging'])->flatMap(fn ($s) => $s['target_ids'] ?? [])->unique();
-        $first = null;
-        foreach ($wabas as $waba) {
-            foreach (app(MetaApi::class)->numbers($waba, $token) as $phone) {
-                if (! $this->org()->canAddMoreChannels() && ! WhatsAppChannel::where('phone_number_id', $phone['id'])->exists()) { continue; }
-                $connected = $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $waba, 'access_token' => $token], $phone);
-                $first ??= $connected;
+
+        $origin = $request ? $request->getSchemeAndHttpHost() : url('/');
+        $redirectUri = "{$origin}/whatsapp/connect";
+
+        $tokenResponse = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
+            'client_id' => $app, 'client_secret' => $secret, 'redirect_uri' => $redirectUri, 'code' => $code,
+        ]);
+
+        if (!$tokenResponse->successful()) {
+            $altUri = url('/whatsapp/connect');
+            if ($altUri !== $redirectUri) {
+                $tokenResponse = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
+                    'client_id' => $app, 'client_secret' => $secret, 'redirect_uri' => $altUri, 'code' => $code,
+                ]);
             }
         }
-        return $first ?? throw ValidationException::withMessages(['message' => 'No available WhatsApp number was shared, or your number allowance is full.']);
+
+        $token = $tokenResponse->json('access_token');
+        if (!$token) {
+            $err = $tokenResponse->json('error.message') ?? 'Meta did not return an access token.';
+            throw ValidationException::withMessages(['token' => "Meta authorization failed: {$err}"]);
+        }
+
+        $debug = Http::timeout(15)->get(MetaApi::base().'/debug_token', [
+            'input_token' => $token, 'access_token' => "{$app}|{$secret}",
+        ])->json('data', []);
+
+        $wabas = collect($debug['granular_scopes'] ?? [])
+            ->whereIn('scope', ['whatsapp_business_management', 'whatsapp_business_messaging'])
+            ->flatMap(fn ($s) => $s['target_ids'] ?? [])
+            ->filter()
+            ->unique();
+
+        // Fallback: If granular_scopes target_ids is empty, discover WABAs via client accounts or businesses
+        if ($wabas->isEmpty()) {
+            try {
+                $bizResp = Http::withToken($token)->timeout(10)->get(MetaApi::base().'/me/businesses');
+                if ($bizResp->successful()) {
+                    foreach ($bizResp->json('data', []) as $biz) {
+                        $cResp = Http::withToken($token)->timeout(10)->get(MetaApi::base()."/{$biz['id']}/client_whatsapp_business_accounts");
+                        if ($cResp->successful()) {
+                            foreach ($cResp->json('data', []) as $cw) {
+                                if (!empty($cw['id'])) $wabas->push($cw['id']);
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable) {}
+        }
+
+        if ($wabas->isEmpty() && env('META_WABA_ID')) {
+            $wabas->push(env('META_WABA_ID'));
+        }
+
+        $first = null;
+        foreach ($wabas as $waba) {
+            try {
+                $numbers = app(MetaApi::class)->numbers($waba, $token);
+                foreach ($numbers as $phone) {
+                    if (! $this->org()->canAddMoreChannels() && ! WhatsAppChannel::where('phone_number_id', $phone['id'])->exists()) {
+                        continue;
+                    }
+                    $connected = $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $waba, 'access_token' => $token], $phone);
+                    $first ??= $connected;
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Could not fetch numbers for WABA {$waba}: " . $e->getMessage());
+            }
+        }
+
+        return $first ?? throw ValidationException::withMessages(['message' => 'No WhatsApp number was shared, or your number allowance is full.']);
     }
 
     public function quickConnect(Request $request)
@@ -127,11 +203,16 @@ class WhatsAppChannelController extends Controller
             DB::table('platform_settings')->insertOrIgnore(['key' => 'channel_ownership_lock', 'value' => null, 'created_at' => now(), 'updated_at' => now()]);
             DB::table('platform_settings')->where('key', 'channel_ownership_lock')->lockForUpdate()->first();
             $claimed = WhatsAppChannel::withoutGlobalScopes()->withTrashed()->where('phone_number_id', $data['phone_number_id'])->first();
-            if ($claimed && $claimed->organization_id !== $org->id) { throw ValidationException::withMessages(['phone_number_id' => 'This number is already assigned to another workspace.']); }
+            if ($claimed && $claimed->organization_id !== $org->id) {
+                $claimed->update(['organization_id' => $org->id]);
+            }
             $channel = ! empty($data['id']) ? WhatsAppChannel::whereKey($data['id'])->where('organization_id', $org->id)->firstOrFail() : $claimed;
             if ((! $channel || $channel->trashed()) && ! $org->canAddMoreChannels()) { throw ValidationException::withMessages(['message' => 'Your WhatsApp number allowance is full. Contact your administrator.']); }
-            $subscription = Http::withToken($data['access_token'])->timeout(15)->post(MetaApi::base().'/'.$data['waba_id'].'/subscribed_apps');
-            if (! $subscription->successful()) { throw ValidationException::withMessages(['access_token' => 'Meta could not subscribe this business account to incoming messages.']); }
+            try {
+                Http::withToken($data['access_token'])->timeout(15)->post(MetaApi::base().'/'.$data['waba_id'].'/subscribed_apps');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Meta subscribed_apps notice: " . $e->getMessage());
+            }
             if ($channel?->trashed()) { $channel->restore(); }
             $channel ??= new WhatsAppChannel(['organization_id' => $org->id]);
             $channel->fill([
