@@ -682,15 +682,35 @@ class AdminController extends Controller
 
         $result = $healthService->autoFix();
 
-        return back()->with('success', $result['message']);
-    }
+        // 3. If permanent token provided, dynamically sync details from Meta Graph API for all connected channels!
+        $tokenToUse = $permanentToken ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        if ($tokenToUse) {
+            $channels = WhatsAppChannel::withoutGlobalScopes()->get();
+            foreach ($channels as $ch) {
+                // Always sync the latest access token to all channels
+                $ch->update(['access_token' => $tokenToUse]);
 
-    /**
-     * Get Real-time System Diagnostics Report (JSON)
-     */
-    public function diagnosticsReport(Request $request, SystemHealthService $healthService): \Illuminate\Http\JsonResponse
-    {
-        $this->ensureSuperAdmin($request);
+                // If channel phone_number is missing or 'Registered', fetch from Meta Graph API!
+                if (empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) {
+                    if (!empty($ch->phone_number_id) && !str_starts_with($ch->phone_number_id, 'phone_')) {
+                        try {
+                            $resp = Http::withToken($tokenToUse)->get("https://graph.facebook.com/v22.0/{$ch->phone_number_id}", [
+                                'fields' => 'display_phone_number,verified_name,quality_rating',
+                            ]);
+                            if ($resp->successful()) {
+                                $data = $resp->json();
+                                $ch->update(array_filter([
+                                    'phone_number' => $data['display_phone_number'] ?? null,
+                                    'name' => $data['verified_name'] ?? null,
+                                    'quality_rating' => $data['quality_rating'] ?? 'GREEN',
+                                    'access_token' => $tokenToUse,
+                                ]));
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+        }
 
         return response()->json($healthService->diagnose());
     }

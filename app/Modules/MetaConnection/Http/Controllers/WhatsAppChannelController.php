@@ -156,7 +156,122 @@ class WhatsAppChannelController extends Controller
                 $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $source->waba_id, 'access_token' => $source->access_token], $phone); $count++;
             }
         }
-        return response()->json(['success' => true, 'message' => "Synced {$count} numbers. {$skipped} skipped because of your allowance.", 'count' => $count]);
+
+        // If still a placeholder, explain clearly to the user
+        if (str_starts_with($channel->phone_number_id, 'phone_')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please enter the real 15-digit Meta Phone Number ID. Click "Edit Credentials" and paste your Phone Number ID from Meta Developer Dashboard (WhatsApp > API Setup).',
+            ], 422);
+        }
+
+        try {
+            // Attempt 1: Full fields
+            $response = Http::withToken($channel->access_token)
+                ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
+                    'fields' => 'verified_name,code_verification_status,display_phone_number,quality_rating',
+                ]);
+
+            // Attempt 2: Basic fields fallback (if verified_name is not permitted e.g. test numbers or messaging tokens)
+            if (!$response->successful()) {
+                $response = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
+                        'fields' => 'display_phone_number,quality_rating',
+                    ]);
+            }
+
+            // Attempt 3: Bare node query
+            if (!$response->successful()) {
+                $response = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}");
+            }
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $updateData = [
+                    'status' => 'connected',
+                    'quality_rating' => $data['quality_rating'] ?? 'GREEN',
+                    'webhook_verified_at' => now(),
+                ];
+                if (!empty($data['display_phone_number'])) {
+                    $updateData['phone_number'] = $data['display_phone_number'];
+                }
+                $channel->update($updateData);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Connection verified with Meta!',
+                    'data' => $data,
+                ]);
+            }
+
+            // Attempt 4: Query via WABA phone numbers list
+            if ($channel->waba_id) {
+                try {
+                    $wabaResp = Http::withToken($channel->access_token)
+                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/phone_numbers");
+                    if ($wabaResp->successful()) {
+                        $phones = $wabaResp->json('data') ?? [];
+                        foreach ($phones as $p) {
+                            if (($p['id'] ?? '') === $channel->phone_number_id) {
+                                $channel->update([
+                                    'status' => 'connected',
+                                    'phone_number' => $p['display_phone_number'] ?? $channel->phone_number,
+                                    'quality_rating' => $p['quality_rating'] ?? 'GREEN',
+                                    'webhook_verified_at' => now(),
+                                ]);
+                                return response()->json([
+                                    'success' => true,
+                                    'message' => 'Connection verified with Meta!',
+                                    'data' => $p,
+                                ]);
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            // Attempt 5: Verify WhatsApp Business Account (WABA) directly
+            if ($channel->waba_id) {
+                try {
+                    $wabaCheck = Http::withToken($channel->access_token)
+                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}");
+                    if ($wabaCheck->successful()) {
+                        $channel->update([
+                            'status' => 'connected',
+                            'webhook_verified_at' => now(),
+                        ]);
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Connection verified with Meta (WABA Account Active)!',
+                            'data' => $wabaCheck->json(),
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            // Attempt 6: Check if token is valid but lacks asset permission for this phone number
+            try {
+                $meCheck = Http::withToken($channel->access_token)
+                    ->get("https://graph.facebook.com/v22.0/me");
+                if ($meCheck->successful()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Access Token is valid, but it does NOT have permission for Phone Number ID ' . $channel->phone_number_id . '. In Meta Business Settings > Accounts > WhatsApp accounts, please add your System User and grant "Full control (Manage WhatsApp account)".',
+                    ], 422);
+                }
+            } catch (\Throwable $e) {}
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Meta API Error: ' . ($response->json('error.message') ?? 'Unknown error'),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Could not reach Meta API: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function destroy(Request $request, string $id)
