@@ -14,6 +14,9 @@ Route::post('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\Meta
 
 Route::post('/webhooks/razorpay', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'webhook']);
 
+// Public Meta Commerce Scheduled Data Feed URL (for automatic background catalog sync)
+Route::get('/commerce/catalog-feed.csv', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'publicCatalogFeed'])->name('commerce.catalog.feed');
+
 Route::get('/invitations/{token}', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'accept'])->middleware('auth');
 
 // Super Admin: Dedicated Separate Authentication Routes (Public access for Admin Login)
