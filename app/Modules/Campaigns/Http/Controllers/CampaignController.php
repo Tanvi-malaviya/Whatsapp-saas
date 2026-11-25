@@ -572,6 +572,22 @@ class CampaignController extends Controller
         $org = $this->resolveOrg($request);
         $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
 
+        // Process any pending webhooks immediately so latest delivery statuses appear
+        $pendingWebhooks = \App\Modules\Messaging\Models\WebhookInbox::where('organization_id', $org->id)
+            ->where('status', 'pending')
+            ->take(50)
+            ->get();
+        if ($pendingWebhooks->isNotEmpty()) {
+            $webhookController = app(\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class);
+            foreach ($pendingWebhooks as $wh) {
+                try {
+                    $webhookController->process($wh->id);
+                } catch (\Throwable $t) {
+                    // ignore
+                }
+            }
+        }
+
         $counts = DB::table('campaign_recipients')
             ->where('campaign_id', $campaign->id)
             ->selectRaw('status, COUNT(*) as count')
