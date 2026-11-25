@@ -1,3 +1,4 @@
+import { PanelLoginLinks } from '@/components/panel-login-links';
 import { useState } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -207,6 +208,7 @@ export default function AdminLogin({ status }: Props) {
                                 <ArrowRight className="size-3.5 ml-auto" />
                             </Button>
                         </form>
+                            <PanelLoginLinks panel="admin" />
                     </div>
 
                     {/* Bottom Security Info */}

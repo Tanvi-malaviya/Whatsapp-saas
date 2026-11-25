@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ !empty($error) ? 'Connection Notice' : 'WhatsApp Connected' }} | Sathwara InfoTech</title>
+    <title>{{ !empty($pendingNumbers) ? 'Choose WhatsApp Number' : (!empty($error) ? 'Connection Notice' : 'WhatsApp Connected') }} | Sathwara InfoTech</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -70,7 +70,19 @@
 </head>
 <body>
     <div class="card">
-        @if (!empty($error))
+        @if (!empty($pendingNumbers))
+            <h1>Choose your WhatsApp number</h1>
+            <p>Facebook shared several numbers. Choose the one to add to this workspace.</p>
+            @foreach ($pendingNumbers as $number)
+                <form method="POST" action="{{ url('/channels/signup/complete') }}" class="details">
+                    @csrf
+                    <input type="hidden" name="phone_number_id" value="{{ $number['id'] }}">
+                    <input type="hidden" name="waba_id" value="{{ $number['waba_id'] }}">
+                    <p>{{ $number['name'] }} · {{ $number['phone'] }}</p>
+                    <button class="btn" type="submit">Add this number</button>
+                </form>
+            @endforeach
+        @elseif (!empty($error))
             <div class="icon error">⚠️</div>
             <h1>Connection Incomplete</h1>
             <p>{{ $error }}</p>
@@ -81,7 +93,7 @@
                 <button class="btn" onclick="window.close()">Close Window</button>
                 <a href="/whatsapp/connect" class="btn btn-outline" target="_blank">Open Panel</a>
             </div>
-        @else
+        @elseif (!empty($channel))
             <div class="icon success">✓</div>
             <h1>WhatsApp Connected!</h1>
             <p>Your WhatsApp number has been successfully linked to your workspace.</p>
@@ -100,8 +112,9 @@
     <script>
         (function() {
             var isError = {{ !empty($error) ? 'true' : 'false' }};
-            var errorMsg = {!! json_encode($error ?? '') !!};
-            var channelData = {!! json_encode($channel ?? null) !!};
+            var connected = {{ !empty($channel) && empty($error) ? 'true' : 'false' }};
+            var errorMsg = {{ Illuminate\Support\Js::from($error ?? '') }};
+            var channelData = {{ Illuminate\Support\Js::from(isset($channel) ? $channel->only(['id', 'name', 'phone_number', 'phone_number_id', 'status']) : null) }};
 
             if (window.opener && !window.opener.closed) {
                 try {
@@ -110,7 +123,7 @@
                             type: 'WHATSAPP_CONNECT_ERROR',
                             error: errorMsg
                         }, window.location.origin);
-                    } else {
+                    } else if (connected) {
                         window.opener.postMessage({
                             type: 'WHATSAPP_CONNECTED',
                             channel: channelData
@@ -122,7 +135,7 @@
                 } catch (e) {
                     console.error('postMessage failed:', e);
                 }
-            } else if (!isError) {
+            } else if (connected) {
                 setTimeout(function() {
                     window.location.replace('/whatsapp/connect');
                 }, 1200);

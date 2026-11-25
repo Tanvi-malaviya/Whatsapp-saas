@@ -1,3 +1,4 @@
+import { PanelLoginLinks } from '@/components/panel-login-links';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Form, Head, Link } from '@inertiajs/react';
@@ -282,6 +283,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 </>
                             )}
                         </Form>
+                        <PanelLoginLinks panel="user" />
                     </div>
 
                     {/* Bottom Security Footer */}

@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return auth()->check() ? redirect()->route('dashboard') : redirect()->route('login');
+    return auth()->check() ? redirect(\App\Services\PanelNavigation::home(auth()->user())) : redirect()->route('login');
 })->name('home');
 Route::inertia('/privacy', 'privacy')->name('privacy');
 Route::inertia('/terms', 'terms')->name('terms');
@@ -38,6 +38,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('channels/connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'wizard'])->name('channels.connect');
     Route::get('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'index'])->name('channels.index');
     Route::post('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'store'])->name('channels.store');
+    Route::get('channels/signup/review', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'reviewSignup']);
+    Route::post('channels/signup/complete', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'completeSignup']);
     Route::post('channels/signup', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'beginSignup']);
     Route::post('channels/quick-connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'quickConnect'])->name('channels.quick-connect');
     Route::post('channels/sync-meta', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncFromMeta'])->name('channels.sync-meta');

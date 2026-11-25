@@ -1,3 +1,4 @@
+import { useMetaSignup } from '@/hooks/use-meta-signup';
 import { api } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -46,6 +47,7 @@ type Props = {
     defaultWebhookUrl?: string;
     defaultVerifyToken?: string;
     metaAppId?: string;
+    graphVersion?: string;
     maxChannels?: number;
     channelsCount?: number;
     canAddMore?: boolean;
@@ -56,6 +58,7 @@ export default function WhatsAppConnect({
     defaultWebhookUrl = '',
     defaultVerifyToken = '',
     metaAppId = '',
+    graphVersion = 'v22.0',
     maxChannels = 1,
     channelsCount = 0,
     canAddMore = true,
@@ -64,73 +67,10 @@ export default function WhatsAppConnect({
     const currentOrg = tenant?.current;
 
     const [copiedField, setCopiedField] = useState<string | null>(null);
-    const [isConnecting, setIsConnecting] = useState(false);
     const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null);
     const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
-    const popupRef = useRef<Window | null>(null);
-
-    // Initialize official Facebook JavaScript SDK for Embedded Signup
-    useEffect(() => {
-        if (typeof window !== 'undefined' && metaAppId) {
-            (window as any).fbAsyncInit = function () {
-                (window as any).FB.init({
-                    appId: metaAppId,
-                    cookie: true,
-                    xfbml: true,
-                    version: 'v22.0',
-                });
-            };
-
-            if (!document.getElementById('facebook-jssdk')) {
-                const js = document.createElement('script');
-                js.id = 'facebook-jssdk';
-                js.src = 'https://connect.facebook.net/en_US/sdk.js';
-                js.async = true;
-                js.defer = true;
-                document.body.appendChild(js);
-            }
-        }
-    }, [metaAppId]);
-
-    useEffect(() => {
-        const connected = (event: MessageEvent) => {
-            if (event.origin === window.location.origin) {
-                if (event.data?.type === 'WHATSAPP_CONNECTED') {
-                    router.reload();
-                } else if (event.data?.type === 'WHATSAPP_CONNECT_ERROR') {
-                    setSyncNotice(`Connection error: ${event.data.error || 'Connection failed'}`);
-                }
-            }
-        };
-        window.addEventListener('message', connected);
-        return () => window.removeEventListener('message', connected);
-    }, []);
-
-    // 1-Click Connect with Meta (Embedded Signup)
-    const launchDirectMetaWizard = async () => {
-        if (!canAddMore) {
-            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
-            return;
-        }
-
-        setIsConnecting(true);
-        const popup = window.open('about:blank', 'WhatsAppSignup', 'width=650,height=750');
-        try {
-            const data = await api('/channels/signup', 'POST', {});
-            if (popup) {
-                popupRef.current = popup;
-                popup.location.href = data.url;
-            } else {
-                window.location.assign(data.url);
-            }
-        } catch (error) {
-            popup?.close();
-            setSyncNotice((error as Error).message);
-        } finally {
-            setIsConnecting(false);
-        }
-    };
+    const { launch: launchDirectMetaWizard, busy: isConnecting } = useMetaSignup({ appId: metaAppId, graphVersion, onError: setSyncNotice });
 
     // Synchronize an active channel directly from Meta
     const handleSyncActiveChannel = async (channelId: string) => {
@@ -140,6 +80,7 @@ export default function WhatsAppConnect({
             const res = await fetch('/channels/sync-meta', {
                 method: 'POST',
                 headers: {
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
                 },
@@ -147,7 +88,7 @@ export default function WhatsAppConnect({
             const data = await res.json();
             if (data.success) {
                 setSyncNotice(data.message || 'Synced successfully from Meta!');
-                router.reload({ only: ['channels'] });
+                router.reload({ only: ['channels', 'channelsCount', 'canAddMore', 'whatsapp'] });
             } else {
                 setSyncNotice(data.message || 'Could not sync from Meta.');
             }
@@ -235,7 +176,7 @@ export default function WhatsAppConnect({
                     <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs shadow-2xs">
                         <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                         <span>
-                            <strong>Number Quota Reached:</strong> Your current subscription allows a maximum of <strong>{maxChannels}</strong> WhatsApp number{maxChannels > 1 ? 's' : ''}. Contact support or upgrade your plan in settings to connect additional numbers.
+                            <strong>Number Quota Reached:</strong> Your current subscription allows a maximum of <strong>{maxChannels}</strong> WhatsApp number{maxChannels > 1 ? 's' : ''}. Contact your administrator to increase your number allowance.
                         </span>
                     </div>
                 )}

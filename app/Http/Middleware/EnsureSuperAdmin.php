@@ -23,7 +23,7 @@ class EnsureSuperAdmin
 
         // If logged in but not a Super Admin, deny and send to workspace dashboard
         if (! $user->isSuperAdmin()) {
-            return redirect()->route('dashboard')->with('error', 'Unauthorized access. Only Super Administrators can access the Admin Portal.');
+            return redirect(\App\Services\PanelNavigation::home($user))->with('error', 'Unauthorized access. Only Super Administrators can access the Admin Portal.');
         }
 
         return $next($request);

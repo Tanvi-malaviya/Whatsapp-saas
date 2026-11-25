@@ -1,3 +1,4 @@
+import { PanelLoginLinks } from '@/components/panel-login-links';
 import { useState } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -277,6 +278,7 @@ export default function AgentLogin({ status }: Props) {
                                     )}
                                 </Button>
                             </form>
+                            <PanelLoginLinks panel="agent" />
 
                             <div className="mt-6 pt-5 border-t border-border/60 text-center">
                                 <p className="text-[11px] text-muted-foreground">

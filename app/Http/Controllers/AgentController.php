@@ -31,12 +31,7 @@ class AgentController extends Controller
 
     public function showLogin(Request $request): Response|RedirectResponse
     {
-        if ($request->user()) {
-            if ($request->user()->isB2BAgent() || $request->user()->isSuperAdmin()) {
-                return redirect()->route('agent.dashboard');
-            }
-            return redirect()->route('dashboard')->with('error', 'Only registered B2B Partners have access to the Partner Portal.');
-        }
+        if ($request->user()) { return redirect(\App\Services\PanelNavigation::home($request->user())); }
 
         return Inertia::render('agent/login', [
             'status' => session('status'),
@@ -45,6 +40,7 @@ class AgentController extends Controller
 
     public function exitAssist(Request $request): RedirectResponse
     {
+        $request->session()->forget('support_workspace_id');
         $agent = $request->user();
         $ownOrg = $agent->organizations()->first();
         if ($ownOrg) {
@@ -207,6 +203,7 @@ class AgentController extends Controller
             'organization_name' => $org->name,
         ]);
 
+        $request->session()->put('support_workspace_id', $org->id);
         return redirect()->route('dashboard')->with('success', "Now assisting '{$org->name}'.");
     }
 

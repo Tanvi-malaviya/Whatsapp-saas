@@ -12,7 +12,7 @@ class AuthorizeWorkspace
     public function handle(Request $request, Closure $next)
     {
         $user = $request->user();
-        if (! $user || $request->is('admin', 'admin/*', 'agent', 'agent/*', 'webhooks/*', 'login', 'logout', 'register', 'email/*', 'user/*', 'two-factor-challenge', 'settings/profile', 'settings/security', 'settings/password', 'settings/appearance', 'account', 'invitations/*')) {
+        if (! $user || $request->is('/', 'privacy', 'terms', 'admin', 'admin/*', 'agent', 'agent/*', 'webhooks/*', 'login', 'logout', 'register', 'email/*', 'user/*', 'two-factor-challenge', 'settings/profile', 'settings/security', 'settings/password', 'settings/appearance', 'account', 'invitations/*')) {
             return $next($request);
         }
         $org = TenantContext::get();

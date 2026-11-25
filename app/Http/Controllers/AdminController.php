@@ -46,9 +46,7 @@ class AdminController extends Controller
     public function showLogin(Request $request): Response|RedirectResponse
     {
 
-        if ($request->user() && $request->user()->isSuperAdmin()) {
-            return redirect()->route('admin.dashboard');
-        }
+        if ($request->user()) { return redirect(\App\Services\PanelNavigation::home($request->user())); }
 
         return Inertia::render('admin/login', [
             'status' => session('status'),
@@ -67,7 +65,7 @@ class AdminController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login')->with('success', 'You have been safely signed out from the Super Admin portal.');
+        return redirect($request->is('agent/logout') ? '/agent/login' : '/admin/login')->with('success', 'You have been signed out.');
     }
 
     /**
@@ -361,6 +359,7 @@ class AdminController extends Controller
                 $user->organizations()->attach($org->id, ['role' => 'Owner']);
             }
             $user->switchOrganization($org);
+            $request->session()->put('support_workspace_id', $org->id);
             $user->update(['current_organization_id' => $org->id]);
             $request->session()->put('current_organization_id', $org->id);
             \App\Shared\TenantContext::set($org);
@@ -694,6 +693,12 @@ class AdminController extends Controller
     /**
      * Run Automated Bug Fixes across all workspaces and channels
      */
+    public function diagnosticsReport(Request $request, SystemHealthService $healthService)
+    {
+        $this->ensureSuperAdmin($request);
+        return response()->json($healthService->diagnose());
+    }
+
     public function autoFixDiagnostics(Request $request, SystemHealthService $healthService)
     {
         $this->ensureSuperAdmin($request);

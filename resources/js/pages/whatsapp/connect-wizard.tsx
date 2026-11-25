@@ -1,3 +1,4 @@
+import { useMetaSignup } from '@/hooks/use-meta-signup';
 import { api } from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -267,24 +268,7 @@ export default function WhatsAppConnectWizard({
         }
     };
 
-    const launchMetaEmbeddedSignup = async () => {
-        const popup = window.open('about:blank', 'WhatsAppSignup', 'width=650,height=750');
-        try { const data = await api('/channels/signup', 'POST', {}); if (popup) popup.location.href = data.url; else window.location.assign(data.url); }
-        catch (error) { popup?.close(); setErrorMsg((error as Error).message); }
-    };
-    useEffect(() => {
-        const connected = (event: MessageEvent) => {
-            if (event.origin === window.location.origin) {
-                if (event.data?.type === 'WHATSAPP_CONNECTED') {
-                    router.visit('/whatsapp/connect');
-                } else if (event.data?.type === 'WHATSAPP_CONNECT_ERROR') {
-                    setErrorMsg(event.data.error || 'Connection incomplete. Please try again.');
-                }
-            }
-        };
-        window.addEventListener('message', connected);
-        return () => window.removeEventListener('message', connected);
-    }, []);
+    const { launch: launchMetaEmbeddedSignup, busy: signupBusy } = useMetaSignup({ appId: metaAppId ?? '', onError: setErrorMsg });
 
     const currentStepData = COEXISTENCE_STEPS.find((s) => s.step === guideStep) || COEXISTENCE_STEPS[0];
 
@@ -359,7 +343,7 @@ export default function WhatsAppConnectWizard({
                     {/* Single Primary 1-Click Launch Button in Project Blue Theme */}
                     <Button
                         onClick={launchMetaEmbeddedSignup}
-                        disabled={isSubmitting}
+                        disabled={signupBusy || isSubmitting}
                         className="h-8 px-3.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-2xs gap-1.5 shrink-0 self-start sm:self-auto transition-transform hover:scale-[1.02]"
                     >
                         <div className="size-3.5 rounded-full bg-white flex items-center justify-center text-primary">
