@@ -66,15 +66,15 @@ const DOCS_DATA: DocItem[] = [
         content:
             'Messaging on WhatsApp Cloud API uses pay-as-you-go wallet deduction based on transparent official Meta conversation rates with ZERO hidden markup.',
         steps: [
-            'Go to Billing & Wallet in the sidebar.',
-            'Click "Recharge Wallet". Enter any amount (minimum ₹200).',
+            'Go to Wallet in the sidebar.',
+            'Click "Recharge wallet" and choose a message category and quantity. The configured minimum purchase is shown in the dialog.',
             'Complete instant recharge via Razorpay / UPI / Card / NetBanking.',
             'Utility messages (OTPs, order tracking, alerts) cost ~₹0.14 per message.',
             'Marketing messages (promotions, offers, product launches) cost ~₹0.88 per message.',
             'Inbound customer customer-care conversations initiated by users have a 24-hour service window.',
             'Click-to-WhatsApp Ads (CTWA) provide an official 72-hour FREE messaging window!',
         ],
-        link: { label: 'View Billing & Wallet', url: '/settings/billing' },
+        link: { label: 'View Wallet', url: '/wallet' },
     },
 
     // 2. Broadcasts & Campaigns

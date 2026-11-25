@@ -21,6 +21,7 @@ import {
     Kanban,
     Shield,
     CreditCard,
+    Wallet,
     Terminal,
     History,
     CheckSquare,
@@ -76,7 +77,7 @@ export function AppSidebar() {
         }
 
         if (target === '/settings/organization') {
-            return current === '/settings/organization' || current === '/settings/profile' || current === '/settings/security';
+            return current.startsWith('/settings/');
         }
 
         return current === target;
@@ -484,18 +485,15 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     )}
 
-                    {/* Subscription & Messaging Wallet */}
+                    {/* Subscription and messaging credits have separate pages. */}
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isActive('/settings/billing')}
-                            className={isActive('/settings/billing') ? activeClass : inactiveClass}
-                            tooltip="Billing & Wallet"
-                        >
-                            <Link href="/settings/billing" prefetch>
-                                <CreditCard className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                <span>Billing &amp; Wallet</span>
-                            </Link>
+                        <SidebarMenuButton asChild isActive={isActive('/subscription')} className={isActive('/subscription') ? activeClass : inactiveClass} tooltip="Subscription">
+                            <Link href="/subscription" prefetch><CreditCard className="size-4" /><span>Subscription</span></Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={isActive('/wallet')} className={isActive('/wallet') ? activeClass : inactiveClass} tooltip="Wallet">
+                            <Link href="/wallet" prefetch><Wallet className="size-4 text-emerald-600 dark:text-emerald-400" /><span>Wallet</span></Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 

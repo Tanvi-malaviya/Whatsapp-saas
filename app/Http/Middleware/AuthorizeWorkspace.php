@@ -32,7 +32,7 @@ class AuthorizeWorkspace
         $path = $request->path();
         $module = match (true) {
             str_starts_with($path, 'management/team') => 'team',
-            str_starts_with($path, 'settings/billing') => 'billing',
+            str_starts_with($path, 'settings/billing'), $path === 'wallet', $path === 'subscription' => 'billing',
             str_starts_with($path, 'settings/organization') => 'organizations',
             str_starts_with($path, 'channels'), str_starts_with($path, 'whatsapp') => 'whatsapp_accounts',
             str_starts_with($path, 'inbox'), str_starts_with($path, 'chat') => 'inbox',

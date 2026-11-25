@@ -960,7 +960,7 @@ export default function CampaignsList({
                                         <AlertCircle className="size-3.5 shrink-0" />
                                         <span>Insufficient balance. Required: ₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}</span>
                                     </div>
-                                    <Link href="/settings/billing" className="font-bold underline ml-2">
+                                    <Link href="/wallet" className="font-bold underline ml-2">
                                         Recharge Wallet &rarr;
                                     </Link>
                                 </div>

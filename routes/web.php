@@ -1313,6 +1313,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('contacts/duplicates', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'duplicates'])->name('contacts.duplicates');
     Route::post('contacts/merge', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'merge'])->name('contacts.merge');
 
+    Route::get('wallet', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'wallet'])->name('wallet.index');
+    Route::get('subscription', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'subscription'])->name('subscription.index');
     Route::get('settings/billing', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'index'])->name('settings.billing');
     Route::post('settings/billing/checkout', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'checkout'])->middleware('throttle:10,1');
     Route::post('settings/billing/verify', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'verify']);
