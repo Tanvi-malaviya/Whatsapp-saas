@@ -45,10 +45,10 @@ class CommerceController extends Controller
         $defaultChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
 
         $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id")
-            ?: ($products->first()?->meta_catalog_id ?: '2228290221823928');
-        if ($savedCatalogId === '934553439246885_cat_01' || empty($savedCatalogId)) {
-            $savedCatalogId = '2228290221823928';
-            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '2228290221823928');
+            ?: ($products->first()?->meta_catalog_id ?: '4612710129017842');
+        if ($savedCatalogId === '934553439246885_cat_01' || $savedCatalogId === '2228290221823928' || empty($savedCatalogId)) {
+            $savedCatalogId = '4612710129017842';
+            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '4612710129017842');
         }
         $channelName = $defaultChannel?->name ?: 'WhatsApp Store';
         $channelPhone = $defaultChannel?->phone_number ?: '';
@@ -229,8 +229,8 @@ class CommerceController extends Controller
         $orgId = $this->resolveTenantId($request);
         $catalogId = trim($request->input('catalog_id') ?? \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id", ''));
         if (empty($catalogId) || !is_numeric($catalogId)) {
-            $catalogId = '2228290221823928';
-            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '2228290221823928');
+            $catalogId = '4612710129017842';
+            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '4612710129017842');
         }
 
         $channels = WhatsAppChannel::where('organization_id', $orgId)->get();
@@ -286,8 +286,8 @@ class CommerceController extends Controller
         $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
         $catalogId = trim($request->input('catalog_id') ?? \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id", ''));
         if (empty($catalogId) || !is_numeric($catalogId)) {
-            $catalogId = '2228290221823928';
-            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '2228290221823928');
+            $catalogId = '4612710129017842';
+            \Illuminate\Support\Facades\Cache::forever("org_{$orgId}_meta_catalog_id", '4612710129017842');
         }
 
         $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
@@ -456,9 +456,9 @@ class CommerceController extends Controller
                         \Illuminate\Support\Facades\Http::withToken($token)
                             ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
 
-                        $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id") ?: '2228290221823928';
-                        if ($savedCatalogId === '934553439246885_cat_01' || !is_numeric($savedCatalogId)) {
-                            $savedCatalogId = '2228290221823928';
+                        $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id") ?: '4612710129017842';
+                        if ($savedCatalogId === '934553439246885_cat_01' || $savedCatalogId === '2228290221823928' || !is_numeric($savedCatalogId)) {
+                            $savedCatalogId = '4612710129017842';
                         }
                         if ($channel->waba_id && !empty($savedCatalogId) && is_numeric($savedCatalogId)) {
                             \Illuminate\Support\Facades\Http::withToken($token)
@@ -484,10 +484,15 @@ class CommerceController extends Controller
                 }
 
                 $isNativeCatalog = false;
+                $nativeErrMsg = null;
+                $nativeErrCode = null;
                 if ($nativeRes->successful()) {
                     $sentSuccessfully = true;
                     $isNativeCatalog = true;
                 } else {
+                    $nativeErrBody = $nativeRes->json();
+                    $nativeErrMsg = $nativeErrBody['error']['message'] ?? $nativeRes->body();
+                    $nativeErrCode = $nativeErrBody['error']['code'] ?? null;
                     \Illuminate\Support\Facades\Log::warning('Meta native catalog message returned error: ' . $nativeRes->body());
 
                     // Fallback: Send rich catalog showcase cards with this channel's available products
@@ -572,9 +577,17 @@ class CommerceController extends Controller
             'status' => 'sent',
         ]);
 
-        $successMessage = ($isNativeCatalog ?? false)
-            ? "Official WhatsApp Catalog (with 'View catalog' button) delivered to +{$cleanPhone}!"
-            : "Catalog card sent to +{$cleanPhone}! (Note: To show the official green 'View catalog' button, please connect your Catalog in Meta WhatsApp Manager > Account tools > Catalog).";
+        if ($isNativeCatalog ?? false) {
+            $successMessage = "Official WhatsApp Catalog (with 'View catalog' button) delivered to +{$cleanPhone}!";
+        } else {
+            $note = "To show the official green 'View catalog' button, please connect your Catalog in Meta WhatsApp Manager > Account tools > Catalog.";
+            if (!empty($nativeErrCode) && (int)$nativeErrCode === 131047) {
+                $note = "Meta 24-Hour Rule: Customer must send 'Hi' to this WhatsApp number first to open the 24-hr session window for interactive buttons.";
+            } elseif (!empty($nativeErrMsg)) {
+                $note = "Meta API: {$nativeErrMsg}";
+            }
+            $successMessage = "Catalog card sent to +{$cleanPhone}! (Note: {$note})";
+        }
 
         return response()->json([
             'success' => true,
@@ -833,7 +846,7 @@ class CommerceController extends Controller
                 'category' => $item['category'],
                 'image_url' => $item['image_url'],
                 'is_available' => true,
-                'meta_catalog_id' => '2228290221823928',
+                'meta_catalog_id' => '4612710129017842',
             ]);
         }
     }
