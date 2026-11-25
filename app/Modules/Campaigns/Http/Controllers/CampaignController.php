@@ -383,7 +383,7 @@ class CampaignController extends Controller
                 ]);
             }
 
-            $campaign = DB::transaction(function () use ($org, $channel, $data, $payload, $recipients, $category, $estimatedCostPaise, $maxAllowed) {
+            [$campaign, $recipientIds] = DB::transaction(function () use ($org, $channel, $data, $payload, $recipients, $category, $estimatedCostPaise, $maxAllowed) {
                 $campaign = BroadcastCampaign::create([
                     'organization_id' => $org->id,
                     'channel_id' => $channel->id,
@@ -428,8 +428,6 @@ class CampaignController extends Controller
 
                 return [$campaign, $recipientIds];
             });
-
-            [$campaign, $recipientIds] = $result;
 
             // If small recipient list (<= 10 recipients), dispatch immediately so messages deliver in real-time without waiting for background worker!
             if (count($recipientIds) <= 10) {
