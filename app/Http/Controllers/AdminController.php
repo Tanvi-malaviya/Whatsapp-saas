@@ -369,6 +369,34 @@ class AdminController extends Controller
     }
 
     /**
+     * Credit Wallet Balance to any workspace manually
+     */
+    public function creditWallet(Request $request, string $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+        $org = Organization::findOrFail($id);
+        $validated = $request->validate([
+            'amount_rupees' => 'required|numeric|min:0.01|max:50000',
+            'type' => 'nullable|string|in:promotional,paid',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $amountPaise = (int) round($validated['amount_rupees'] * 100);
+        $balanceType = $validated['type'] ?? 'promotional';
+        $note = $validated['note'] ?: "Admin manual credit of ₹{$validated['amount_rupees']}";
+
+        app(\App\Services\WalletService::class)->credit(
+            org: $org,
+            amountPaise: $amountPaise,
+            type: 'manual_credit',
+            balanceType: $balanceType,
+            description: $note
+        );
+
+        return back()->with('success', "Credited ₹{$validated['amount_rupees']} to {$org->name}'s wallet successfully.");
+    }
+
+    /**
      * Global Master List of All WhatsApp Channels
      */
     public function channels(Request $request): Response

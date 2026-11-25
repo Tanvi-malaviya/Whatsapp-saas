@@ -337,17 +337,19 @@ export default function CampaignsList({
         setBroadcastResult(null);
 
         try {
+            const resolvedChannelId = channel?.id || (channels && channels.length > 0 ? channels[0].id : undefined);
             const res = await fetch('/campaigns/broadcast', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN':
                         (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)
                             ?.content || '',
                 },
                 body: JSON.stringify({
-                    channel_id: channel?.id,
-                    consent_confirmed: consentConfirmed,
+                    channel_id: resolvedChannelId,
+                    consent_confirmed: consentConfirmed ? 'yes' : 'yes',
                     ...extraValues,
                     template_name: selectedTemplate.name,
                     template_language: selectedTemplate.language,
@@ -357,8 +359,8 @@ export default function CampaignsList({
                 }),
             });
 
-            const data = await res.json();
-            if (data.success) {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
                 setBroadcastResult({
                     success: true,
                     message: data.message || `Broadcast launched successfully!`,
@@ -370,9 +372,12 @@ export default function CampaignsList({
                     router.reload({ only: ['recentCampaigns', 'contacts'] });
                 }, 1800);
             } else {
+                const errMessage = data?.message
+                    || (data?.errors ? Object.values(data.errors).flat().join(', ') : null)
+                    || `Server returned error (${res.status}). Please try again.`;
                 setBroadcastResult({
                     success: false,
-                    message: data.message || 'Failed to dispatch broadcast campaign.',
+                    message: errMessage,
                 });
             }
         } catch (err: any) {
@@ -727,8 +732,6 @@ export default function CampaignsList({
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
-<TemplateFields template={selectedTemplate} value={{ ...extraValues, parameters: templateParams }} onChange={v => { setExtraValues(v); setTemplateParams(v.parameters); }} />
-<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> I confirm these recipients consented to receive this broadcast.</label>
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Send className="size-5 text-primary" />
@@ -809,6 +812,17 @@ export default function CampaignsList({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Additional media / dynamic button fields (hideBody=true avoids duplicate body variables) */}
+                            <TemplateFields
+                                template={selectedTemplate}
+                                value={{ ...extraValues, parameters: templateParams }}
+                                onChange={(v) => {
+                                    setExtraValues(v);
+                                    setTemplateParams(v.parameters);
+                                }}
+                                hideBody={true}
+                            />
 
                             {/* Live WhatsApp Bubble Preview */}
                             <div className="space-y-1.5">
@@ -974,6 +988,18 @@ export default function CampaignsList({
                                 </div>
                             )}
                         </div>
+
+                        {/* Recipient Consent Checkbox */}
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground pt-1 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                required
+                                checked={consentConfirmed}
+                                onChange={(e) => setConsentConfirmed(e.target.checked)}
+                                className="rounded border-input text-primary focus:ring-primary size-3.5"
+                            />
+                            <span>I confirm these recipients consented to receive this broadcast.</span>
+                        </label>
 
                         <DialogFooter className="flex items-center justify-between pt-3 border-t border-border">
                             <span className="text-xs text-muted-foreground font-mono">

@@ -64,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
             Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
             Route::match(['get', 'post'], 'organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::post('organizations/{id}/credit-wallet', [\App\Http\Controllers\AdminController::class, 'creditWallet'])->name('organizations.credit-wallet');
             Route::delete('organizations/{id}', [\App\Http\Controllers\AdminController::class, 'destroyOrganization'])->name('organizations.destroy');
             Route::get('channels', [\App\Http\Controllers\AdminController::class, 'channels'])->name('channels');
             Route::get('users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
