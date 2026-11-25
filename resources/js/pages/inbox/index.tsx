@@ -87,6 +87,8 @@ type ChatThread = {
     assignedUserId?: number | null;
     channel: string; // e.g. "DukanHisab"
     lastMessage: string;
+    lastMessageStatus?: string | null;
+    lastMessageDirection?: string | null;
     time: string;
     unread: number;
     windowRemaining: string;
@@ -1111,6 +1113,15 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     {thread.channel}
                                                 </span>
                                                 <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
+                                                    {thread.lastMessageDirection === 'outbound' && (
+                                                        thread.lastMessageStatus === 'read' || thread.lastMessageStatus === 'seen' ? (
+                                                            <CheckCheck className="size-3 text-[#53bdeb] stroke-[2.5] shrink-0" />
+                                                        ) : thread.lastMessageStatus === 'delivered' ? (
+                                                            <CheckCheck className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        ) : (
+                                                            <Check className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        )
+                                                    )}
                                                     {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
                                                         <>
                                                             <FileText className="size-3 text-red-500 shrink-0 inline" />
@@ -1528,12 +1539,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             )}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
-                                                {msg.sender === 'agent' && (
+                                                {msg.sender !== 'contact' && (
                                                     <span
                                                         className="inline-flex items-center ml-0.5"
                                                         title={
-                                                            msg.status === 'read'
-                                                                ? 'Read'
+                                                            msg.status === 'read' || msg.status === 'seen'
+                                                                ? 'Read (Seen)'
                                                                 : msg.status === 'delivered'
                                                                     ? 'Delivered'
                                                                     : msg.status === 'failed'
@@ -1541,14 +1552,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                                         : 'Sent'
                                                         }
                                                     >
-                                                        {msg.status === 'read' ? (
-                                                            <CheckCheck className="size-3.5 text-[#53bdeb]" />
+                                                        {msg.status === 'read' || msg.status === 'seen' ? (
+                                                            <CheckCheck className="size-3.5 text-[#53bdeb] stroke-[2.5]" />
                                                         ) : msg.status === 'delivered' ? (
-                                                            <CheckCheck className="size-3.5 text-muted-foreground/70" />
+                                                            <CheckCheck className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         ) : msg.status === 'failed' ? (
                                                             <AlertCircle className="size-3.5 text-destructive" />
                                                         ) : (
-                                                            <Check className="size-3.5 text-muted-foreground/70" />
+                                                            <Check className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         )}
                                                     </span>
                                                 )}

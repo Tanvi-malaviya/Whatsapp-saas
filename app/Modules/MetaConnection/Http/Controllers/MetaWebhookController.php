@@ -65,7 +65,7 @@ class MetaWebhookController extends Controller
             $channel = WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $org->id)->where('phone_number_id', $record->phone_number_id)->where('status', 'connected')->first();
             $rank = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3];
             foreach ($value['statuses'] ?? [] as $status) {
-                $message = Message::where('wamid', $status['id'] ?? '')->first();
+                $message = Message::withoutGlobalScopes()->where('wamid', $status['id'] ?? '')->first();
                 if ($message && (($status['status'] ?? '') === 'failed' || ($rank[$status['status'] ?? ''] ?? 0) > ($rank[$message->status] ?? 0))) {
                     $meta = $message->metadata ?? [];
                     $errorReason = null;
@@ -140,6 +140,12 @@ class MetaWebhookController extends Controller
             $message = Message::create(['organization_id' => $org->id, 'conversation_id' => $conversation->id,
                 'direction' => 'inbound', 'sender_type' => 'contact', 'sender_id' => $phone,
                 'wamid' => $wamid, 'type' => $type, 'content' => $text, 'status' => 'received']);
+            // Mark all prior outbound messages as read since contact replied
+            Message::withoutGlobalScopes()
+                ->where('conversation_id', $conversation->id)
+                ->where('direction', 'outbound')
+                ->whereIn('status', ['queued', 'sent', 'delivered'])
+                ->update(['status' => 'read']);
             if ($type === 'order') { $this->order($org, $channel, $incoming, $conversation); }
             return [$conversation, $message, $first];
         });
