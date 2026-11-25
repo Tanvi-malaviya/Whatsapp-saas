@@ -46,7 +46,11 @@ class MetaWebhookController extends Controller
                 if (! $channel) { continue; }
                 $record = WebhookInbox::create(['provider' => 'meta', 'organization_id' => $channel->organization_id,
                     'phone_number_id' => $phoneId, 'payload' => $change, 'status' => 'pending']);
-                ProcessMetaWebhook::dispatch($record->id)->afterCommit();
+                try {
+                    $this->process($record->id);
+                } catch (\Throwable $e) {
+                    ProcessMetaWebhook::dispatch($record->id)->afterCommit();
+                }
             }
         }
         return response('EVENT_RECEIVED', 200);
@@ -89,6 +93,11 @@ class MetaWebhookController extends Controller
                     DB::table('campaign_recipients')->where('wamid', $status['id'])->update([
                         'status' => $status['status'],
                         'error' => $errorReason,
+                        'updated_at' => now(),
+                    ]);
+                } elseif (! empty($status['id'])) {
+                    DB::table('campaign_recipients')->where('wamid', $status['id'])->update([
+                        'status' => $status['status'],
                         'updated_at' => now(),
                     ]);
                 }
