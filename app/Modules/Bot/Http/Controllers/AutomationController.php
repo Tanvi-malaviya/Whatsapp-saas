@@ -39,7 +39,11 @@ class AutomationController extends Controller
     }
     public function agent()
     {
-        return Inertia::render('bot/ai-agent', ['settings' => TenantContext::get()->metadata['ai_agent'] ?? [], 'providerReady' => (bool) app(AiAgentService::class)->key(), 'initialDocs' => $this->documents()]);
+        return Inertia::render('bot/ai-agent', [
+            'settings' => TenantContext::get()->metadata['ai_agent'] ?? [],
+            'providerReady' => (bool) app(AiAgentService::class)->defaultKey(),
+            'initialDocs' => $this->documents(),
+        ]);
     }
     private function documents()
     {
