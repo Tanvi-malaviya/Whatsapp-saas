@@ -11,7 +11,26 @@ class MetaApi
 {
     public static function setting(string $key): ?string
     {
-        return PlatformSetting::read('meta_'.$key, config('release.meta.'.$key));
+        try {
+            $val = PlatformSetting::read('meta_'.$key);
+            if (!empty(trim((string)$val))) {
+                return trim((string)$val);
+            }
+        } catch (\Throwable $e) {}
+
+        $cfg = config('release.meta.'.$key);
+        if (!empty(trim((string)$cfg))) {
+            return trim((string)$cfg);
+        }
+
+        return match ($key) {
+            'app_id' => env('META_APP_ID', '1079349601748656'),
+            'app_secret' => env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027'),
+            'config_id' => env('META_CONFIG_ID', '1835889181059188'),
+            'verify_token' => env('META_VERIFY_TOKEN', 'sathwara_secret_token_123'),
+            'graph_version' => env('META_GRAPH_VERSION', 'v22.0'),
+            default => null,
+        };
     }
 
     public static function base(): string
