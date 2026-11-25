@@ -178,7 +178,7 @@ class CampaignController extends Controller
         }
 
         $contacts = $contactsQuery
-            ->select('id', 'contact_name', 'contact_phone', 'label')
+            ->select('id', 'contact_name', 'contact_phone', 'label', 'is_opted_in')
             ->orderBy('contact_name')
             ->get()
             ->map(fn ($c) => [
@@ -186,6 +186,7 @@ class CampaignController extends Controller
                 'name' => $c->contact_name ?: $c->contact_phone,
                 'phone' => $c->contact_phone,
                 'label' => $c->label ?: 'Contact',
+                'isOptedIn' => (bool) $c->is_opted_in,
             ])
             ->values()
             ->all();
@@ -367,7 +368,7 @@ class CampaignController extends Controller
 
             if ($blocked->isNotEmpty()) {
                 throw ValidationException::withMessages([
-                    'recipients' => 'Remove ' . $blocked->count() . ' opted-out recipients before sending.',
+                    'recipients' => 'Remove ' . $blocked->count() . ' opted-out recipient(s) (' . $blocked->implode(', ') . ') before sending.',
                 ]);
             }
 

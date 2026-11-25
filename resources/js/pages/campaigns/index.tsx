@@ -65,6 +65,7 @@ interface ContactItem {
     name: string;
     phone: string;
     label: string;
+    isOptedIn?: boolean;
 }
 
 interface CampaignHistoryItem {
@@ -298,7 +299,9 @@ export default function CampaignsList({
         if (selectedContactIds.length === contacts.length) {
             setSelectedContactIds([]);
         } else {
-            setSelectedContactIds(contacts.map((c) => c.id));
+            // Select opted-in contacts (or all if none opted-out)
+            const optInContacts = contacts.filter((c) => c.isOptedIn !== false);
+            setSelectedContactIds(optInContacts.map((c) => c.id));
         }
     };
 
@@ -1047,10 +1050,13 @@ export default function CampaignsList({
                                         ) : (
                                             contacts.map((c) => {
                                                 const isChecked = selectedContactIds.includes(c.id);
+                                                const isOptedOut = c.isOptedIn === false;
                                                 return (
                                                     <label
                                                         key={c.id}
-                                                        className="flex items-center justify-between p-1.5 rounded hover:bg-muted/50 cursor-pointer text-xs transition-colors"
+                                                        className={`flex items-center justify-between p-1.5 rounded cursor-pointer text-xs transition-colors ${
+                                                            isOptedOut ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'
+                                                        }`}
                                                     >
                                                         <div className="flex items-center gap-2">
                                                             <input
@@ -1066,9 +1072,20 @@ export default function CampaignsList({
                                                                 {c.phone}
                                                             </span>
                                                         </div>
-                                                        <Badge variant="outline" className="text-[9px] py-0 px-1.5">
-                                                            {c.label}
-                                                        </Badge>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {isOptedOut ? (
+                                                                <Badge variant="destructive" className="text-[9px] py-0 px-1.5 bg-destructive/15 text-destructive border-destructive/30">
+                                                                    Opted Out
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-emerald-600 border-emerald-500/30">
+                                                                    Opted In
+                                                                </Badge>
+                                                            )}
+                                                            <Badge variant="outline" className="text-[9px] py-0 px-1.5">
+                                                                {c.label}
+                                                            </Badge>
+                                                        </div>
                                                     </label>
                                                 );
                                             })
