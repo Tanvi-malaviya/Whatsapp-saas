@@ -273,7 +273,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/flows') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <GitBranch className="size-3.5 text-muted-foreground" />
-                                            <span>Bot Flows</span>
+                                            <span>WhatsApp Bot</span>
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -283,7 +283,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/auto-responder') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <Zap className="size-3.5 text-amber-500" />
-                                            <span>Auto Responder</span>
+                                            <span>WhatsApp Auto Responder</span>
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -293,7 +293,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/ai-agent') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
-                                            <span>AI Agent</span>
+                                            <span>WhatsApp AI Agent</span>
                                         </Link>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -320,7 +320,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/flows')}>
                                                 <Link href="/flows" prefetch className={isActive('/flows') ? activeClass : inactiveClass}>
                                                     <GitBranch className="size-3.5" />
-                                                    <span>Bot Flows</span>
+                                                    <span>WhatsApp Bot</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -329,7 +329,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/auto-responder')}>
                                                 <Link href="/auto-responder" prefetch className={isActive('/auto-responder') ? activeClass : inactiveClass}>
                                                     <Zap className="size-3.5 text-amber-500" />
-                                                    <span>Auto Responder</span>
+                                                    <span>WhatsApp Auto Responder</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -338,7 +338,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/ai-agent')}>
                                                 <Link href="/ai-agent" prefetch className={isActive('/ai-agent') ? activeClass : inactiveClass}>
                                                     <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
-                                                    <span>AI Agent</span>
+                                                    <span>WhatsApp AI Agent</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -508,6 +508,21 @@ export function AppSidebar() {
                             <Link href="/settings/organization" prefetch>
                                 <Settings className="size-4" />
                                 <span>Settings</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    {/* API & Developers */}
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isActive('/developers')}
+                            className={isActive('/developers') ? activeClass : inactiveClass}
+                            tooltip="API & Docs"
+                        >
+                            <Link href="/developers" prefetch>
+                                <Terminal className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                <span>API &amp; Docs</span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

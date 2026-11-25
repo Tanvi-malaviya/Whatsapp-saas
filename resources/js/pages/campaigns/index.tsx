@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import { TemplateFields, type TemplateValues } from '@/components/template-fields';
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -27,6 +28,9 @@ import {
     BarChart2,
     Wallet as WalletIcon,
     Megaphone,
+    Upload,
+    Download,
+    FileSpreadsheet,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -132,11 +136,14 @@ export default function CampaignsList({
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState<TemplateItem | null>(null);
     const [campaignName, setCampaignName] = useState(activeSegmentName ? `${activeSegmentName} Broadcast` : '');
-    const [audienceMode, setAudienceMode] = useState<'contacts' | 'manual'>('contacts');
+    const [audienceMode, setAudienceMode] = useState<'contacts' | 'manual' | 'upload'>('contacts');
     const [selectedContactIds, setSelectedContactIds] = useState<string[]>(
         contacts.map((c) => c.id)
     );
     const [manualPhoneInput, setManualPhoneInput] = useState('');
+    const [uploadedRecipients, setUploadedRecipients] = useState<{ phone: string; name: string }[]>([]);
+    const [uploadSummary, setUploadSummary] = useState<{ filename: string; valid: number; skipped: number } | null>(null);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const [templateParams, setTemplateParams] = useState<string[]>([]);
     const [extraValues, setExtraValues] = useState<TemplateValues>({ parameters: [] });
     const [consentConfirmed, setConsentConfirmed] = useState(false);
@@ -238,6 +245,9 @@ export default function CampaignsList({
         }
         setSelectedContactIds(contacts.map((c) => c.id));
         setManualPhoneInput('');
+        setUploadedRecipients([]);
+        setUploadSummary(null);
+        setUploadError(null);
         setBroadcastResult(null);
         setIsBroadcastOpen(true);
     };
@@ -292,12 +302,132 @@ export default function CampaignsList({
         }
     };
 
+    // Parse uploaded Excel (.xlsx/.xls) or CSV file
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploadError(null);
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                if (!firstSheetName) {
+                    setUploadError('The uploaded file has no sheets.');
+                    return;
+                }
+                const sheet = workbook.Sheets[firstSheetName];
+                const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+                if (rows.length === 0) {
+                    setUploadError('The uploaded file is empty.');
+                    return;
+                }
+
+                // Detect header row & column indices
+                let startRow = 0;
+                let phoneCol = 0;
+                let nameCol = 1;
+                const firstRowLower = rows[0].map((c) => String(c ?? '').trim().toLowerCase());
+                const phoneHeaderIdx = firstRowLower.findIndex((h) =>
+                    ['phone', 'mobile', 'number', 'whatsapp', 'phone_number', 'contact', 'tel'].some((k) => h.includes(k))
+                );
+                const nameHeaderIdx = firstRowLower.findIndex((h) =>
+                    ['name', 'customer', 'full_name', 'first_name'].some((k) => h.includes(k))
+                );
+
+                if (phoneHeaderIdx !== -1 || firstRowLower.some((h) => h === 'name' || h === 'phone')) {
+                    startRow = 1;
+                    phoneCol = phoneHeaderIdx !== -1 ? phoneHeaderIdx : 0;
+                    nameCol = nameHeaderIdx !== -1 ? nameHeaderIdx : (phoneCol === 0 ? 1 : 0);
+                }
+
+                const seen = new Set<string>();
+                const validList: { phone: string; name: string }[] = [];
+                let skipped = 0;
+
+                for (let i = startRow; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row || row.every((cell) => String(cell ?? '').trim() === '')) continue;
+
+                    const rawPhone = String(row[phoneCol] ?? '').trim();
+                    const digits = rawPhone.replace(/\D/g, '');
+                    if (digits.length < 8 || digits.length > 15) {
+                        skipped++;
+                        continue;
+                    }
+                    if (seen.has(digits)) {
+                        continue;
+                    }
+                    seen.add(digits);
+                    const rawName = String(row[nameCol] ?? '').trim();
+                    validList.push({
+                        phone: digits,
+                        name: rawName || 'Valued Customer',
+                    });
+                }
+
+                if (validList.length === 0) {
+                    setUploadError('No valid phone numbers found. Ensure phone numbers have 8-15 digits (with country code).');
+                    setUploadedRecipients([]);
+                    setUploadSummary(null);
+                    return;
+                }
+
+                setUploadedRecipients(validList);
+                setUploadSummary({
+                    filename: file.name,
+                    valid: validList.length,
+                    skipped,
+                });
+            } catch (err: any) {
+                setUploadError('Could not read file: ' + (err?.message || 'Invalid Excel/CSV format'));
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        e.target.value = '';
+    };
+
+    const downloadSampleExcel = () => {
+        const sampleRows = [
+            { phone: '919898696798', name: 'Bhavesh Sathwara' },
+            { phone: '917405402826', name: 'Aarav Patel' },
+        ];
+        const ws = XLSX.utils.json_to_sheet(sampleRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Recipients');
+        XLSX.writeFile(wb, 'broadcast_sample_numbers.xlsx');
+    };
+
+    const exportCampaignsExcel = () => {
+        const rows = recentCampaigns.map((c) => ({
+            'Campaign Name': c.name,
+            'Template': c.templateName,
+            'Language': c.templateLanguage,
+            'Category': c.category || 'MARKETING',
+            'Total Recipients': c.recipientsCount,
+            'Sent / Success': c.successCount,
+            'Failed': c.failedCount,
+            'Cost': c.costFormatted || '',
+            'Status': c.isPaused ? 'Paused' : c.status,
+            'Date': c.date,
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Campaigns');
+        XLSX.writeFile(wb, 'whatsapp_campaigns_summary.xlsx');
+    };
+
     // Calculate active recipients
     const getRecipientsList = () => {
         if (audienceMode === 'contacts') {
             return contacts
                 .filter((c) => selectedContactIds.includes(c.id))
                 .map((c) => ({ phone: c.phone, name: c.name }));
+        }
+        if (audienceMode === 'upload') {
+            return uploadedRecipients;
         }
         // Manual numbers parsed by line or comma
         const lines = manualPhoneInput
@@ -477,14 +607,26 @@ export default function CampaignsList({
                 {recentCampaigns.length > 0 && (
                     <Card className="border-border shadow-2xs">
                         <CardHeader className="pb-3 pt-3.5 px-4 sm:px-5">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                                 <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
                                     <Clock className="size-4 text-primary" />
                                     Recent Broadcast Activity
                                 </CardTitle>
-                                <span className="text-[11px] text-muted-foreground">
-                                    {recentCampaigns.length} campaigns dispatched
-                                </span>
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[11px] text-muted-foreground">
+                                        {recentCampaigns.length} campaigns dispatched
+                                    </span>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={exportCampaignsExcel}
+                                        className="h-7 text-[11px] gap-1.5 border-border"
+                                    >
+                                        <Download className="size-3.5 text-emerald-600" />
+                                        Export Excel
+                                    </Button>
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
@@ -828,7 +970,7 @@ export default function CampaignsList({
 
                             {/* Audience / Recipients Selection */}
                             <div className="space-y-2">
-                                <div className="flex items-center justify-between">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
                                     <Label className="text-xs font-semibold flex items-center gap-1.5">
                                         <Users className="size-3.5 text-primary" />
                                         Target Audience ({recipientsCount} selected)
@@ -844,6 +986,18 @@ export default function CampaignsList({
                                             }`}
                                         >
                                             CRM Contacts ({contacts.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAudienceMode('upload')}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                                                audienceMode === 'upload'
+                                                    ? 'bg-card text-foreground shadow-2xs font-semibold'
+                                                    : 'text-muted-foreground hover:text-foreground'
+                                            }`}
+                                        >
+                                            <FileSpreadsheet className="size-3 text-emerald-600" />
+                                            Excel / CSV ({uploadedRecipients.length})
                                         </button>
                                         <button
                                             type="button"
@@ -877,7 +1031,7 @@ export default function CampaignsList({
                                         </div>
                                         {contacts.length === 0 ? (
                                             <div className="py-4 text-center text-xs text-muted-foreground">
-                                                No contacts in this workspace yet. Switch to "Paste Numbers" tab to broadcast to any phone number.
+                                                No contacts in this workspace yet. Switch to "Excel / CSV" or "Paste Numbers" tab to broadcast to any phone number.
                                             </div>
                                         ) : (
                                             contacts.map((c) => {
@@ -907,6 +1061,73 @@ export default function CampaignsList({
                                                     </label>
                                                 );
                                             })
+                                        )}
+                                    </div>
+                                ) : audienceMode === 'upload' ? (
+                                    <div className="rounded-lg border border-dashed border-border bg-card p-3 space-y-2.5">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-colors">
+                                                <Upload className="size-3.5" />
+                                                <span>Upload Excel (.xlsx / .xls) or CSV</span>
+                                                <input
+                                                    type="file"
+                                                    accept=".xlsx,.xls,.csv"
+                                                    onChange={handleFileUpload}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={downloadSampleExcel}
+                                                className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold hover:underline"
+                                            >
+                                                <Download className="size-3" />
+                                                Download Sample Excel
+                                            </button>
+                                        </div>
+
+                                        {uploadError && (
+                                            <div className="p-2 rounded bg-destructive/10 border border-destructive/20 text-[11px] text-destructive">
+                                                {uploadError}
+                                            </div>
+                                        )}
+
+                                        {uploadSummary ? (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between text-[11px] bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md text-emerald-700 dark:text-emerald-300">
+                                                    <span>
+                                                        <strong>{uploadSummary.filename}</strong>: {uploadSummary.valid} valid numbers loaded
+                                                        {uploadSummary.skipped > 0 ? ` (${uploadSummary.skipped} invalid skipped)` : ''}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setUploadedRecipients([]);
+                                                            setUploadSummary(null);
+                                                        }}
+                                                        className="text-[10px] underline ml-2"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                                <div className="max-h-28 overflow-y-auto divide-y divide-border/50 border border-border rounded-md text-[11px]">
+                                                    {uploadedRecipients.slice(0, 20).map((r, idx) => (
+                                                        <div key={idx} className="px-2.5 py-1 flex items-center justify-between">
+                                                            <span className="font-mono text-foreground">{r.phone}</span>
+                                                            <span className="text-muted-foreground truncate max-w-[160px]">{r.name}</span>
+                                                        </div>
+                                                    ))}
+                                                    {uploadedRecipients.length > 20 && (
+                                                        <div className="px-2.5 py-1 text-center text-[10px] text-muted-foreground">
+                                                            +{uploadedRecipients.length - 20} more numbers ready
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Upload a spreadsheet with a <code>phone</code> column (include country code, e.g. 919898696798) and optional <code>name</code> column.
+                                            </p>
                                         )}
                                     </div>
                                 ) : (
@@ -1149,7 +1370,21 @@ export default function CampaignsList({
 
                             {/* Recent Recipients Log */}
                             <div className="space-y-1.5 pt-2">
-                                <div className="font-semibold text-foreground text-xs">Recent Recipients Activity</div>
+                                <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-foreground text-xs">Recent Recipients Activity</span>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        asChild
+                                        className="h-7 text-[11px] gap-1.5"
+                                    >
+                                        <a href={`/campaigns/${analyticsData.campaign.id}/export`}>
+                                            <Download className="size-3 text-emerald-600" />
+                                            Export Full Report (CSV)
+                                        </a>
+                                    </Button>
+                                </div>
                                 <div className="max-h-40 overflow-y-auto divide-y divide-border/60 border border-border rounded-lg">
                                     {analyticsData.recipients?.slice(0, 20).map((r: any) => (
                                         <div key={r.id} className="p-2 flex items-center justify-between text-[11px]">

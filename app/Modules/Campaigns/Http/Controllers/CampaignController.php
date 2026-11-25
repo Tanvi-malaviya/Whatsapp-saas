@@ -571,4 +571,36 @@ class CampaignController extends Controller
             'recipients' => $recipients,
         ]);
     }
+
+    public function export(Request $request, string $id)
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        $rows = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id')
+            ->get(['phone', 'name', 'status', 'error', 'wamid', 'updated_at']);
+
+        $filename = 'campaign-' . \Illuminate\Support\Str::slug($campaign->name ?: $campaign->id) . '-report.csv';
+
+        return response()->streamDownload(function () use ($rows, $campaign) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['Campaign', 'Phone', 'Name', 'Status', 'Error', 'WAMID', 'Updated At']);
+            foreach ($rows as $row) {
+                fputcsv($out, [
+                    $campaign->name,
+                    $row->phone,
+                    $row->name ?? '',
+                    $row->status,
+                    $row->error ?? '',
+                    $row->wamid ?? '',
+                    $row->updated_at ?? '',
+                ]);
+            }
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
 }

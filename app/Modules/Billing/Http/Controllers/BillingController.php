@@ -107,6 +107,7 @@ class BillingController extends Controller
         $data = $request->validate([
             'plan' => 'required|in:annual,starter,growth,business_pro,enterprise,wallet_recharge',
             'amount_paise' => 'nullable|integer|min:100',
+            'amount_rupees' => 'nullable|numeric|min:1',
             'messages_count' => 'nullable|integer|min:200',
             'category' => 'nullable|string|in:MARKETING,UTILITY,AUTHENTICATION',
         ]);
@@ -127,22 +128,34 @@ class BillingController extends Controller
         $description = '';
 
         if ($data['plan'] === 'wallet_recharge') {
-            $minMessages = max(200, (int) PlatformSetting::read('min_message_purchase_count', 200));
-            $msgCount = (int) ($data['messages_count'] ?? 0);
-            if ($msgCount > 0 && $msgCount < $minMessages) {
-                abort(422, "Minimum message purchase is {$minMessages} messages.");
-            }
+            $minRechargePaise = max(20000, (int) PlatformSetting::read('min_wallet_recharge_paise', 20000));
 
-            if ($msgCount > 0) {
+            if (! empty($data['amount_rupees'])) {
+                $amountPaise = (int) round(((float) $data['amount_rupees']) * 100);
+                if ($amountPaise < $minRechargePaise) {
+                    $minRupees = number_format($minRechargePaise / 100, 0);
+                    abort(422, "Minimum wallet recharge amount is ₹{$minRupees}.");
+                }
+                $description = 'Wallet Recharge: ₹' . number_format($amountPaise / 100, 2);
+            } elseif (! empty($data['amount_paise'])) {
+                $amountPaise = (int) $data['amount_paise'];
+                if ($amountPaise < $minRechargePaise) {
+                    $minRupees = number_format($minRechargePaise / 100, 0);
+                    abort(422, "Minimum wallet recharge amount is ₹{$minRupees}.");
+                }
+                $description = 'Wallet Recharge: ₹' . number_format($amountPaise / 100, 2);
+            } elseif (! empty($data['messages_count'])) {
+                $minMessages = max(200, (int) PlatformSetting::read('min_message_purchase_count', 200));
+                $msgCount = (int) $data['messages_count'];
+                if ($msgCount < $minMessages) {
+                    abort(422, "Minimum message purchase is {$minMessages} messages.");
+                }
                 $category = $data['category'] ?? 'MARKETING';
                 $rate = $this->walletService->getRatePerMessage($category);
                 $amountPaise = max(100, $msgCount * $rate);
-                $description = "Wallet Recharge: {$msgCount} {$category} messages (₹" . number_format($amountPaise / 100, 2) . ")";
-            } elseif (! empty($data['amount_paise'])) {
-                $amountPaise = (int) $data['amount_paise'];
                 $description = "Wallet Recharge: ₹" . number_format($amountPaise / 100, 2);
             } else {
-                abort(422, 'Please specify messages count or recharge amount.');
+                abort(422, 'Please specify a recharge amount (minimum ₹200).');
             }
         } elseif ($data['plan'] === 'annual') {
             $amountPaise = (int) PlatformSetting::read('subscription_annual_price_paise', 999900);

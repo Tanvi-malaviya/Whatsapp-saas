@@ -82,27 +82,26 @@ export default function Wallet({
     invoices,
     checkoutReady,
 }: Props) {
-    const minimum = Math.max(200, rates.min_messages);
+    const minAmountRupees = 200;
     const [open, setOpen] = useState(false);
-    const [category, setCategory] =
-        useState<(typeof categories)[number]['value']>('MARKETING');
-    const [count, setCount] = useState(String(minimum));
+    const [amountInput, setAmountInput] = useState(String(500));
     const [copied, setCopied] = useState(false);
     const { busy, notice, setNotice, checkout } = useCheckout(() =>
         setOpen(false),
     );
-    const quantity = Number(count);
-    const validQuantity = Number.isSafeInteger(quantity) && quantity >= minimum;
-    const rate =
-        rates[categories.find((item) => item.value === category)!.rate];
-    const total = validQuantity ? Math.max(100, quantity * rate) : 0;
-    const presets = [
-        ...new Set(
-            [minimum, 500, 1000, 2500, 5000].filter(
-                (value) => value >= minimum,
-            ),
-        ),
-    ];
+    const parsedAmount = Number(amountInput);
+    const validAmount =
+        Number.isFinite(parsedAmount) && parsedAmount >= minAmountRupees;
+    const totalPaise = validAmount ? Math.round(parsedAmount * 100) : 0;
+    const approxMarketing =
+        validAmount && rates.marketing > 0
+            ? Math.floor(totalPaise / rates.marketing)
+            : 0;
+    const approxUtility =
+        validAmount && rates.utility > 0
+            ? Math.floor(totalPaise / rates.utility)
+            : 0;
+    const presets = [200, 500, 1000, 2500, 5000];
 
     const copyReferral = async () => {
         try {
@@ -289,10 +288,11 @@ export default function Wallet({
                                 </div>
                             ))}
                             <p className="border-t pt-4 text-xs leading-5 text-muted-foreground">
-                                Minimum purchase:{' '}
-                                {minimum.toLocaleString('en-IN')} messages.
-                                Promotional credits are used before paid
-                                credits.
+                                Minimum wallet recharge: ₹{minAmountRupees}.
+                                Balance is automatically deducted per message
+                                based on whether the sent template is Marketing,
+                                Utility, or Authentication. Promotional credits
+                                are used before paid credits.
                             </p>
                         </CardContent>
                     </Card>
@@ -383,8 +383,9 @@ export default function Wallet({
                     <DialogHeader>
                         <DialogTitle>Recharge messaging wallet</DialogTitle>
                         <DialogDescription>
-                            Choose a message category and quantity to add
-                            prepaid credits.
+                            Add prepaid balance to your wallet. Charges are
+                            deducted automatically per message based on the
+                            template category (Marketing or Utility).
                         </DialogDescription>
                     </DialogHeader>
                     <BillingNotice
@@ -394,63 +395,50 @@ export default function Wallet({
                         className="min-w-0 space-y-5"
                         onSubmit={(event) => {
                             event.preventDefault();
-                            if (validQuantity && checkoutReady)
+                            if (validAmount && checkoutReady)
                                 void checkout({
                                     plan: 'wallet_recharge',
-                                    messages_count: quantity,
-                                    category,
+                                    amount_rupees: parsedAmount,
                                 });
                         }}
                     >
-                        <fieldset disabled={busy} className="space-y-2">
-                            <legend className="mb-2 text-sm font-medium">
-                                Message category
-                            </legend>
-                            <div className="grid gap-2 min-[420px]:grid-cols-3">
-                                {categories.map((item) => (
-                                    <label
-                                        key={item.value}
-                                        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border p-3 text-xs ${category === item.value ? 'border-emerald-600 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300' : 'border-border'}`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="category"
-                                            value={item.value}
-                                            checked={category === item.value}
-                                            onChange={() =>
-                                                setCategory(item.value)
-                                            }
-                                            className="accent-emerald-700"
-                                        />
-                                        {item.label}
-                                    </label>
-                                ))}
-                            </div>
-                        </fieldset>
                         <div className="space-y-2">
-                            <Label htmlFor="message-count">
-                                Number of messages
+                            <Label htmlFor="recharge-amount">
+                                Recharge Amount (₹)
                             </Label>
                             <Input
-                                id="message-count"
+                                id="recharge-amount"
                                 type="number"
-                                min={minimum}
-                                step={1}
+                                min={minAmountRupees}
+                                step="1"
                                 required
-                                value={count}
+                                value={amountInput}
                                 onChange={(event) =>
-                                    setCount(event.target.value)
+                                    setAmountInput(event.target.value)
                                 }
+                                onBlur={() => {
+                                    if (
+                                        amountInput.trim() !== '' &&
+                                        (!Number.isFinite(parsedAmount) ||
+                                            parsedAmount < minAmountRupees)
+                                    ) {
+                                        setAmountInput(String(minAmountRupees));
+                                    }
+                                }}
                                 disabled={busy}
-                                aria-describedby="message-minimum"
+                                aria-describedby="amount-minimum"
                                 className="h-11 text-base md:text-sm"
+                                placeholder="Enter amount (min ₹200)"
                             />
                             <p
-                                id="message-minimum"
-                                className="text-xs text-muted-foreground"
+                                id="amount-minimum"
+                                className={`text-xs ${
+                                    amountInput.trim() !== '' && !validAmount
+                                        ? 'font-medium text-destructive'
+                                        : 'text-muted-foreground'
+                                }`}
                             >
-                                Minimum {minimum.toLocaleString('en-IN')}{' '}
-                                messages.
+                                Minimum recharge is ₹{minAmountRupees}.
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 {presets.map((preset) => (
@@ -459,38 +447,48 @@ export default function Wallet({
                                         type="button"
                                         disabled={busy}
                                         variant={
-                                            quantity === preset
+                                            parsedAmount === preset
                                                 ? 'secondary'
                                                 : 'outline'
                                         }
                                         size="sm"
-                                        onClick={() => setCount(String(preset))}
+                                        onClick={() =>
+                                            setAmountInput(String(preset))
+                                        }
                                     >
-                                        {preset.toLocaleString('en-IN')}
+                                        + ₹{preset.toLocaleString('en-IN')}
                                     </Button>
                                 ))}
                             </div>
                         </div>
-                        <div className="space-y-3 rounded-xl bg-muted/60 p-4 text-sm">
-                            <div className="flex flex-wrap justify-between gap-2 text-muted-foreground">
-                                <span>Rate per message</span>
-                                <span>{money(rate)}</span>
+                        <div className="space-y-2.5 rounded-xl bg-muted/60 p-4 text-sm">
+                            <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                                <span>Approx. Marketing msgs ({money(rates.marketing)}/msg)</span>
+                                <span className="font-medium text-foreground tabular-nums">
+                                    ~{approxMarketing.toLocaleString('en-IN')} msgs
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+                                <span>Approx. Utility msgs ({money(rates.utility)}/msg)</span>
+                                <span className="font-medium text-foreground tabular-nums">
+                                    ~{approxUtility.toLocaleString('en-IN')} msgs
+                                </span>
                             </div>
                             <div className="flex flex-wrap justify-between gap-2 border-t pt-3 font-semibold">
                                 <span>Total recharge</span>
                                 <span className="tabular-nums">
-                                    {money(total)}
+                                    {money(totalPaise)}
                                 </span>
                             </div>
                         </div>
                         <Button
                             type="submit"
-                            disabled={busy || !validQuantity || !checkoutReady}
+                            disabled={busy || !validAmount || !checkoutReady}
                             className="h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800"
                         >
                             {busy
                                 ? 'Processing payment…'
-                                : `Pay ${money(total)} via Razorpay`}
+                                : `Pay ${money(totalPaise)} via Razorpay`}
                         </Button>
                     </form>
                 </DialogContent>

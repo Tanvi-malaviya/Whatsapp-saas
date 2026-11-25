@@ -288,17 +288,17 @@ export default function AutoResponder({ settings = {}, initialRules = [] }: { se
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        Auto Responder &amp; Keyword Rules
+                                        WhatsApp Auto Responder
                                     </h2>
                                     <Badge
                                         variant="outline"
                                         className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
                                     >
-                                        24/7 Automation Engine
+                                        Keyword Replies
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Set up instant welcome greetings, business hours away messages, and keyword trigger responses for your WhatsApp number.
+                                    Automatically reply when a customer types specific words (e.g. Hi, Fees, Price) along with welcome &amp; away messages.
                                 </p>
                             </div>
                         </div>

@@ -635,14 +635,14 @@ export default function BotFlows({ flows = [] }: Props) {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        WhatsApp Bot Flows
+                                        WhatsApp Bot
                                     </h2>
                                     <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                        Interactive Menus
+                                        Interactive Selection Menus
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Automated 24/7 WhatsApp menu bots. Greets customers and provides instant answers to frequent questions.
+                                    Create predefined selection menus (1, 2, 3...) so customers can pick an option and receive instant automated answers.
                                 </p>
                             </div>
                         </div>

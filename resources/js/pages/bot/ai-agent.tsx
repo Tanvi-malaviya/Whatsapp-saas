@@ -38,7 +38,7 @@ const DEFAULT_SYSTEM_PROMPT =
 
 export default function AIAgent({ settings = {}, initialDocs = [], providerReady = false }: { settings?: any; initialDocs?: KnowledgeDoc[]; providerReady?: boolean }) {
     const [agentEnabled, setAgentEnabled] = useState<boolean>(settings.enabled ?? false);
-    const [provider, setProvider] = useState<'openai' | 'anthropic'>(settings.provider ?? 'openai');
+    const [provider, setProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'groq'>(settings.provider ?? 'openai');
     const [customerApiKey, setCustomerApiKey] = useState<string>(settings.api_key ?? '');
     const [model, setModel] = useState<string>(settings.model ?? 'gpt-4o-mini');
     const [primaryLanguage, setPrimaryLanguage] = useState<string>(settings.language ?? 'multilingual');
@@ -102,7 +102,7 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
 
     return (
         <>
-            <Head title="AI WhatsApp Agent - Sathwara InfoTech" />
+            <Head title="WhatsApp AI Agent - PDF & Document Knowledge Base" />
 
             {/* Hidden file input for real uploads */}
             <input
@@ -133,17 +133,17 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                             <div>
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        AI Agent
+                                        WhatsApp AI Agent
                                     </h2>
                                     <Badge
                                         variant="outline"
                                         className="text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
                                     >
-                                        Business knowledge
+                                        PDF &amp; Document Knowledge Base
                                     </Badge>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                    Train an intelligent conversational AI to understand questions and reply naturally using your company guidelines.
+                                    Upload your product brochures, pricing PDFs, or company documents. Connect OpenAI, Claude, Gemini, or Groq using your own API key—the AI searches your files to reply and handles out-of-bounds questions politely.
                                 </p>
                             </div>
                         </div>
@@ -277,7 +277,7 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                                             type="button"
                                             onClick={() => {
                                                 setProvider('openai');
-                                                if (model.includes('claude')) setModel('gpt-4o-mini');
+                                                setModel('gpt-4o-mini');
                                             }}
                                             className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
                                                 provider === 'openai'
@@ -293,7 +293,7 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                                             type="button"
                                             onClick={() => {
                                                 setProvider('anthropic');
-                                                if (model.includes('gpt')) setModel('claude-3-5-sonnet-20241022');
+                                                setModel('claude-3-5-sonnet-20241022');
                                             }}
                                             className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
                                                 provider === 'anthropic'
@@ -302,28 +302,80 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                                             }`}
                                         >
                                             <div className="text-xs">Anthropic (Claude)</div>
-                                            <div className="text-[10px] text-muted-foreground font-normal">Claude 3.5 Sonnet, Haiku</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal">Claude 3.5 / 3.7 Sonnet</div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setProvider('gemini');
+                                                setModel('gemini-2.5-flash');
+                                            }}
+                                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                                                provider === 'gemini'
+                                                    ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300 font-bold'
+                                                    : 'border-border bg-card hover:bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="text-xs">Google (Gemini)</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal">Gemini 2.5 Flash, 1.5 Pro</div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setProvider('groq');
+                                                setModel('llama-3.3-70b-versatile');
+                                            }}
+                                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                                                provider === 'groq'
+                                                    ? 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold'
+                                                    : 'border-border bg-card hover:bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="text-xs">Groq (Llama 3)</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal">Ultra-fast Llama 3.3 70B</div>
                                         </button>
                                     </div>
 
                                     <div className="space-y-1 pt-1">
                                         <div className="flex items-center justify-between">
                                             <Label className="text-[11px] font-semibold text-foreground">
-                                                {provider === 'anthropic' ? 'Anthropic API Key' : 'OpenAI API Key'}
+                                                {provider === 'anthropic'
+                                                    ? 'Anthropic Claude API Key'
+                                                    : provider === 'gemini'
+                                                    ? 'Google Gemini API Key'
+                                                    : provider === 'groq'
+                                                    ? 'Groq API Key'
+                                                    : 'OpenAI API Key'}
                                             </Label>
                                             <span className="text-[10px] text-muted-foreground font-mono">
-                                                {provider === 'anthropic' ? 'sk-ant-...' : 'sk-proj-...'}
+                                                {provider === 'anthropic'
+                                                    ? 'sk-ant-...'
+                                                    : provider === 'gemini'
+                                                    ? 'AIza...'
+                                                    : provider === 'groq'
+                                                    ? 'gsk_...'
+                                                    : 'sk-proj-...'}
                                             </span>
                                         </div>
                                         <Input
                                             type="password"
                                             value={customerApiKey}
                                             onChange={(e) => setCustomerApiKey(e.target.value)}
-                                            placeholder={provider === 'anthropic' ? 'Paste your Anthropic API Key (sk-ant-...)' : 'Paste your OpenAI API Key (sk-...)'}
+                                            placeholder={`Paste your ${
+                                                provider === 'anthropic'
+                                                    ? 'Anthropic'
+                                                    : provider === 'gemini'
+                                                    ? 'Google Gemini'
+                                                    : provider === 'groq'
+                                                    ? 'Groq'
+                                                    : 'OpenAI'
+                                            } API Key`}
                                             className="h-8 text-xs font-mono"
                                         />
                                         <p className="text-[10px] text-muted-foreground">
-                                            Your personal key is stored encrypted and used only for your workspace's bot replies.
+                                            Your personal key is stored encrypted and used only for your workspace&apos;s bot replies.
                                         </p>
                                     </div>
                                 </div>
@@ -336,15 +388,31 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                                             onChange={(e) => setModel(e.target.value)}
                                             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
                                         >
-                                            {provider === 'openai' ? (
+                                            {provider === 'openai' && (
                                                 <>
                                                     <option value="gpt-4o-mini">GPT-4o Mini (Fast &amp; Cost-Effective)</option>
                                                     <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                                                    <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
                                                 </>
-                                            ) : (
+                                            )}
+                                            {provider === 'anthropic' && (
                                                 <>
                                                     <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Highest Quality)</option>
+                                                    <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Latest)</option>
                                                     <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Lightning Fast)</option>
+                                                </>
+                                            )}
+                                            {provider === 'gemini' && (
+                                                <>
+                                                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast &amp; Smart)</option>
+                                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Complex Docs)</option>
+                                                </>
+                                            )}
+                                            {provider === 'groq' && (
+                                                <>
+                                                    <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile</option>
+                                                    <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant</option>
                                                 </>
                                             )}
                                         </select>
