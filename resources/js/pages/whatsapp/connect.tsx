@@ -118,46 +118,38 @@ export default function WhatsAppConnect({
         <>
             <Head title="WhatsApp Channels & Phone Number Management" />
 
-            <div className="flex flex-1 flex-col gap-4 p-3.5 sm:p-5 max-w-5xl mx-auto w-full font-sans">
-                {/* Header Row: Clean, without redundant back button */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-3.5">
-                    <div className="flex items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shadow-2xs">
-                            <Smartphone className="size-5" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-                                    WhatsApp Channels
-                                </h1>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    Meta Cloud API
+            <div className="flex flex-1 flex-col gap-4 p-3.5 sm:p-5 max-w-5xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Meta Cloud API
+                            </span>
+                            {maxChannels <= 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                                    <Sparkles className="size-2.5" /> Unlimited Numbers Plan
                                 </span>
-                                {maxChannels <= 0 ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
-                                        <Sparkles className="size-2.5" /> Unlimited Numbers Plan
-                                    </span>
-                                ) : (
-                                    <span
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                                            canAddMore
-                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                                : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold'
-                                        }`}
-                                    >
-                                        Allowance: {channelsCount}/{maxChannels} Used {maxChannels === 1 ? '(Single Number)' : `(Max ${maxChannels})`}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Connect numbers directly with Meta to manage live messaging, broadcasts, and automated bot flows.
-                            </p>
+                            ) : (
+                                <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                                        canAddMore
+                                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold'
+                                    }`}
+                                >
+                                    Allowance: {channelsCount}/{maxChannels} Used {maxChannels === 1 ? '(Single Number)' : `(Max ${maxChannels})`}
+                                </span>
+                            )}
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            Connect numbers directly with Meta to manage live messaging, broadcasts, and automated bot flows.
+                        </p>
                     </div>
 
                     {/* Primary Action: Connect via Meta Only (No Manual Entry) */}
-                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             type="button"
                             size="sm"
@@ -231,12 +223,12 @@ export default function WhatsAppConnect({
                                     key={ch.id}
                                     className="border-border/80 bg-card overflow-hidden shadow-2xs hover:border-primary/40 hover:shadow-xs transition-all rounded-2xl"
                                 >
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4">
-                                        <div className="flex items-start gap-3.5">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4 min-w-0">
+                                        <div className="flex items-start gap-3.5 min-w-0">
                                             <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-bold mt-0.5">
                                                 <Smartphone className="size-5" />
                                             </div>
-                                            <div className="space-y-1 min-w-0">
+                                            <div className="space-y-1 min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-1.5">
                                                     <h3 className="text-sm font-bold text-foreground truncate">
                                                         {ch.name}
@@ -279,7 +271,7 @@ export default function WhatsAppConnect({
                                         </div>
 
                                         {/* Actions Per Active Channel: Sync from Meta, Details & Test, Make Default, Disconnect */}
-                                        <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-auto pt-2 md:pt-0 border-t md:border-t-0 border-border/60">
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto pt-2.5 md:pt-0 border-t md:border-t-0 border-border/60">
                                             {/* Sync from Meta inside Active Channel */}
                                             <Button
                                                 type="button"

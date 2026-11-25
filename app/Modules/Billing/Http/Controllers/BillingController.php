@@ -23,65 +23,66 @@ class BillingController extends Controller
         protected ReferralService $referralService
     ) {}
 
-    public function index(Request $request)
+    public function index()
+    {
+        return redirect()->route('subscription.index');
+    }
+
+    private function checkoutReady(): bool
+    {
+        return (bool) (PlatformSetting::read('razorpay_key_id', config('release.razorpay.key_id'))
+            && PlatformSetting::read('razorpay_key_secret', config('release.razorpay.key_secret')));
+    }
+
+    public function subscription()
     {
         $org = TenantContext::get();
-        $user = $request->user();
         $plans = config('release.plans');
+        $plans['annual']['amount_paise'] = (int) PlatformSetting::read('subscription_annual_price_paise', 999900);
+        $plans['annual']['validity_days'] = (int) PlatformSetting::read('subscription_validity_days', 365);
 
-        // Dynamic annual price from admin platform settings
-        $annualPricePaise = (int) PlatformSetting::read('subscription_annual_price_paise', 999900);
-        $annualValidityDays = (int) PlatformSetting::read('subscription_validity_days', 365);
-        if (isset($plans['annual'])) {
-            $plans['annual']['amount_paise'] = $annualPricePaise;
-            $plans['annual']['validity_days'] = $annualValidityDays;
-        }
-
-        $wallet = $this->walletService->getOrCreateWallet($org);
-        $walletBalances = $this->walletService->getBalances($org);
-        $walletTransactions = $wallet->transactions()->take(50)->get()->map(fn ($tx) => [
-            'id' => $tx->id,
-            'type' => $tx->type,
-            'amount_paise' => $tx->amount_paise,
-            'amount_formatted' => ($tx->amount_paise >= 0 ? '+' : '-') . '₹' . number_format(abs($tx->amount_paise) / 100, 2),
-            'balance_type' => $tx->balance_type,
-            'description' => $tx->description,
-            'reference_id' => $tx->reference_id,
-            'date' => $tx->created_at->format('d M Y, h:i A'),
-        ]);
-
-        $referralStats = $this->referralService->getReferralStats($user);
-
-        $rates = [
-            'marketing' => (int) PlatformSetting::read('meta_rate_marketing_paise', 88),
-            'utility' => (int) PlatformSetting::read('meta_rate_utility_paise', 14),
-            'authentication' => (int) PlatformSetting::read('meta_rate_authentication_paise', 14),
-            'min_messages' => (int) PlatformSetting::read('min_message_purchase_count', 500),
-        ];
-
-        return Inertia::render('settings/billing', [
+        return Inertia::render('subscription/index', [
             'currentPlan' => $org->subscription_plan ?: 'annual',
-            'subscriptionStatus' => $org->status ?: 'active',
+            'subscriptionStatus' => $org->status === 'active' && ! $org->isSubscriptionActive() ? 'expired' : $org->status,
             'subscriptionExpiresAt' => $org->subscription_expires_at?->toIso8601String(),
             'daysUntilExpiry' => $org->daysUntilExpiry(),
             'plans' => $plans,
-            'wallet' => [
-                ...$walletBalances,
-                'transactions' => $walletTransactions,
-            ],
-            'rates' => $rates,
-            'referral' => $referralStats,
             'usage' => [
                 'messages' => Message::where('direction', 'outbound')->where('created_at', '>=', now()->startOfMonth())->count(),
                 'channels' => $org->channels()->count(),
                 'seats' => $org->users()->count(),
             ],
-            'limits' => [
-                'channels' => $org->getMaxChannels(),
+            'limits' => ['channels' => $org->getMaxChannels()],
+            'invoices' => BillingInvoice::where('plan', '!=', 'wallet_recharge')->latest()->limit(50)->get(),
+            'profile' => [...($org->metadata['billing_profile'] ?? []), 'name' => $org->name, 'billing_email' => $org->billing_email],
+            'checkoutReady' => $this->checkoutReady(),
+        ]);
+    }
+
+    public function wallet(Request $request)
+    {
+        $org = TenantContext::get();
+        $wallet = $this->walletService->getOrCreateWallet($org);
+        $transactions = $wallet->transactions()->take(50)->get()->map(fn ($tx) => [
+            'id' => $tx->id,
+            'type' => $tx->type,
+            'amount_formatted' => ($tx->amount_paise >= 0 ? '+' : '-').'₹'.number_format(abs($tx->amount_paise) / 100, 2),
+            'balance_type' => $tx->balance_type,
+            'description' => $tx->description,
+            'date' => $tx->created_at->format('d M Y, h:i A'),
+        ]);
+
+        return Inertia::render('wallet/index', [
+            'wallet' => [...$this->walletService->getBalances($org), 'transactions' => $transactions],
+            'rates' => [
+                'marketing' => (int) PlatformSetting::read('meta_rate_marketing_paise', 88),
+                'utility' => (int) PlatformSetting::read('meta_rate_utility_paise', 14),
+                'authentication' => (int) PlatformSetting::read('meta_rate_authentication_paise', 14),
+                'min_messages' => max(200, (int) PlatformSetting::read('min_message_purchase_count', 200)),
             ],
-            'invoices' => BillingInvoice::latest()->limit(50)->get(),
-            'profile' => ['name' => $org->name, 'billing_email' => $org->billing_email, ...($org->metadata['billing_profile'] ?? [])],
-            'checkoutReady' => (bool) (PlatformSetting::read('razorpay_key_id', config('release.razorpay.key_id')) && PlatformSetting::read('razorpay_key_secret', config('release.razorpay.key_secret'))),
+            'referral' => $this->referralService->getReferralStats($request->user()),
+            'invoices' => BillingInvoice::where('plan', 'wallet_recharge')->latest()->limit(50)->get(),
+            'checkoutReady' => $this->checkoutReady(),
         ]);
     }
 
@@ -106,6 +107,7 @@ class BillingController extends Controller
         $data = $request->validate([
             'plan' => 'required|in:annual,starter,growth,business_pro,enterprise,wallet_recharge',
             'amount_paise' => 'nullable|integer|min:100',
+            'amount_rupees' => 'nullable|numeric|min:1',
             'messages_count' => 'nullable|integer|min:200',
             'category' => 'nullable|string|in:MARKETING,UTILITY,AUTHENTICATION',
         ]);
@@ -126,26 +128,39 @@ class BillingController extends Controller
         $description = '';
 
         if ($data['plan'] === 'wallet_recharge') {
-            $minMessages = (int) PlatformSetting::read('min_message_purchase_count', 200);
-            $msgCount = (int) ($data['messages_count'] ?? 0);
-            if ($msgCount > 0 && $msgCount < $minMessages) {
-                abort(422, "Minimum message purchase is {$minMessages} messages.");
-            }
+            $minRechargePaise = max(20000, (int) PlatformSetting::read('min_wallet_recharge_paise', 20000));
 
-            if ($msgCount > 0) {
+            if (! empty($data['amount_rupees'])) {
+                $amountPaise = (int) round(((float) $data['amount_rupees']) * 100);
+                if ($amountPaise < $minRechargePaise) {
+                    $minRupees = number_format($minRechargePaise / 100, 0);
+                    abort(422, "Minimum wallet recharge amount is ₹{$minRupees}.");
+                }
+                $description = 'Wallet Recharge: ₹' . number_format($amountPaise / 100, 2);
+            } elseif (! empty($data['amount_paise'])) {
+                $amountPaise = (int) $data['amount_paise'];
+                if ($amountPaise < $minRechargePaise) {
+                    $minRupees = number_format($minRechargePaise / 100, 0);
+                    abort(422, "Minimum wallet recharge amount is ₹{$minRupees}.");
+                }
+                $description = 'Wallet Recharge: ₹' . number_format($amountPaise / 100, 2);
+            } elseif (! empty($data['messages_count'])) {
+                $minMessages = max(200, (int) PlatformSetting::read('min_message_purchase_count', 200));
+                $msgCount = (int) $data['messages_count'];
+                if ($msgCount < $minMessages) {
+                    abort(422, "Minimum message purchase is {$minMessages} messages.");
+                }
                 $category = $data['category'] ?? 'MARKETING';
                 $rate = $this->walletService->getRatePerMessage($category);
                 $amountPaise = max(100, $msgCount * $rate);
-                $description = "Wallet Recharge: {$msgCount} {$category} messages (₹" . number_format($amountPaise / 100, 2) . ")";
-            } elseif (! empty($data['amount_paise'])) {
-                $amountPaise = (int) $data['amount_paise'];
                 $description = "Wallet Recharge: ₹" . number_format($amountPaise / 100, 2);
             } else {
-                abort(422, 'Please specify messages count or recharge amount.');
+                abort(422, 'Please specify a recharge amount (minimum ₹200).');
             }
         } elseif ($data['plan'] === 'annual') {
             $amountPaise = (int) PlatformSetting::read('subscription_annual_price_paise', 999900);
-            $description = 'Annual Business Plan (365 Days) — ₹' . number_format($amountPaise / 100, 2);
+            $validityDays = (int) PlatformSetting::read('subscription_validity_days', 365);
+            $description = 'Annual Business Plan ('.$validityDays.' Days) — ₹'.number_format($amountPaise / 100, 2);
         } else {
             $planConfig = config('release.plans.' . $data['plan']);
             $amountPaise = (int) ($planConfig['amount_paise'] ?? 99900);

@@ -113,22 +113,14 @@ export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
         <>
             <Head title="Chat Stages Pipeline - Sathwara InfoTech" />
 
-            <div className="flex-1 flex flex-col gap-6 p-4 sm:p-6 lg:p-6 min-w-0">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                <Kanban className="size-5 text-[#47b672]" />
-                                Chat Lead Stages &amp; Pipeline
-                            </h2>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            Track every WhatsApp prospect from initial message to paid conversion.
-                        </p>
-                    </div>
+            <div className="flex-1 flex flex-col gap-5 p-4 sm:p-6 min-w-0">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                        Track every WhatsApp prospect from initial message to paid conversion.
+                    </p>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                         <div className="rounded-lg border border-border bg-card px-3.5 py-1.5 text-xs text-right shadow-2xs">
                             <span className="text-muted-foreground text-[10px] block font-medium">Active Leads</span>
                             <span className="font-bold text-foreground text-sm">{activeLeadsCount} Leads</span>

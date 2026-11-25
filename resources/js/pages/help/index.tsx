@@ -66,15 +66,15 @@ const DOCS_DATA: DocItem[] = [
         content:
             'Messaging on WhatsApp Cloud API uses pay-as-you-go wallet deduction based on transparent official Meta conversation rates with ZERO hidden markup.',
         steps: [
-            'Go to Billing & Wallet in the sidebar.',
-            'Click "Recharge Wallet". Enter any amount (minimum ₹200).',
+            'Go to Wallet in the sidebar.',
+            'Click "Recharge wallet" and choose a message category and quantity. The configured minimum purchase is shown in the dialog.',
             'Complete instant recharge via Razorpay / UPI / Card / NetBanking.',
             'Utility messages (OTPs, order tracking, alerts) cost ~₹0.14 per message.',
             'Marketing messages (promotions, offers, product launches) cost ~₹0.88 per message.',
             'Inbound customer customer-care conversations initiated by users have a 24-hour service window.',
             'Click-to-WhatsApp Ads (CTWA) provide an official 72-hour FREE messaging window!',
         ],
-        link: { label: 'View Billing & Wallet', url: '/settings/billing' },
+        link: { label: 'View Wallet', url: '/wallet' },
     },
 
     // 2. Broadcasts & Campaigns
@@ -254,30 +254,18 @@ export default function HelpDocsPage() {
             <Head title="Help & Documentation - Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 min-w-0 max-w-[1400px] mx-auto w-full">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-xl bg-primary/10 text-primary">
-                                <BookOpen className="size-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                                        Help &amp; Knowledge Center
-                                    </h1>
-                                    <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
-                                        Docs &amp; Guides
-                                    </Badge>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                    Everything you need to know about setting up WhatsApp Cloud API, broadcasts, 24/7 bot flows, and ads.
-                                </p>
-                            </div>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
+                            Docs &amp; Guides
+                        </Badge>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Everything you need to know about setting up WhatsApp Cloud API, broadcasts, 24/7 bot flows, and ads.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             variant="outline"
                             size="sm"

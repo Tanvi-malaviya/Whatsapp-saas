@@ -21,6 +21,7 @@ import {
     Kanban,
     Shield,
     CreditCard,
+    Wallet,
     Terminal,
     History,
     CheckSquare,
@@ -76,7 +77,7 @@ export function AppSidebar() {
         }
 
         if (target === '/settings/organization') {
-            return current === '/settings/organization' || current === '/settings/profile' || current === '/settings/security';
+            return current.startsWith('/settings/');
         }
 
         return current === target;
@@ -241,7 +242,7 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Automation (Submenu: Flows, Auto Responder, AI Agent) */}
+                    {/* WhatsApp Automation (Submenu: Bot, Auto Responder, AI Agent) */}
                     <SidebarMenuItem>
                         {isCollapsed ? (
                             <DropdownMenu>
@@ -249,10 +250,10 @@ export function AppSidebar() {
                                     <SidebarMenuButton
                                         isActive={isInsideAutomation}
                                         className={isInsideAutomation ? activeClass : inactiveClass}
-                                        tooltip="Automation"
+                                        tooltip="WhatsApp Automation"
                                     >
                                         <Zap className="size-4 text-amber-500" />
-                                        <span>Automation</span>
+                                        <span>WhatsApp Automation</span>
                                     </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
@@ -262,7 +263,7 @@ export function AppSidebar() {
                                     className="w-48 p-1.5 shadow-xl rounded-xl border border-border bg-popover z-50 animate-in fade-in-0 zoom-in-95"
                                 >
                                     <DropdownMenuLabel className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                        Automation
+                                        WhatsApp Automation
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator className="my-1" />
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -272,7 +273,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/flows') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <GitBranch className="size-3.5 text-muted-foreground" />
-                                            <span>Bot Flows</span>
+                                            <span>Bot</span>
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -302,10 +303,10 @@ export function AppSidebar() {
                                 <SidebarMenuButton
                                     onClick={() => setAutomationOpen(!automationOpen)}
                                     className={isInsideAutomation ? 'font-semibold text-foreground' : inactiveClass}
-                                    tooltip="Automation"
+                                    tooltip="WhatsApp Automation"
                                 >
                                     <Zap className="size-4 text-amber-500" />
-                                    <span className="flex-1">Automation</span>
+                                    <span className="flex-1 truncate">WhatsApp Automation</span>
                                     {automationOpen ? (
                                         <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                                     ) : (
@@ -319,7 +320,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/flows')}>
                                                 <Link href="/flows" prefetch className={isActive('/flows') ? activeClass : inactiveClass}>
                                                     <GitBranch className="size-3.5" />
-                                                    <span>Bot Flows</span>
+                                                    <span>Bot</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -484,18 +485,15 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                     )}
 
-                    {/* Subscription & Messaging Wallet */}
+                    {/* Subscription and messaging credits have separate pages. */}
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isActive('/settings/billing')}
-                            className={isActive('/settings/billing') ? activeClass : inactiveClass}
-                            tooltip="Billing & Wallet"
-                        >
-                            <Link href="/settings/billing" prefetch>
-                                <CreditCard className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                <span>Billing &amp; Wallet</span>
-                            </Link>
+                        <SidebarMenuButton asChild isActive={isActive('/subscription')} className={isActive('/subscription') ? activeClass : inactiveClass} tooltip="Subscription">
+                            <Link href="/subscription" prefetch><CreditCard className="size-4" /><span>Subscription</span></Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild isActive={isActive('/wallet')} className={isActive('/wallet') ? activeClass : inactiveClass} tooltip="Wallet">
+                            <Link href="/wallet" prefetch><Wallet className="size-4 text-emerald-600 dark:text-emerald-400" /><span>Wallet</span></Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
@@ -510,6 +508,21 @@ export function AppSidebar() {
                             <Link href="/settings/organization" prefetch>
                                 <Settings className="size-4" />
                                 <span>Settings</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    {/* API & Developers */}
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isActive('/developers')}
+                            className={isActive('/developers') ? activeClass : inactiveClass}
+                            tooltip="API & Docs"
+                        >
+                            <Link href="/developers" prefetch>
+                                <Terminal className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                <span>API &amp; Docs</span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

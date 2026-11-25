@@ -353,28 +353,22 @@ export default function ContactSegments({
             )}
 
             <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6 min-w-0">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                <Layers className="size-5 text-[#47b672]" />
-                                Contact Segments &amp; Audiences
-                            </h2>
-                            <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                {segments.length} Audiences
-                            </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
+                            {segments.length} Audiences
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
                             Target specific groups of real contacts based on opt-in consent, pipeline stage, and activity.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             size="sm"
                             onClick={() => setIsCreateOpen(true)}
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs shadow-xs"
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-9 px-3.5 shadow-xs"
                         >
                             <Plus className="size-3.5 mr-1.5" />
                             Create Segment

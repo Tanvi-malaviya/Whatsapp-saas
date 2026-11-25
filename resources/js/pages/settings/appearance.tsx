@@ -10,7 +10,7 @@ export default function Appearance() {
 
             <h1 className="sr-only">Appearance settings</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
                 <Heading
                     variant="small"
                     title="Appearance settings"

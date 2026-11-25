@@ -52,7 +52,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('whatsapp/channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('whatsapp.channels.show');
 
     // Developers redirect to System Logs
-    Route::redirect('developers', '/insights/system-logs')->name('developers.index');
+    Route::get('developers', [\App\Http\Controllers\DeveloperController::class, 'index'])->name('developers.index');
+    Route::post('developers/keys', [\App\Http\Controllers\DeveloperController::class, 'storeKey'])->name('developers.keys.store');
+    Route::delete('developers/keys/{id}', [\App\Http\Controllers\DeveloperController::class, 'revokeKey'])->name('developers.keys.destroy');
+    Route::post('developers/send-test', [\App\Http\Controllers\DeveloperController::class, 'sendTest'])->name('developers.send-test');
 
     // Super Admin: Dedicated Standalone Portal (Strict Auth & SuperAdmin Protection)
     Route::prefix('admin')
@@ -469,6 +472,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('campaigns/{id}/resume', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'resume'])->name('campaigns.resume');
     Route::post('campaigns/{id}/cancel', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'cancel'])->name('campaigns.cancel');
     Route::get('campaigns/{id}/analytics', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'analytics'])->name('campaigns.analytics');
+    Route::get('campaigns/{id}/export', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'export'])->name('campaigns.export');
     Route::get('campaigns/ads', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
@@ -1314,6 +1318,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('contacts/duplicates', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'duplicates'])->name('contacts.duplicates');
     Route::post('contacts/merge', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'merge'])->name('contacts.merge');
 
+    Route::get('wallet', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'wallet'])->name('wallet.index');
+    Route::get('subscription', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'subscription'])->name('subscription.index');
     Route::get('settings/billing', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'index'])->name('settings.billing');
     Route::post('settings/billing/checkout', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'checkout'])->middleware('throttle:10,1');
     Route::post('settings/billing/verify', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'verify']);

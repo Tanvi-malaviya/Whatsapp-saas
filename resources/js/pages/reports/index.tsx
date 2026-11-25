@@ -135,31 +135,19 @@ export default function ReportsIndex({
         <>
             <Head title="Meta Template Cost & Analytics | WhatsApp SaaS" />
 
-            <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4 md:p-5 max-w-7xl mx-auto w-full font-sans">
-                {/* 1. Sleek Compact Header */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-border/60">
+            <div className="flex flex-1 flex-col gap-3 p-3 sm:p-4 md:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* 1. Sleek Compact Action Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-border/60">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-muted-foreground px-1.5 hover:text-foreground">
-                            <Link href="/dashboard">
-                                <ArrowLeft className="size-3.5 mr-1" />
-                                Dashboard
-                            </Link>
-                        </Button>
-                        <span className="text-muted-foreground/40 text-xs">/</span>
-                        <div className="flex items-center gap-1.5">
-                            <div className="flex size-6 items-center justify-center rounded-md bg-primary text-white">
-                                <BarChart3 className="size-3.5" />
-                            </div>
-                            <h1 className="text-sm sm:text-base font-bold text-foreground tracking-tight">
-                                Meta Template Cost &amp; Analytics
-                            </h1>
-                        </div>
                         <Badge variant="outline" className="text-[10px] h-5 py-0 px-1.5 font-medium border-primary/30 bg-primary/5 text-primary">
                             Meta India Pricing
                         </Badge>
+                        <span className="text-xs text-muted-foreground">
+                            Live template delivery analytics &amp; per-category Meta conversation cost breakdown
+                        </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         {last_synced_at && (
                             <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                                 <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -189,7 +177,7 @@ export default function ReportsIndex({
                 </div>
 
                 {/* 2. Top Summary KPI Cards (Ultra-Compact Sleek Row) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     {/* Total Meta Cost */}
                     <div className="border border-border/60 bg-card/90 hover:bg-card px-2.5 py-1.5 rounded-md flex items-center justify-between transition-colors shadow-none">
                         <div className="min-w-0">
@@ -295,8 +283,8 @@ export default function ReportsIndex({
                             </div>
 
                             {/* Graphical Bars (Compact Height: h-28) */}
-                            <div className="pt-3 pb-1">
-                                <div className="grid grid-cols-7 gap-2 sm:gap-4 items-end h-28 border-b border-border/50 pb-1.5">
+                            <div className="pt-3 pb-1 overflow-x-auto">
+                                <div className="grid grid-cols-7 gap-1.5 sm:gap-4 items-end h-28 border-b border-border/50 pb-1.5 min-w-[300px]">
                                     {dailyTrends.map((d, i) => {
                                         const dayTotal = d.marketingCost + d.utilityCost;
                                         const marketingHeightPct = Math.round((d.marketingCost / maxDailyCost) * 100);
@@ -443,7 +431,7 @@ export default function ReportsIndex({
 
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[600px] text-left text-xs">
                                 <thead className="bg-muted/40 border-b border-border/50 text-muted-foreground uppercase text-[9px] font-bold tracking-wider">
                                     <tr>
                                         <th className="px-3.5 py-2">Campaign</th>

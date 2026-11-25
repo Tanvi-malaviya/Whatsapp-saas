@@ -400,30 +400,20 @@ export default function CommerceIndex({
         <>
             <Head title="WhatsApp Commerce & Meta Catalog | WhatsApp SaaS" />
 
-            <div className="flex flex-col gap-2.5 p-3 md:p-4 max-w-7xl mx-auto w-full font-sans">
-                {/* 1. Ultra-Compact Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2.5">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-                            <ShoppingBag className="size-4" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-none">
-                                    WhatsApp Catalog &amp; Commerce
-                                </h1>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    Meta Connected
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5 hidden sm:block">
-                                Showcase catalog products and accept direct customer cart orders in WhatsApp chat.
-                            </p>
-                        </div>
+            <div className="flex flex-col gap-3 p-3.5 md:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Meta Connected
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                            Showcase catalog products and accept direct customer cart orders in WhatsApp chat.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
                         {catalogMeta.share_catalog_url && (
                             <Button
                                 variant="outline"
@@ -716,7 +706,7 @@ export default function CommerceIndex({
                         {viewMode === 'table' ? (
                             <Card className="border-border/80 bg-card overflow-hidden shadow-2xs">
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-xs">
+                                    <table className="w-full min-w-[640px] text-left text-xs">
                                         <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground uppercase text-[10px] font-semibold">
                                             <tr>
                                                 <th className="px-3.5 py-2">Product</th>
@@ -958,7 +948,7 @@ export default function CommerceIndex({
                             </CardHeader>
                             <CardContent className="p-0">
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-xs">
+                                    <table className="w-full min-w-[640px] text-left text-xs">
                                         <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground uppercase text-[10px] font-semibold">
                                             <tr>
                                                 <th className="px-3 py-2">Order ID</th>
@@ -1081,8 +1071,8 @@ export default function CommerceIndex({
                             </div>
 
                             {/* Right: Realistic WhatsApp Mobile Phone Simulation */}
-                            <div className="md:col-span-6 flex justify-center">
-                                <div className="w-[320px] rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
+                            <div className="md:col-span-6 flex justify-center min-w-0">
+                                <div className="w-full max-w-[320px] rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
                                     {/* Phone Screen Header */}
                                     <div className="rounded-[28px] overflow-hidden bg-[#0b141a] text-white text-xs">
                                         <div className="bg-[#202c33] p-3 flex items-center gap-2.5 border-b border-neutral-700">
@@ -1284,9 +1274,9 @@ export default function CommerceIndex({
                     </TabsContent>
                 </Tabs>
 
-                {/* 4. Add Product Modal - Ultra-Compact & Without Scroll */}
+                {/* 4. Add Product Modal - Mobile & Desktop Responsive */}
                 <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                    <DialogContent className="sm:max-w-xl p-4 gap-2.5 overflow-hidden max-h-[90vh]">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl p-4 gap-2.5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-1.5 text-foreground">
                                 <Plus className="size-4 text-primary" />
@@ -1298,7 +1288,7 @@ export default function CommerceIndex({
                         </DialogHeader>
 
                         <form onSubmit={handleCreateProduct} className="space-y-2.5 pt-0.5">
-                            <div className="grid grid-cols-2 gap-3 items-start">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                                 {/* Left Column: Details */}
                                 <div className="space-y-2">
                                     {channels.length > 0 && (
@@ -1512,7 +1502,7 @@ export default function CommerceIndex({
 
                 {/* 5. WhatsApp Product Preview Modal - Compact & Native */}
                 <Dialog open={isPreviewModalOpen} onOpenChange={setIsPreviewModalOpen}>
-                    <DialogContent className="sm:max-w-[320px] p-0 overflow-hidden border-border/80 shadow-2xl rounded-2xl gap-0">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-[320px] p-0 overflow-hidden border-border/80 shadow-2xl rounded-2xl gap-0">
                         {/* WhatsApp Brand Header */}
                         <div className="bg-[#075E54] text-white px-3.5 py-2.5 flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1606,7 +1596,7 @@ export default function CommerceIndex({
                         if (!open && !isDeleting) setDeletingProduct(null);
                     }}
                 >
-                    <DialogContent className="sm:max-w-[360px] p-5">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-[360px] p-5">
                         <DialogHeader className="items-center text-center">
                             <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/50 mb-2 text-red-600">
                                 <Trash2 className="size-5" />
@@ -1645,7 +1635,7 @@ export default function CommerceIndex({
 
                 {/* 7. Send Catalog to Customer Modal */}
                 <Dialog open={isSendCatalogModalOpen} onOpenChange={setIsSendCatalogModalOpen}>
-                    <DialogContent className="sm:max-w-md p-5 overflow-hidden">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md p-5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                 <Send className="size-4 text-primary" />
@@ -1733,7 +1723,7 @@ export default function CommerceIndex({
 
                 {/* 8. Send Single Product to Customer Modal */}
                 <Dialog open={isSendProductModalOpen} onOpenChange={setIsSendProductModalOpen}>
-                    <DialogContent className="sm:max-w-md p-5 overflow-hidden">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md p-5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                 <Send className="size-4 text-blue-600" />

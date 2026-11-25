@@ -97,30 +97,20 @@ export default function SystemLogsPage({
         <>
             <Head title="System & Webhook Logs | Sathwara InfoTech" />
 
-            <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6 max-w-7xl mx-auto w-full font-sans">
-                {/* Header Banner */}
-                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-600 to-blue-600 text-white shadow-md">
-                                <Terminal className="size-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-                                        System &amp; Webhook Logs
-                                    </h1>
-                                    <Badge variant="outline" className="text-xs font-bold border-cyan-500/40 text-cyan-600 dark:text-cyan-400">
-                                        Audit Inspector
-                                    </Badge>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                    Inspect incoming Meta WhatsApp Cloud API webhooks, diagnose payloads, and track workspace audit logs.
-                                </p>
-                            </div>
+            <div className="flex flex-1 flex-col gap-4 p-3.5 sm:p-6 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* Compact Action Toolbar */}
+                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <Badge variant="outline" className="text-xs font-bold border-cyan-500/40 text-cyan-600 dark:text-cyan-400">
+                                Audit Inspector
+                            </Badge>
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                                Inspect incoming Meta WhatsApp Cloud API webhooks, diagnose payloads, and track workspace audit logs.
+                            </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -144,25 +134,25 @@ export default function SystemLogsPage({
                 </div>
 
                 {/* Tabs */}
-                <Tabs defaultValue="webhooks" className="w-full">
-                    <TabsList className="grid grid-cols-2 w-full max-w-md h-10 p-1 bg-muted/60 border border-border/60">
-                        <TabsTrigger value="webhooks" className="text-xs font-semibold gap-1.5">
-                            <Webhook className="size-3.5" />
-                            Meta Webhook Inbox ({webhooks.length})
+                <Tabs defaultValue="webhooks" className="w-full min-w-0">
+                    <TabsList className="grid grid-cols-1 sm:grid-cols-2 w-full max-w-md h-auto sm:h-10 p-1 bg-muted/60 border border-border/60 gap-1 sm:gap-0">
+                        <TabsTrigger value="webhooks" className="text-xs font-semibold gap-1.5 py-2 sm:py-1">
+                            <Webhook className="size-3.5 shrink-0" />
+                            <span className="truncate">Meta Webhook Inbox ({webhooks.length})</span>
                         </TabsTrigger>
-                        <TabsTrigger value="audit" className="text-xs font-semibold gap-1.5">
-                            <ShieldAlert className="size-3.5" />
-                            Security Audit Trail ({auditLogs.length})
+                        <TabsTrigger value="audit" className="text-xs font-semibold gap-1.5 py-2 sm:py-1">
+                            <ShieldAlert className="size-3.5 shrink-0" />
+                            <span className="truncate">Security Audit Trail ({auditLogs.length})</span>
                         </TabsTrigger>
                     </TabsList>
 
                     {/* TAB 1: WEBHOOK INBOX */}
-                    <TabsContent value="webhooks" className="space-y-4 mt-4">
+                    <TabsContent value="webhooks" className="space-y-4 mt-4 min-w-0">
                         <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
                             {/* Filter Bar */}
                             <div className="p-3.5 border-b border-border/60 bg-muted/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-foreground">Filter by Status:</span>
+                                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                    <span className="text-xs font-bold text-foreground w-full sm:w-auto">Filter by Status:</span>
                                     {['all', 'processed', 'failed', 'pending'].map((st) => (
                                         <button
                                             key={st}
@@ -388,7 +378,7 @@ export default function SystemLogsPage({
 
                 {/* Dialog: Raw Webhook JSON Payload */}
                 <Dialog open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
-                    <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[85vh] flex flex-col">
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center justify-between">
                                 <span className="flex items-center gap-2">
@@ -426,7 +416,7 @@ export default function SystemLogsPage({
 
                 {/* Dialog: Audit Log Diff */}
                 <Dialog open={isAuditOpen} onOpenChange={setIsAuditOpen}>
-                    <DialogContent className="sm:max-w-xl max-h-[80vh] flex flex-col">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[80vh] flex flex-col">
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <ShieldAlert className="size-4 text-primary" />
