@@ -1231,7 +1231,7 @@ export default function CommerceIndex({
                                     <div className="flex items-center gap-2 pt-1">
                                         <Input
                                             readOnly
-                                            value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv` : '/commerce/catalog-feed.csv'}
+                                            value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}` : '/commerce/catalog-feed.csv'}
                                             className="h-8 text-[11px] font-mono bg-background"
                                         />
                                         <Button
@@ -1240,7 +1240,8 @@ export default function CommerceIndex({
                                             size="sm"
                                             onClick={() => {
                                                 if (typeof window !== 'undefined') {
-                                                    navigator.clipboard.writeText(`${window.location.origin}/commerce/catalog-feed.csv`);
+                                                    const url = `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}`;
+                                                    navigator.clipboard.writeText(url);
                                                     alert('Copied Feed URL to clipboard!');
                                                 }
                                             }}

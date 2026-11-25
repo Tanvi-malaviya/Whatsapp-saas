@@ -420,9 +420,35 @@ class CommerceController extends Controller
     public function exportMetaCsv(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         $orgId = $this->resolveTenantId($request);
-        $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
-        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
-            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+        $channelId = $request->query('channel_id');
+        $phoneQuery = $request->query('phone');
+
+        $channel = null;
+        if (!empty($channelId)) {
+            $channel = WhatsAppChannel::where('id', $channelId)->first();
+            if ($channel) {
+                $orgId = $channel->organization_id;
+            }
+        } elseif (!empty($phoneQuery)) {
+            $cleanQueryPhone = preg_replace('/[^0-9]/', '', $phoneQuery);
+            $channel = WhatsAppChannel::where('phone_number', 'LIKE', "%{$cleanQueryPhone}%")->first();
+            if ($channel) {
+                $orgId = $channel->organization_id;
+            }
+        }
+
+        if (!$channel) {
+            $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+                ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+        }
+
+        $productsQuery = CommerceProduct::where('organization_id', $orgId)->where('is_available', true);
+        if ($channel) {
+            $productsQuery->where(function ($q) use ($channel) {
+                $q->where('channel_id', $channel->id)->orWhereNull('channel_id');
+            });
+        }
+        $products = $productsQuery->get();
 
         $senderPhone = preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531');
         $storeLink = "https://wa.me/{$senderPhone}";
@@ -484,9 +510,35 @@ class CommerceController extends Controller
             $orgId = $org?->id;
         }
 
-        $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
-        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
-            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+        $channelId = $request->query('channel_id');
+        $phoneQuery = $request->query('phone');
+
+        $channel = null;
+        if (!empty($channelId)) {
+            $channel = WhatsAppChannel::where('id', $channelId)->first();
+            if ($channel) {
+                $orgId = $channel->organization_id;
+            }
+        } elseif (!empty($phoneQuery)) {
+            $cleanQueryPhone = preg_replace('/[^0-9]/', '', $phoneQuery);
+            $channel = WhatsAppChannel::where('phone_number', 'LIKE', "%{$cleanQueryPhone}%")->first();
+            if ($channel) {
+                $orgId = $channel->organization_id;
+            }
+        }
+
+        if (!$channel) {
+            $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+                ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+        }
+
+        $productsQuery = CommerceProduct::where('organization_id', $orgId)->where('is_available', true);
+        if ($channel) {
+            $productsQuery->where(function ($q) use ($channel) {
+                $q->where('channel_id', $channel->id)->orWhereNull('channel_id');
+            });
+        }
+        $products = $productsQuery->get();
 
         $senderPhone = preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531');
         $storeLink = "https://wa.me/{$senderPhone}";
