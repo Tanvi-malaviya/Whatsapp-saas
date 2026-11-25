@@ -1,8 +1,8 @@
 import { Input } from '@/components/ui/input';
 export type TemplateValues = { parameters: string[]; header_url?: string; header_parameters?: string[]; button_parameters?: Record<string, string> };
-export function TemplateFields({ template, value, onChange }: { template: any; value: TemplateValues; onChange: (value: TemplateValues) => void }) {
+export function TemplateFields({ template, value, onChange, hideBody = false }: { template: any; value: TemplateValues; onChange: (value: TemplateValues) => void; hideBody?: boolean }) {
     if (!template) return null;
-    const body = [...new Set<string>((template.body ?? '').match(/\{\{\d+\}\}/g) ?? [])];
+    const body = hideBody ? [] : [...new Set<string>((template.body ?? '').match(/\{\{\d+\}\}/g) ?? [])];
     const header = template.components?.find((c: any) => c.type === 'HEADER');
     const headerVars = [...new Set<string>((header?.text ?? '').match(/\{\{\d+\}\}/g) ?? [])];
     const format = template.headerFormat ?? header?.format;

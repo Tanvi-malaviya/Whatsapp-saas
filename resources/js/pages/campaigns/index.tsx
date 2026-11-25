@@ -727,8 +727,6 @@ export default function CampaignsList({
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
-<TemplateFields template={selectedTemplate} value={{ ...extraValues, parameters: templateParams }} onChange={v => { setExtraValues(v); setTemplateParams(v.parameters); }} />
-<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> I confirm these recipients consented to receive this broadcast.</label>
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Send className="size-5 text-primary" />
@@ -809,6 +807,17 @@ export default function CampaignsList({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Additional media / dynamic button fields (hideBody=true avoids duplicate body variables) */}
+                            <TemplateFields
+                                template={selectedTemplate}
+                                value={{ ...extraValues, parameters: templateParams }}
+                                onChange={(v) => {
+                                    setExtraValues(v);
+                                    setTemplateParams(v.parameters);
+                                }}
+                                hideBody={true}
+                            />
 
                             {/* Live WhatsApp Bubble Preview */}
                             <div className="space-y-1.5">
@@ -974,6 +983,18 @@ export default function CampaignsList({
                                 </div>
                             )}
                         </div>
+
+                        {/* Recipient Consent Checkbox */}
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground pt-1 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                required
+                                checked={consentConfirmed}
+                                onChange={(e) => setConsentConfirmed(e.target.checked)}
+                                className="rounded border-input text-primary focus:ring-primary size-3.5"
+                            />
+                            <span>I confirm these recipients consented to receive this broadcast.</span>
+                        </label>
 
                         <DialogFooter className="flex items-center justify-between pt-3 border-t border-border">
                             <span className="text-xs text-muted-foreground font-mono">
