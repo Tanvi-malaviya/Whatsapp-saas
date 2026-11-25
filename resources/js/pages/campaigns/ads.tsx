@@ -85,38 +85,18 @@ export default function ClickToWhatsAppAds({ channels = [], flows = [] }: Props)
             <Head title="Click-to-WhatsApp Ads (CTWA) - Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6 min-w-0 max-w-[1400px] mx-auto w-full">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1.5">
-                            <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-muted-foreground p-0 hover:text-foreground">
-                                <Link href="/campaigns">
-                                    <ArrowLeft className="size-3.5 mr-1" />
-                                    Broadcasts &amp; Campaigns
-                                </Link>
-                            </Button>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                                <Megaphone className="size-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                                        Click-to-WhatsApp Ads (CTWA)
-                                    </h1>
-                                    <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30">
-                                        Meta Facebook &amp; Instagram
-                                    </Badge>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                    Drive high-intent Facebook &amp; Instagram ad clicks directly into automated WhatsApp conversations with 24/7 Bot handoff.
-                                </p>
-                            </div>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30">
+                            Meta Facebook &amp; Instagram
+                        </Badge>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Drive high-intent Facebook &amp; Instagram ad clicks directly into automated WhatsApp conversations with 24/7 Bot handoff.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             variant="outline"
                             size="sm"

@@ -133,23 +133,18 @@ export default function AgentDashboard({ agent, customers, stats, referral }: Pr
             <Head title="B2B Partner & Reseller Portal" />
 
             <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto w-full">
-                {/* Header Section */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-xl font-bold tracking-tight text-foreground">
-                                B2B Partner & Reseller Portal
-                            </h1>
-                            <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] uppercase font-bold">
-                                Verified Partner
-                            </Badge>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] uppercase font-bold">
+                            Verified Partner
+                        </Badge>
                         <p className="text-xs text-muted-foreground">
                             Manage assigned client workspaces, assist onboarding, and track referral commissions.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             onClick={() => setShowCreateModal(true)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 gap-1.5 cursor-pointer shadow-xs"

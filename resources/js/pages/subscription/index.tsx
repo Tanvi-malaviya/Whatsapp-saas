@@ -85,18 +85,16 @@ export default function Subscription({
         <>
             <Head title="Subscription" />
             <div className="w-full min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6 lg:p-8">
-                <header>
-                    <p className="text-xs font-semibold tracking-wider text-primary uppercase">
-                        Your business plan
-                    </p>
-                    <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-                        Subscription
-                    </h1>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        Manage your plan, renewal, billing details, and
-                        subscription invoices.
-                    </p>
-                </header>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-[11px] font-semibold tracking-wider text-primary uppercase bg-primary/10 px-2 py-0.5 rounded-full">
+                            Your business plan
+                        </span>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Manage your plan, renewal, billing details, and subscription invoices.
+                        </p>
+                    </div>
+                </div>
                 <BillingNotice notice={notice} />
                 {!checkoutReady && (
                     <BillingNotice

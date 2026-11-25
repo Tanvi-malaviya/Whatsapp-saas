@@ -124,34 +124,20 @@ export default function BotBuilder() {
         <>
             <Head title="Bot & Auto-Reply Builder" />
 
-            <div className="flex flex-1 flex-col gap-6 p-6">
-                {/* Header */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-muted-foreground p-0">
-                                <Link href="/dashboard">
-                                    <ArrowLeft className="size-3.5 mr-1" />
-                                    Dashboard
-                                </Link>
-                            </Button>
-                        </div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                            <Bot className="size-6 text-emerald-600" />
-                            Bot Starter — Auto-Reply Engine
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Configure automatic greetings, keyword responses, and human handoff rules. Test live in the WhatsApp simulator.
-                        </p>
-                    </div>
+            <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3.5">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                        Configure automatic greetings, keyword responses, and human handoff rules. Test live in the WhatsApp simulator.
+                    </p>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                         {savedToast && (
                             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-in fade-in">
                                 <Check className="size-4" /> Saved Successfully!
                             </span>
                         )}
-                        <Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
+                        <Button onClick={handleSave} size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-9 px-3.5">
                             <Save className="size-4" />
                             Save Bot Rules
                         </Button>

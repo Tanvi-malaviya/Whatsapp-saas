@@ -346,28 +346,14 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
         <>
             <Head title="Contacts & CRM Directory" />
 
-            <div className="flex flex-1 flex-col gap-6 p-6">
-                {/* Header */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Button variant="ghost" size="sm" asChild className="h-7 text-xs text-muted-foreground p-0">
-                                <Link href="/dashboard">
-                                    <ArrowLeft className="size-3.5 mr-1" />
-                                    Dashboard
-                                </Link>
-                            </Button>
-                        </div>
-                        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                            <Users className="size-6 text-emerald-600" />
-                            Contacts & CRM Directory
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Manage all your customer WhatsApp phone numbers, tags, lead stages, and DPDP suppression list.
-                        </p>
-                    </div>
+            <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3.5">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                        Manage all your customer WhatsApp phone numbers, tags, lead stages, and DPDP suppression list.
+                    </p>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {toastMessage && (
                             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-in fade-in mr-2">
                                 <Check className="size-4" /> {toastMessage}

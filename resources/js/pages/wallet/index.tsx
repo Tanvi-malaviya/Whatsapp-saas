@@ -121,28 +121,25 @@ export default function Wallet({
         <>
             <Head title="Messaging wallet" />
             <div className="w-full min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6 lg:p-8">
-                <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <p className="text-xs font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-[11px] font-semibold tracking-wider text-emerald-700 uppercase dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                             Messaging credits
-                        </p>
-                        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-                            Wallet
-                        </h1>
-                        <p className="mt-2 text-sm text-muted-foreground">
-                            Recharge your messaging balance, track transactions,
-                            and view referral rewards.
+                        </span>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                            Recharge your messaging balance, track transactions, and view referral rewards.
                         </p>
                     </div>
                     <Button
+                        size="sm"
                         onClick={() => setOpen(true)}
                         disabled={!checkoutReady}
-                        className="h-11 w-full shrink-0 gap-2 bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
+                        className="h-9 w-full shrink-0 gap-2 bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto px-4"
                     >
                         <Plus className="size-4" />
                         Recharge wallet
                     </Button>
-                </header>
+                </div>
                 <BillingNotice notice={notice} />
                 {!checkoutReady && (
                     <BillingNotice

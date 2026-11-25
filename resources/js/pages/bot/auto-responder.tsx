@@ -278,38 +278,26 @@ export default function AutoResponder({ settings = {}, initialRules = [] }: { se
                     </div>
                 )}
 
-                {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-lg bg-[#47b672]/10 text-[#47b672]">
-                                <Zap className="size-5" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        WhatsApp Auto Responder
-                                    </h2>
-                                    <Badge
-                                        variant="outline"
-                                        className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
-                                    >
-                                        Keyword Replies
-                                    </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Automatically reply when a customer types specific words (e.g. Hi, Fees, Price) along with welcome &amp; away messages.
-                                </p>
-                            </div>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge
+                            variant="outline"
+                            className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
+                        >
+                            Keyword Replies
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                            Automatically reply when a customer types specific words (e.g. Hi, Fees, Price) along with welcome &amp; away messages.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Button
                             size="sm"
                             variant="outline"
                             onClick={openAddRuleModal}
-                            className="text-xs h-8 gap-1.5 border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/10"
+                            className="text-xs h-9 gap-1.5 border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/10"
                         >
                             <Plus className="size-3.5" />
                             Add Keyword Rule
@@ -318,7 +306,7 @@ export default function AutoResponder({ settings = {}, initialRules = [] }: { se
                             size="sm"
                             onClick={handleSaveAll}
                             disabled={isSaving}
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-8 gap-1.5 shadow-sm"
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-9 gap-1.5 shadow-sm px-3.5"
                         >
                             <Save className="size-3.5" />
                             Save All Settings

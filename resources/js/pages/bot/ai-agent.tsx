@@ -123,38 +123,26 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                     </div>
                 )}
 
-                {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                                <Sparkles className="size-5" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        WhatsApp AI Agent
-                                    </h2>
-                                    <Badge
-                                        variant="outline"
-                                        className="text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
-                                    >
-                                        PDF &amp; Document Knowledge Base
-                                    </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Upload your product brochures, pricing PDFs, or company documents. Connect OpenAI, Claude, Gemini, or Groq using your own API key—the AI searches your files to reply and handles out-of-bounds questions politely.
-                                </p>
-                            </div>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge
+                            variant="outline"
+                            className="text-xs bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                        >
+                            PDF &amp; Document Knowledge Base
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                            Upload your product brochures, pricing PDFs, or company documents. Connect OpenAI, Claude, Gemini, or Groq using your own API key.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             size="sm"
                             onClick={handleSave}
                             disabled={isSaving}
-                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-8 gap-1.5 shadow-sm"
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-9 gap-1.5 shadow-sm px-3.5"
                         >
                             <Save className="size-3.5" />
                             Save Agent

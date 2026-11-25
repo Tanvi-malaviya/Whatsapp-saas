@@ -319,29 +319,19 @@ export default function PipelinePage({
             <Head title="CRM Lead Pipeline | Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6 max-w-[1600px] mx-auto w-full font-sans">
-                {/* Header Banner */}
-                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md">
-                                <Kanban className="size-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-                                        CRM Lead Pipeline
-                                    </h1>
-                                    <Badge variant="outline" className="text-xs font-bold border-primary/40 text-primary">
-                                        Kanban V2
-                                    </Badge>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                    Drag &amp; drop WhatsApp inquiries through your sales funnel with deal values (₹) and follow-up schedules.
-                                </p>
-                            </div>
+                {/* Compact Action Toolbar */}
+                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <Badge variant="outline" className="text-xs font-bold border-primary/40 text-primary">
+                                Kanban V2
+                            </Badge>
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                                Drag &amp; drop WhatsApp inquiries through your sales funnel with deal values (₹) and follow-up schedules.
+                            </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                             <Button
                                 onClick={() => setIsAddOpen(true)}
                                 className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-sm"

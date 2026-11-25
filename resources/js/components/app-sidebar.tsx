@@ -242,7 +242,7 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Automation (Submenu: Flows, Auto Responder, AI Agent) */}
+                    {/* WhatsApp Automation (Submenu: Bot, Auto Responder, AI Agent) */}
                     <SidebarMenuItem>
                         {isCollapsed ? (
                             <DropdownMenu>
@@ -250,10 +250,10 @@ export function AppSidebar() {
                                     <SidebarMenuButton
                                         isActive={isInsideAutomation}
                                         className={isInsideAutomation ? activeClass : inactiveClass}
-                                        tooltip="Automation"
+                                        tooltip="WhatsApp Automation"
                                     >
                                         <Zap className="size-4 text-amber-500" />
-                                        <span>Automation</span>
+                                        <span>WhatsApp Automation</span>
                                     </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
@@ -263,7 +263,7 @@ export function AppSidebar() {
                                     className="w-48 p-1.5 shadow-xl rounded-xl border border-border bg-popover z-50 animate-in fade-in-0 zoom-in-95"
                                 >
                                     <DropdownMenuLabel className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                        Automation
+                                        WhatsApp Automation
                                     </DropdownMenuLabel>
                                     <DropdownMenuSeparator className="my-1" />
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -273,7 +273,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/flows') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <GitBranch className="size-3.5 text-muted-foreground" />
-                                            <span>WhatsApp Bot</span>
+                                            <span>Bot</span>
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -283,7 +283,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/auto-responder') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <Zap className="size-3.5 text-amber-500" />
-                                            <span>WhatsApp Auto Responder</span>
+                                            <span>Auto Responder</span>
                                         </Link>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer">
@@ -293,7 +293,7 @@ export function AppSidebar() {
                                             className={`flex items-center gap-2.5 px-2.5 py-1.5 text-xs font-medium ${isActive('/ai-agent') ? 'bg-primary/10 text-primary font-semibold' : 'text-foreground/80 hover:bg-muted/70'}`}
                                         >
                                             <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
-                                            <span>WhatsApp AI Agent</span>
+                                            <span>AI Agent</span>
                                         </Link>
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -303,10 +303,10 @@ export function AppSidebar() {
                                 <SidebarMenuButton
                                     onClick={() => setAutomationOpen(!automationOpen)}
                                     className={isInsideAutomation ? 'font-semibold text-foreground' : inactiveClass}
-                                    tooltip="Automation"
+                                    tooltip="WhatsApp Automation"
                                 >
                                     <Zap className="size-4 text-amber-500" />
-                                    <span className="flex-1">Automation</span>
+                                    <span className="flex-1 truncate">WhatsApp Automation</span>
                                     {automationOpen ? (
                                         <ChevronDown className="size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                                     ) : (
@@ -320,7 +320,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/flows')}>
                                                 <Link href="/flows" prefetch className={isActive('/flows') ? activeClass : inactiveClass}>
                                                     <GitBranch className="size-3.5" />
-                                                    <span>WhatsApp Bot</span>
+                                                    <span>Bot</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -329,7 +329,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/auto-responder')}>
                                                 <Link href="/auto-responder" prefetch className={isActive('/auto-responder') ? activeClass : inactiveClass}>
                                                     <Zap className="size-3.5 text-amber-500" />
-                                                    <span>WhatsApp Auto Responder</span>
+                                                    <span>Auto Responder</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>
@@ -338,7 +338,7 @@ export function AppSidebar() {
                                             <SidebarMenuSubButton asChild isActive={isActive('/ai-agent')}>
                                                 <Link href="/ai-agent" prefetch className={isActive('/ai-agent') ? activeClass : inactiveClass}>
                                                     <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
-                                                    <span>WhatsApp AI Agent</span>
+                                                    <span>AI Agent</span>
                                                 </Link>
                                             </SidebarMenuSubButton>
                                         </SidebarMenuSubItem>

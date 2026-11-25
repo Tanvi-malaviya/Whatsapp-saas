@@ -303,22 +303,14 @@ print(response.json())`,
         <>
             <Head title="API & Developer Docs - WhatsApp SaaS" />
 
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-6xl mx-auto w-full">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/70 pb-5">
-                    <div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="flex size-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-                                <Code2 className="size-5" />
-                            </div>
-                            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                                REST API &amp; Developer Documentation
-                            </h1>
-                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border-0">
-                                API v1
-                            </Badge>
-                        </div>
-                        <p className="text-xs md:text-sm text-muted-foreground mt-1.5 max-w-3xl">
+            <div className="flex flex-1 flex-col gap-6 p-3.5 sm:p-4 md:p-6 max-w-6xl mx-auto w-full min-w-0 overflow-x-hidden">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-xs font-semibold border-0">
+                            API v1
+                        </Badge>
+                        <p className="text-xs md:text-sm text-muted-foreground max-w-2xl">
                             Connect your ERP, CRM, billing software, or website to send WhatsApp messages, OTPs, and order alerts directly using Bearer Token authentication.
                         </p>
                     </div>
@@ -336,8 +328,8 @@ print(response.json())`,
                 {/* API Keys & Webhook Row */}
                 <div className="grid gap-4 lg:grid-cols-12">
                     {/* API Key Management */}
-                    <Card className="lg:col-span-7 border-border/80 shadow-xs">
-                        <CardHeader className="pb-3 pt-4 px-5">
+                    <Card className="lg:col-span-7 min-w-0 overflow-hidden border-border/80 shadow-xs">
+                        <CardHeader className="pb-3 pt-4 px-4 sm:px-5">
                             <CardTitle className="text-sm font-bold flex items-center gap-2">
                                 <Key className="size-4 text-emerald-600" />
                                 API Keys (Bearer Authentication)
@@ -346,19 +338,19 @@ print(response.json())`,
                                 Pass <code className="bg-muted px-1 py-0.5 rounded">Authorization: Bearer YOUR_API_KEY</code> or <code className="bg-muted px-1 py-0.5 rounded">X-API-Key</code> in every API request.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-3 px-5 pb-5">
-                            <form onSubmit={handleCreateKey} className="flex gap-2">
+                        <CardContent className="space-y-3 px-4 sm:px-5 pb-5">
+                            <form onSubmit={handleCreateKey} className="flex flex-col sm:flex-row gap-2">
                                 <Input
                                     value={newKeyName}
                                     onChange={(e) => setNewKeyName(e.target.value)}
                                     placeholder="New key name (e.g. Tally ERP / Website)"
-                                    className="h-8.5 text-xs"
+                                    className="h-9 text-xs"
                                 />
                                 <Button
                                     type="submit"
                                     size="sm"
                                     disabled={creatingKey || !newKeyName.trim()}
-                                    className="h-8.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                                    className="h-9 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 w-full sm:w-auto"
                                 >
                                     {creatingKey ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
                                     Generate Key
@@ -437,7 +429,7 @@ print(response.json())`,
                     </Card>
 
                     {/* Base URL & Webhook Info */}
-                    <Card className="lg:col-span-5 border-border/80 shadow-xs">
+                    <Card className="lg:col-span-5 min-w-0 overflow-hidden border-border/80 shadow-xs">
                         <CardHeader className="pb-3 pt-4 px-5">
                             <CardTitle className="text-sm font-bold flex items-center gap-2">
                                 <Radio className="size-4 text-emerald-600" />
@@ -690,9 +682,9 @@ print(response.json())`,
                                 Copy and paste directly into your backend or billing software.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="p-5 space-y-3">
+                        <CardContent className="p-4 sm:p-5 space-y-3">
                             <div className="relative">
-                                <pre className="p-3.5 rounded-xl bg-slate-950 text-slate-100 text-[11px] font-mono overflow-x-auto leading-relaxed">
+                                <pre className="p-3.5 pr-20 rounded-xl bg-slate-950 text-slate-100 text-[11px] font-mono overflow-x-auto leading-relaxed">
                                     {codeSnippets[docLang]}
                                 </pre>
                                 <Button

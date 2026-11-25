@@ -129,32 +129,22 @@ export default function Dashboard({
         <>
             <Head title={`Dashboard - ${currentOrg.name} | WhatsApp Business SaaS`} />
 
-            <div className="flex flex-1 flex-col gap-3.5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full font-sans">
-                {/* 1. Unique Glassmorphic Hero Bar */}
+            <div className="flex flex-1 flex-col gap-3.5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* 1. Compact Workspace Status & Quick Action Bar */}
                 <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-slate-900/5 p-3.5 sm:p-4 shadow-sm backdrop-blur-md">
                     <div className="absolute -top-12 -right-12 size-40 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
                     <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#10b981] to-[#047857] text-white shadow-md shadow-emerald-600/25">
-                                <Activity className="size-5" />
-                            </div>
-                            <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-foreground">
-                                        Dashboard
-                                    </h1>
-                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                                        <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
-                                        Meta Cloud v22.0
-                                    </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Workspace: <span className="text-foreground font-semibold">/{currentOrg.slug || 'sathwara-infotech'}</span> • Region: <span className="text-foreground font-medium">{currentOrg.timezone || 'Asia/Kolkata'}</span>
-                                </p>
-                            </div>
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+                                Meta Cloud v22.0
+                            </span>
+                            <p className="text-xs text-muted-foreground">
+                                Workspace: <span className="text-foreground font-semibold">/{currentOrg.slug || 'sathwara-infotech'}</span> • Region: <span className="text-foreground font-medium">{currentOrg.timezone || 'Asia/Kolkata'}</span>
+                            </p>
                         </div>
 
-                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -182,9 +172,9 @@ export default function Dashboard({
 
                 {/* Multi-Number Filter Bar */}
                 {channels && channels.length > 0 && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-card border border-border/70 shadow-2xs">
-                        <div className="flex items-center gap-2">
-                            <Smartphone className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-card border border-border/70 shadow-2xs min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+                            <Smartphone className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             <span className="text-xs font-bold text-foreground">Filter by Number:</span>
                             <span className="text-[11px] text-muted-foreground">
                                 {selected_channel_id === 'all'
@@ -193,7 +183,7 @@ export default function Dashboard({
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0 scrollbar-none">
                             <button
                                 type="button"
                                 onClick={() => router.get('/dashboard', { channel_id: 'all' }, { preserveScroll: true, preserveState: true })}
@@ -232,7 +222,7 @@ export default function Dashboard({
                 )}
 
                 {/* 2. Four Luxury KPI Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     {/* KPI 1 */}
                     <div className="group relative overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.07] via-card to-card p-3.5 shadow-2xs hover:shadow-md hover:border-emerald-500/40 transition-all duration-300">
                         <div className="flex items-center justify-between">

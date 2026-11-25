@@ -625,35 +625,23 @@ export default function BotFlows({ flows = [] }: Props) {
                     </div>
                 )}
 
-                {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2.5">
-                            <div className="p-2 rounded-lg bg-[#47b672]/10 text-[#47b672]">
-                                <GitBranch className="size-5" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h2 className="text-xl font-bold tracking-tight text-foreground">
-                                        WhatsApp Bot
-                                    </h2>
-                                    <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                        Interactive Selection Menus
-                                    </Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Create predefined selection menus (1, 2, 3...) so customers can pick an option and receive instant automated answers.
-                                </p>
-                            </div>
-                        </div>
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
+                            Interactive Selection Menus
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                            Create predefined selection menus (1, 2, 3...) so customers can pick an option and receive instant automated answers.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setShowHowItWorksModal(true)}
-                            className="text-xs gap-1.5 border-border h-8.5"
+                            className="text-xs gap-1.5 border-border h-9"
                         >
                             <HelpCircle className="size-3.5 text-blue-600" />
                             How It Works
@@ -661,7 +649,7 @@ export default function BotFlows({ flows = [] }: Props) {
                         <Button
                             size="sm"
                             onClick={openCreateModal}
-                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 shadow-sm font-semibold h-8.5 px-3.5"
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 shadow-sm font-semibold h-9 px-3.5"
                         >
                             <Plus className="size-3.5" />
                             Create New Flow

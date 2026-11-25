@@ -519,38 +519,35 @@ export default function CampaignsList({
         <>
             <Head title="WhatsApp Broadcasts & Meta Campaigns - Sathwara InfoTech" />
 
-            <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0">
-                <label className="block text-sm">Sender number<select aria-label="Sender number" value={channel?.id ?? ''} onChange={e => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })} className="ml-3 rounded border bg-background p-2"><option value="">Select number</option>{channels.map(c => <option value={c.id} key={c.id}>{c.name} · {c.phone_number}</option>)}</select></label>{/* Header */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="h-7 text-xs text-muted-foreground p-0 hover:text-foreground"
-                            >
-                                <Link href="/dashboard">
-                                    <ArrowLeft className="size-3.5 mr-1" />
-                                    Dashboard
-                                </Link>
-                            </Button>
-                        </div>
-                        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                            <Send className="size-5 sm:size-6 text-primary" />
-                            WhatsApp Broadcasts &amp; Campaigns
-                        </h1>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                            Broadcast official Meta-approved WhatsApp templates to your audience with live delivery tracking.
-                        </p>
-                    </div>
+            <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-border/60 pb-3.5">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                        Broadcast official Meta-approved WhatsApp templates to your audience with live delivery tracking.
+                    </p>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 h-9 rounded-lg text-xs shadow-2xs">
+                            <span className="text-[11px] text-muted-foreground font-medium">Sender:</span>
+                            <select
+                                aria-label="Sender number"
+                                value={channel?.id ?? ''}
+                                onChange={(e) => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })}
+                                className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+                            >
+                                <option value="">Select number</option>
+                                {channels.map((c) => (
+                                    <option value={c.id} key={c.id}>
+                                        {c.name} · {c.phone_number}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <Button
                             variant="outline"
                             size="sm"
                             asChild
-                            className="text-xs h-8.5 sm:h-9 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold"
+                            className="text-xs h-9 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold"
                         >
                             <Link href="/campaigns/ads">
                                 <Megaphone className="size-3.5" />
@@ -560,7 +557,7 @@ export default function CampaignsList({
                         <Button
                             size="sm"
                             onClick={handleNewCampaignClick}
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-8.5 sm:h-9 text-xs font-semibold shadow-xs"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-9 text-xs font-semibold shadow-xs px-3.5"
                         >
                             <Plus className="size-4" />
                             New Campaign
@@ -631,7 +628,7 @@ export default function CampaignsList({
                         </CardHeader>
                         <CardContent className="p-0">
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs">
+                                <table className="w-full min-w-[680px] text-left text-xs">
                                     <thead className="bg-muted/40 border-y border-border/70 text-[11px] uppercase tracking-wider text-muted-foreground">
                                         <tr>
                                             <th className="py-2.5 px-4 font-semibold">Campaign Name</th>
@@ -867,7 +864,7 @@ export default function CampaignsList({
 
             {/* Broadcast Launch Modal Dialog */}
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
 <TemplateFields template={selectedTemplate} value={{ ...extraValues, parameters: templateParams }} onChange={v => { setExtraValues(v); setTemplateParams(v.parameters); }} />
 <label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> I confirm these recipients consented to receive this broadcast.</label>
@@ -1242,7 +1239,7 @@ export default function CampaignsList({
 
             {/* Campaign Analytics Dialog */}
             <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
-                <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+                <DialogContent className="w-[calc(100vw-1.5rem)] max-w-xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="text-base font-bold flex items-center gap-2">
                             <BarChart2 className="size-5 text-primary" />
@@ -1333,7 +1330,7 @@ export default function CampaignsList({
                             </div>
 
                             {/* Secondary Status Breakdown */}
-                            <div className="grid grid-cols-3 gap-2 p-3 bg-card rounded-lg border border-border text-center">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-card rounded-lg border border-border text-center">
                                 <div>
                                     <div className="text-[10px] text-muted-foreground">Queued / Sending</div>
                                     <div className="text-sm font-semibold">{analyticsData.metrics.queued}</div>
