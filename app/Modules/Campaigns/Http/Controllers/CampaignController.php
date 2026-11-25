@@ -455,7 +455,6 @@ class CampaignController extends Controller
             ], 500);
         }
     }
-    }
 
     public function pause(Request $request, string $id): JsonResponse
     {
