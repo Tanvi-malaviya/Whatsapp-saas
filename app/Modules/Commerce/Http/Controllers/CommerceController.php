@@ -358,6 +358,55 @@ class CommerceController extends Controller
         ]);
     }
 
+    public function exportMetaCsv(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $orgId = $this->resolveTenantId($request);
+        $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+
+        $senderPhone = preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531');
+        $storeLink = "https://wa.me/{$senderPhone}";
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="meta_catalog_products_' . date('Y-m-d') . '.csv"',
+        ];
+
+        return response()->stream(function () use ($products, $channel, $storeLink) {
+            $handle = fopen('php://output', 'w');
+            // Standard Meta Commerce Manager CSV headers
+            fputcsv($handle, [
+                'id',
+                'title',
+                'description',
+                'availability',
+                'condition',
+                'price',
+                'link',
+                'image_link',
+                'brand',
+                'google_product_category',
+            ]);
+
+            foreach ($products as $p) {
+                fputcsv($handle, [
+                    $p->retailer_id,
+                    $p->name,
+                    $p->description ?: $p->name,
+                    $p->is_available ? 'in stock' : 'out of stock',
+                    'new',
+                    number_format((float)$p->price, 2, '.', '') . ' ' . ($p->currency ?: 'INR'),
+                    $storeLink,
+                    $p->image_url ?: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+                    $channel?->name ?: 'Dukan Hisab',
+                    $p->category ?: 'General',
+                ]);
+            }
+            fclose($handle);
+        }, 200, $headers);
+    }
+
     public function sendCatalogMessage(Request $request): JsonResponse
     {
         $orgId = $this->resolveTenantId($request);

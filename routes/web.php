@@ -905,6 +905,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('commerce/products/{id}', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'deleteProduct'])->name('commerce.products.destroy');
     Route::patch('commerce/orders/{id}/status', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateOrderStatus'])->name('commerce.orders.status');
     Route::post('commerce/sync', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'syncCatalog'])->name('commerce.sync');
+    Route::get('commerce/export-csv', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'exportMetaCsv'])->name('commerce.export.csv');
     Route::post('commerce/settings', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateSettings'])->name('commerce.settings.update');
     Route::post('commerce/link-catalog', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'linkCatalogToMeta'])->name('commerce.catalog.link');
     Route::post('commerce/send-catalog', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'sendCatalogMessage'])->name('commerce.send.catalog');

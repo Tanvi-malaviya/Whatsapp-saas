@@ -26,6 +26,7 @@ import {
     Image as ImageIcon,
     X,
     Send,
+    Download,
     LayoutGrid,
     List,
 } from 'lucide-react';
@@ -440,6 +441,16 @@ export default function CommerceIndex({
                             <RefreshCw className={`size-3 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
                             {isSyncing ? 'Syncing...' : 'Sync'}
                         </Button>
+
+                        <a
+                            href="/commerce/export-csv"
+                            download
+                            className="inline-flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted h-8 px-2.5 text-xs gap-1.5 font-medium text-foreground transition-colors"
+                            title="Download Meta Catalog CSV to upload into Meta Commerce Manager"
+                        >
+                            <Download className="size-3 text-muted-foreground" />
+                            Export Meta CSV
+                        </a>
 
                         <Button
                             onClick={() => setIsAddModalOpen(true)}
