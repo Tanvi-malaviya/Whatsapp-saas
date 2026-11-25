@@ -93,7 +93,7 @@ class CommerceController extends Controller
         // 1. If physical file uploaded
         if ($request->hasFile('image_file')) {
             $path = $request->file('image_file')->store('commerce_products', 'public');
-            $imageUrl = asset('storage/' . $path);
+            $imageUrl = 'https://whatsapp.sathwarainfotech.cloud/storage/' . $path;
         }
         // 2. If base64 uploaded from browser canvas/reader
         elseif (!empty($request->input('image_base64'))) {
@@ -105,13 +105,18 @@ class CommerceController extends Controller
                 if ($decoded !== false) {
                     $filename = 'commerce_products/prod_' . uniqid() . '.' . $type;
                     \Illuminate\Support\Facades\Storage::disk('public')->put($filename, $decoded);
-                    $imageUrl = asset('storage/' . $filename);
+                    $imageUrl = 'https://whatsapp.sathwarainfotech.cloud/storage/' . $filename;
                 }
             }
         }
 
         if (empty($imageUrl)) {
-            $imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&q=80';
+            $imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80';
+        } elseif (str_starts_with($imageUrl, 'http://localhost') || str_starts_with($imageUrl, 'http://127.0.0.1')) {
+            $parsedPath = parse_url($imageUrl, PHP_URL_PATH);
+            $imageUrl = 'https://whatsapp.sathwarainfotech.cloud/' . ltrim($parsedPath, '/');
+        } elseif (str_starts_with($imageUrl, 'http://')) {
+            $imageUrl = 'https://' . substr($imageUrl, 7);
         }
 
         $sku = !empty($validated['retailer_id'])
@@ -427,6 +432,16 @@ class CommerceController extends Controller
             ]);
 
             foreach ($products as $p) {
+                $img = $p->image_url;
+                if (empty($img)) {
+                    $img = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80';
+                } elseif (str_starts_with($img, 'http://localhost') || str_starts_with($img, 'http://127.0.0.1') || str_starts_with($img, '/storage')) {
+                    $parsedPath = parse_url($img, PHP_URL_PATH);
+                    $img = 'https://whatsapp.sathwarainfotech.cloud/' . ltrim($parsedPath, '/');
+                } elseif (str_starts_with($img, 'http://')) {
+                    $img = 'https://' . substr($img, 7);
+                }
+
                 fputcsv($handle, [
                     $p->retailer_id,
                     $p->name,
@@ -435,7 +450,7 @@ class CommerceController extends Controller
                     'new',
                     number_format((float)$p->price, 2, '.', '') . ' ' . ($p->currency ?: 'INR'),
                     $storeLink,
-                    $p->image_url ?: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+                    $img,
                     $channel?->name ?: 'Dukan Hisab',
                     $p->category ?: 'General',
                 ]);
@@ -480,6 +495,16 @@ class CommerceController extends Controller
             ]);
 
             foreach ($products as $p) {
+                $img = $p->image_url;
+                if (empty($img)) {
+                    $img = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80';
+                } elseif (str_starts_with($img, 'http://localhost') || str_starts_with($img, 'http://127.0.0.1') || str_starts_with($img, '/storage')) {
+                    $parsedPath = parse_url($img, PHP_URL_PATH);
+                    $img = 'https://whatsapp.sathwarainfotech.cloud/' . ltrim($parsedPath, '/');
+                } elseif (str_starts_with($img, 'http://')) {
+                    $img = 'https://' . substr($img, 7);
+                }
+
                 fputcsv($handle, [
                     $p->retailer_id,
                     $p->name,
@@ -488,7 +513,7 @@ class CommerceController extends Controller
                     'new',
                     number_format((float)$p->price, 2, '.', '') . ' ' . ($p->currency ?: 'INR'),
                     $storeLink,
-                    $p->image_url ?: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+                    $img,
                     $channel?->name ?: 'Dukan Hisab',
                     $p->category ?: 'General',
                 ]);
