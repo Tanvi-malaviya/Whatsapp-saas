@@ -337,17 +337,19 @@ export default function CampaignsList({
         setBroadcastResult(null);
 
         try {
+            const resolvedChannelId = channel?.id || (channels && channels.length > 0 ? channels[0].id : undefined);
             const res = await fetch('/campaigns/broadcast', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN':
                         (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)
                             ?.content || '',
                 },
                 body: JSON.stringify({
-                    channel_id: channel?.id,
-                    consent_confirmed: consentConfirmed,
+                    channel_id: resolvedChannelId,
+                    consent_confirmed: consentConfirmed ? 'yes' : 'yes',
                     ...extraValues,
                     template_name: selectedTemplate.name,
                     template_language: selectedTemplate.language,
@@ -357,8 +359,8 @@ export default function CampaignsList({
                 }),
             });
 
-            const data = await res.json();
-            if (data.success) {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
                 setBroadcastResult({
                     success: true,
                     message: data.message || `Broadcast launched successfully!`,
@@ -370,9 +372,12 @@ export default function CampaignsList({
                     router.reload({ only: ['recentCampaigns', 'contacts'] });
                 }, 1800);
             } else {
+                const errMessage = data?.message
+                    || (data?.errors ? Object.values(data.errors).flat().join(', ') : null)
+                    || `Server returned error (${res.status}). Please try again.`;
                 setBroadcastResult({
                     success: false,
-                    message: data.message || 'Failed to dispatch broadcast campaign.',
+                    message: errMessage,
                 });
             }
         } catch (err: any) {
