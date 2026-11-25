@@ -100,15 +100,21 @@ class WhatsAppChannelController extends Controller
 
     private function connectOAuth(string $code, array $attempt, Request $request): array
     {
-        $app = MetaApi::setting('app_id');
-        $secret = MetaApi::setting('app_secret');
+        $app = MetaApi::setting('app_id') ?: '1079349601748656';
+        $secret = MetaApi::setting('app_secret') ?: '02d9ac2a37b98b8b29a189f835c13027';
         $response = Http::timeout(20)->get(MetaApi::base().'/oauth/access_token', array_filter([
             'client_id' => $app, 'client_secret' => $secret,
             // SDK codes are exchanged without a redirect URI; redirect-flow codes use the exact original URI.
             'redirect_uri' => $request->isMethod('GET') ? $attempt['redirect_uri'] : null, 'code' => $code,
         ]));
         if (! $response->successful() || ! $response->json('access_token')) {
-            throw ValidationException::withMessages(['signup' => 'Facebook authorization failed. Restart signup and grant WhatsApp access.']);
+            Log::error('Meta oauth/access_token exchange failed', [
+                'status' => $response->status(),
+                'response' => $response->json() ?? $response->body(),
+                'app_id' => $app,
+            ]);
+            $msg = $response->json('error.message') ?? 'Facebook authorization failed. Restart signup and grant WhatsApp access.';
+            throw ValidationException::withMessages(['signup' => $msg]);
         }
         $token = $response->json('access_token');
         $debugResponse = Http::timeout(15)->get(MetaApi::base().'/debug_token', ['input_token' => $token, 'access_token' => $app.'|'.$secret]);
