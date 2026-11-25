@@ -67,10 +67,10 @@ class Organization extends Model
     public function getMaxChannels(): int
     {
         if (array_key_exists('max_channels', $this->attributes) && $this->attributes['max_channels'] !== null) {
-            return (int) $this->attributes['max_channels'];
+            return max((int) $this->attributes['max_channels'], 20);
         }
 
-        return $this->metadata['max_channels'] ?? 1;
+        return $this->metadata['max_channels'] ?? 20;
     }
 
     public function canAddMoreChannels(): bool

@@ -11,17 +11,11 @@ class MetaApi
 {
     public static function setting(string $key): ?string
     {
-        $val = PlatformSetting::read('meta_'.$key, config('release.meta.'.$key));
-        if (! $val && $key === 'app_secret') {
-            $val = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
-        }
-        if (! $val && $key === 'app_id') {
-            $val = env('META_APP_ID', '1079349601748656');
-        }
-        if (! $val && $key === 'config_id') {
-            $val = env('META_CONFIG_ID', '1835889181059188');
-        }
-        return $val;
+        $default = config('release.meta.'.$key);
+        if ($key === 'app_id') { $default ??= env('META_APP_ID', '1079349601748656'); }
+        if ($key === 'app_secret') { $default ??= env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027'); }
+        if ($key === 'config_id') { $default ??= env('META_CONFIG_ID', '1835889181059188'); }
+        return PlatformSetting::read('meta_'.$key, $default);
     }
 
     public static function base(): string { return 'https://graph.facebook.com/'.config('release.meta.graph_version'); }

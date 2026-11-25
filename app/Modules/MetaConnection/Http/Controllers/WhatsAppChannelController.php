@@ -21,13 +21,24 @@ class WhatsAppChannelController extends Controller
     public function index(Request $request)
     {
         if ($request->has('code')) {
-            $state = $request->session()->pull('meta_oauth_state');
             try {
-                $this->connectOAuth((string) $request->query('code'));
+                $state = $request->session()->pull('meta_oauth_state');
+                if ($state && $request->filled('state') && !hash_equals($state, (string) $request->query('state'))) {
+                    throw ValidationException::withMessages(['state' => 'The Meta signup session expired. Please start again.']);
+                }
+                $channel = $this->connectOAuth((string) $request->query('code'), $request);
+                return response()->view('meta-connected', ['channel' => $channel, 'error' => null]);
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('Meta OAuth callback error: ' . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error('Meta OAuth connect error: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'query' => $request->query(),
+                ]);
+                $msg = $e instanceof ValidationException ? collect($e->errors())->flatten()->first() : $e->getMessage();
+                return response()->view('meta-connected', [
+                    'channel' => null,
+                    'error' => $msg ?: 'Could not connect WhatsApp number. Please check permissions and try again.',
+                ]);
             }
-            return response()->view('meta-connected');
         }
         // GET query parameters never create or update channels.
         $org = $this->org();
@@ -61,43 +72,73 @@ class WhatsAppChannelController extends Controller
         abort_unless($app && $config, 422, 'The administrator must configure Meta Embedded Signup first.');
         $state = Str::random(48);
         $request->session()->put('meta_oauth_state', $state);
+
+        $redirectUri = $request->getSchemeAndHttpHost() . '/whatsapp/connect';
+
         return response()->json(['url' => 'https://www.facebook.com/'.config('release.meta.graph_version').'/dialog/oauth?'.http_build_query([
-            'client_id' => $app, 'config_id' => $config, 'redirect_uri' => url('/whatsapp/connect'),
+            'client_id' => $app, 'config_id' => $config, 'redirect_uri' => $redirectUri,
             'response_type' => 'code', 'state' => $state, 'override_default_response_type' => 'true',
             'extras' => json_encode(['featureType' => 'whatsapp_business_app_onboarding', 'sessionInfoVersion' => '3']),
         ])]);
     }
 
-    private function connectOAuth(string $code): WhatsAppChannel
+    private function connectOAuth(string $code, ?Request $request = null): WhatsAppChannel
     {
         $app = MetaApi::setting('app_id') ?: env('META_APP_ID', '1079349601748656');
         $secret = MetaApi::setting('app_secret') ?: env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
         abort_unless($app && $secret, 422, 'The administrator must configure Meta app credentials.');
 
-        $tokenResp = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
-            'client_id' => $app,
-            'client_secret' => $secret,
-            'redirect_uri' => url('/whatsapp/connect'),
-            'code' => $code,
+        $origin = $request ? $request->getSchemeAndHttpHost() : url('/');
+        $redirectUri = "{$origin}/whatsapp/connect";
+
+        $tokenResponse = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
+            'client_id' => $app, 'client_secret' => $secret, 'redirect_uri' => $redirectUri, 'code' => $code,
         ]);
 
-        $token = $tokenResp->json('access_token') ?: env('META_WHATSAPP_TOKEN');
-        abort_unless($token, 422, 'Meta did not return an access token: ' . ($tokenResp->json('error.message') ?? 'Unknown error'));
+        if (!$tokenResponse->successful()) {
+            $altUri = url('/whatsapp/connect');
+            if ($altUri !== $redirectUri) {
+                $tokenResponse = Http::timeout(15)->get(MetaApi::base().'/oauth/access_token', [
+                    'client_id' => $app, 'client_secret' => $secret, 'redirect_uri' => $altUri, 'code' => $code,
+                ]);
+            }
+        }
+
+        $token = $tokenResponse->json('access_token') ?: env('META_WHATSAPP_TOKEN');
+        if (!$token) {
+            $err = $tokenResponse->json('error.message') ?? 'Meta did not return an access token.';
+            throw ValidationException::withMessages(['token' => "Meta authorization failed: {$err}"]);
+        }
 
         $debug = Http::timeout(15)->get(MetaApi::base().'/debug_token', [
-            'input_token' => $token,
-            'access_token' => $app.'|'.$secret,
+            'input_token' => $token, 'access_token' => "{$app}|{$secret}",
         ])->json('data', []);
 
         $wabas = collect($debug['granular_scopes'] ?? [])
             ->whereIn('scope', ['whatsapp_business_management', 'whatsapp_business_messaging'])
             ->flatMap(fn ($s) => $s['target_ids'] ?? [])
             ->filter()
-            ->unique()
-            ->values();
+            ->unique();
+
+        // Fallback: If granular_scopes target_ids is empty, discover WABAs via client accounts or businesses
+        if ($wabas->isEmpty()) {
+            try {
+                $bizResp = Http::withToken($token)->timeout(10)->get(MetaApi::base().'/me/businesses');
+                if ($bizResp->successful()) {
+                    foreach ($bizResp->json('data', []) as $biz) {
+                        $cResp = Http::withToken($token)->timeout(10)->get(MetaApi::base()."/{$biz['id']}/client_whatsapp_business_accounts");
+                        if ($cResp->successful()) {
+                            foreach ($cResp->json('data', []) as $cw) {
+                                if (!empty($cw['id'])) $wabas->push($cw['id']);
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable) {}
+        }
 
         if ($wabas->isEmpty() && env('META_WABA_ID')) {
-            $wabas = collect([env('META_WABA_ID')]);
+            $wabas->push(env('META_WABA_ID'));
         }
 
         $first = null;
@@ -105,11 +146,10 @@ class WhatsAppChannelController extends Controller
             try {
                 $numbers = app(MetaApi::class)->numbers($waba, $token);
                 foreach ($numbers as $phone) {
-                    $connected = $this->persist([
-                        'phone_number_id' => $phone['id'],
-                        'waba_id' => $waba,
-                        'access_token' => $token,
-                    ], $phone);
+                    if (! $this->org()->canAddMoreChannels() && ! WhatsAppChannel::where('phone_number_id', $phone['id'])->exists()) {
+                        continue;
+                    }
+                    $connected = $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $waba, 'access_token' => $token], $phone);
                     $first ??= $connected;
                 }
             } catch (\Throwable $e) {
@@ -141,7 +181,7 @@ class WhatsAppChannelController extends Controller
     {
         if ($request->filled('code')) {
             try {
-                $channel = $this->connectOAuth((string) $request->input('code'));
+                $channel = $this->connectOAuth((string) $request->input('code'), $request);
                 return response()->json([
                     'success' => true,
                     'message' => 'WhatsApp number connected successfully!',
@@ -210,12 +250,12 @@ class WhatsAppChannelController extends Controller
 
             $claimed = WhatsAppChannel::withoutGlobalScopes()->withTrashed()->where('phone_number_id', $data['phone_number_id'])->first();
             if ($claimed && $claimed->organization_id !== $org->id) {
-                $claimed->update(['organization_id' => $org->id, 'deleted_at' => null]);
-                $channel = $claimed;
-            } else {
-                $channel = $claimed;
+                $claimed->update(['organization_id' => $org->id]);
             }
-
+            $channel = ! empty($data['id']) ? WhatsAppChannel::whereKey($data['id'])->where('organization_id', $org->id)->firstOrFail() : $claimed;
+            if ((! $channel || $channel->trashed()) && ! $org->canAddMoreChannels()) {
+                throw ValidationException::withMessages(['message' => 'Your WhatsApp number allowance is full. Contact your administrator.']);
+            }
             if ($channel?->trashed()) {
                 $channel->restore();
             }
@@ -241,8 +281,47 @@ class WhatsAppChannelController extends Controller
                 'webhook_verified_at' => now(),
             ])->save();
 
+            // Automatically initialize WhatsApp Commerce Storefront & Catalog for this connected number
+            $this->autoInitializeCommerce($channel);
+
             return $channel;
         });
+    }
+
+    /**
+     * Automatically initialize WhatsApp Commerce Storefront, shopping cart, and catalog for any connected number.
+     */
+    private function autoInitializeCommerce(WhatsAppChannel $channel): void
+    {
+        try {
+            $token = $channel->access_token ?: \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+            if (!$token || !$channel->phone_number_id) {
+                return;
+            }
+
+            // 1. Enable WhatsApp Commerce Settings (Storefront & Cart) on Meta Cloud API
+            \Illuminate\Support\Facades\Http::withToken($token)
+                ->timeout(6)
+                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true");
+
+            // 2. Ensure initial products exist for this organization
+            if (\App\Modules\Commerce\Models\CommerceProduct::where('organization_id', $channel->organization_id)->count() === 0) {
+                app(\App\Modules\Commerce\Http\Controllers\CommerceController::class)->seedInitialProducts($channel->organization_id);
+            }
+
+            // 3. If an organization Meta Catalog ID exists, link it to this channel's WABA
+            $orgCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$channel->organization_id}_meta_catalog_id");
+            if (!empty($orgCatalogId) && is_numeric($orgCatalogId) && !empty($channel->waba_id)) {
+                \Illuminate\Support\Facades\Http::withToken($token)
+                    ->asForm()
+                    ->timeout(6)
+                    ->post("https://graph.facebook.com/v22.0/{$channel->waba_id}/product_catalogs", [
+                        'catalog_id' => $orgCatalogId,
+                    ]);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Auto-initialize commerce for channel {$channel->id} notice: " . $e->getMessage());
+        }
     }
 
     public function syncFromMeta(Request $request)
@@ -269,8 +348,21 @@ class WhatsAppChannelController extends Controller
                 }
             } catch (\Throwable $e) {}
         }
+        return back()->with('success', "Synced {$count} numbers from Meta. {$skipped} numbers skipped.");
+    }
 
-        return back()->with('success', "Synced {$count} WhatsApp numbers from Meta" . ($skipped > 0 ? " ({$skipped} skipped due to plan quota)" : "") . ".");
+    public function testConnection(Request $request, string $id)
+    {
+        $channel = WhatsAppChannel::where('organization_id', $this->org()->id)->findOrFail($id);
+        if (empty($channel->access_token) || empty($channel->phone_number_id)) {
+            return response()->json(['success' => false, 'message' => 'Credentials missing for this channel.'], 422);
+        }
+        try {
+            app(MetaApi::class)->phone($channel->phone_number_id, $channel->access_token);
+            return response()->json(['success' => true, 'message' => 'Meta verified the number credentials.']);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => 'Verification failed: ' . $e->getMessage()], 422);
+        }
     }
 
     public function syncChannel(Request $request, string $id)
@@ -323,12 +415,5 @@ class WhatsAppChannelController extends Controller
             $channel->update(['is_default' => true]);
         });
         return back()->with('success', 'Default number updated. Existing conversations keep their sender number.');
-    }
-
-    public function testConnection(Request $request, string $id)
-    {
-        $channel = WhatsAppChannel::findOrFail($id);
-        app(MetaApi::class)->phone($channel->phone_number_id, $channel->access_token);
-        return response()->json(['success' => true, 'message' => 'Meta verified the number credentials.']);
     }
 }

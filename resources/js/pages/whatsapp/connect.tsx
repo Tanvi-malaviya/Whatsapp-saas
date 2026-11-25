@@ -95,8 +95,12 @@ export default function WhatsAppConnect({
 
     useEffect(() => {
         const connected = (event: MessageEvent) => {
-            if (event.origin === window.location.origin && event.data?.type === 'WHATSAPP_CONNECTED') {
-                router.reload();
+            if (event.origin === window.location.origin) {
+                if (event.data?.type === 'WHATSAPP_CONNECTED') {
+                    router.reload();
+                } else if (event.data?.type === 'WHATSAPP_CONNECT_ERROR') {
+                    setSyncNotice(`Connection error: ${event.data.error || 'Connection failed'}`);
+                }
             }
         };
         window.addEventListener('message', connected);
