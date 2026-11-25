@@ -342,9 +342,13 @@ class CommerceController extends Controller
         }
 
         $count = $products->count();
-        $msg = $syncedWithMeta
-            ? "Successfully synced {$count} items with Meta Commerce Manager Catalog #{$catalogId}!"
-            : ($metaError ? "Local catalog refreshed ({$count} items). Meta sync note: {$metaError}" : "Successfully synced {$count} items with catalog!");
+        if ($metaError && (str_contains($metaError, 'Unsupported post request') || str_contains($metaError, 'missing permissions') || str_contains($metaError, 'does not exist'))) {
+            $msg = "Local products refreshed ({$count} items). Note: To show items in WhatsApp, please add your items once directly in Meta Commerce Manager > Items (API write permission is restricted by Meta).";
+        } else {
+            $msg = $syncedWithMeta
+                ? "Successfully synced {$count} items with Meta Commerce Manager Catalog #{$catalogId}!"
+                : ($metaError ? "Local catalog refreshed ({$count} items). Meta sync note: {$metaError}" : "Successfully synced {$count} items with catalog!");
+        }
 
         return response()->json([
             'success' => true,
