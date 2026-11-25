@@ -40,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('channels/sync-meta', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncFromMeta'])->name('channels.sync-meta');
     Route::delete('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'destroy'])->name('channels.destroy');
     Route::post('channels/{id}/set-default', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'setDefault'])->name('channels.set-default');
+    Route::post('channels/{id}/sync', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncChannel'])->name('channels.sync');
     Route::post('channels/{id}/test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'testConnection'])->name('channels.test');
     Route::get('channels/{id}/templates', function (string $id) { $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::findOrFail($id); return response()->json(['templates' => array_values(array_filter(app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel), fn ($t) => $t['status'] === 'APPROVED'))]); });
     Route::get('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('channels.show');
@@ -57,7 +58,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard.index');
             Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
             Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
-            Route::post('organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::match(['get', 'post'], 'organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
             Route::delete('organizations/{id}', [\App\Http\Controllers\AdminController::class, 'destroyOrganization'])->name('organizations.destroy');
             Route::get('channels', [\App\Http\Controllers\AdminController::class, 'channels'])->name('channels');
             Route::get('users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
@@ -462,6 +463,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('campaigns/{id}/resume', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'resume'])->name('campaigns.resume');
     Route::post('campaigns/{id}/cancel', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'cancel'])->name('campaigns.cancel');
     Route::get('campaigns/{id}/analytics', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'analytics'])->name('campaigns.analytics');
+    Route::get('campaigns/ads', function (\Illuminate\Http\Request $request) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
+        \App\Shared\TenantContext::set($org);
+
+        $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->orderByDesc('is_default')
+            ->get();
+
+        $flows = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)
+            ->where('status', 'active')
+            ->get(['id', 'name', 'trigger_keywords']);
+
+        return \Inertia\Inertia::render('campaigns/ads', [
+            'channels' => $channels->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'phoneNumber' => $c->phone_number,
+                'cleanPhone' => preg_replace('/\D+/', '', $c->phone_number ?? ''),
+                'isDefault' => (bool) $c->is_default,
+            ])->values()->all(),
+            'flows' => $flows,
+        ]);
+    })->name('campaigns.ads');
+
+    Route::get('help', function () {
+        return \Inertia\Inertia::render('help/index');
+    })->name('help.index');
     // Templates Management (Live Meta Templates)
     Route::get('templates', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()

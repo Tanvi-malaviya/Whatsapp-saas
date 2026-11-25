@@ -47,9 +47,20 @@ class AutomationController extends Controller
     }
     public function saveAgent(Request $request)
     {
-        $data = $request->validate(['enabled' => 'required|boolean', 'model' => 'required|in:gpt-4o-mini,gpt-4o,gpt-4.1-mini,gpt-4.1', 'language' => 'required|in:multilingual,en,gu,hi', 'system_prompt' => 'required|string|max:12000', 'temperature' => 'required|numeric|between:0,2']);
-        if ($data['enabled'] && ! app(AiAgentService::class)->key()) { throw ValidationException::withMessages(['enabled' => 'Ask the administrator to configure the OpenAI API key before enabling AI.']); }
-        $org = TenantContext::get(); $meta = $org->metadata ?? []; $meta['ai_agent'] = $data; $org->update(['metadata' => $meta]);
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'provider' => 'nullable|string|in:openai,anthropic',
+            'api_key' => 'nullable|string|max:1000',
+            'model' => 'required|string|max:100',
+            'language' => 'required|in:multilingual,en,gu,hi',
+            'system_prompt' => 'required|string|max:12000',
+            'temperature' => 'required|numeric|between:0,2'
+        ]);
+
+        $org = TenantContext::get();
+        $meta = $org->metadata ?? [];
+        $meta['ai_agent'] = $data;
+        $org->update(['metadata' => $meta]);
         return response()->json(['success' => true]);
     }
     public function upload(Request $request, AiAgentService $ai)

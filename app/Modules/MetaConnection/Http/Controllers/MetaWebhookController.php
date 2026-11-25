@@ -54,228 +54,36 @@ class MetaWebhookController extends Controller
 
     public function process(int $recordId): void
     {
-        $entry = $payload['entry'][0] ?? null;
-        $change = $entry['changes'][0]['value'] ?? null;
-
-        if (! $change) {
-            return;
-        }
-
-        // Process delivery/read receipt statuses from Meta
-        $statuses = $change['statuses'] ?? [];
-        if (! empty($statuses)) {
-            foreach ($statuses as $st) {
-                $statusWamid = $st['id'] ?? null;
-                $newStatus = $st['status'] ?? null; // 'sent', 'delivered', 'read', 'failed'
-                if ($statusWamid && $newStatus) {
-                    $errors = $st['errors'] ?? [];
-                    if (!empty($errors)) {
-                        Log::warning("WhatsApp message delivery failed ({$statusWamid}): " . json_encode($errors));
-                    }
-                    Message::where('wamid', $statusWamid)->update(['status' => $newStatus]);
-                }
-            }
-        }
-
-        $messages = $change['messages'] ?? [];
-        if (empty($messages)) {
-            return;
-        }
-
-        // Get sender profile
-        $contactProfile = $change['contacts'][0] ?? null;
-        $contactName = $contactProfile['profile']['name'] ?? 'WhatsApp Customer';
-        $phoneNumberId = $change['metadata']['phone_number_id'] ?? null;
-
-        foreach ($messages as $msg) {
-            $wamid = $msg['id'] ?? null;
-            $fromNumber = $msg['from'] ?? null;
-            $msgType = $msg['type'] ?? 'text';
-            $textBody = $msg['text']['body'] ?? ($msg['button']['text'] ?? '');
-
-            // Meta Cloud API: Customer sent a Cart from WhatsApp Catalog
-            $orderItems = [];
-            $totalAmount = 0.0;
-            $currency = 'INR';
-            $orderData = [];
-            if ($msgType === 'order') {
-                $orderData = $msg['order'] ?? [];
-                $productItems = $orderData['product_items'] ?? [];
-                foreach ($productItems as $pItem) {
-                    $qty = (int) ($pItem['quantity'] ?? 1);
-                    $price = (float) ($pItem['item_price'] ?? 0);
-                    $retailerId = $pItem['product_retailer_id'] ?? '';
-                    $currency = $pItem['currency'] ?? 'INR';
-                    $matchedProduct = \App\Modules\Commerce\Models\CommerceProduct::where('retailer_id', $retailerId)->first();
-                    $name = $matchedProduct?->name ?? $retailerId ?? 'Catalog Product';
-
-                    $orderItems[] = [
-                        'name' => $name,
-                        'qty' => $qty,
-                        'price' => $price,
-                        'retailer_id' => $retailerId,
-                    ];
-                    $totalAmount += ($qty * $price);
-                }
-
-                $textBody = "🛒 New WhatsApp Cart Order (" . count($orderItems) . " item(s)) - Total: ₹" . number_format($totalAmount, 2);
-                if (!empty($orderData['text'])) {
-                    $textBody .= "\nNote: " . $orderData['text'];
-                }
-            }
-
-            if (! $fromNumber || empty($textBody)) {
-                continue;
-            }
-
-            // Deduplication: if message with this wamid already exists, skip
-            if ($wamid && Message::where('wamid', $wamid)->exists()) {
-                continue;
-            }
-
-            $normalizedPhone = (new PhoneNumber($fromNumber))->getE164();
-
-            // 1. Match existing active conversation thread for this contact phone
-            $existingConv = Conversation::where('contact_phone', $normalizedPhone)
-                ->orderBy('last_message_at', 'desc')
-                ->first();
-
-            $org = null;
-            if ($existingConv) {
-                $org = Organization::find($existingConv->organization_id);
-            }
-
-            // 2. Fallback to active logged in user's current organization
-            if (! $org) {
-                $activeUserOrg = \App\Models\User::first()?->current_organization_id;
-                if ($activeUserOrg && $phoneNumberId) {
-                    $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)
-                        ->where('organization_id', $activeUserOrg)
-                        ->first();
-                    if ($channel) {
-                        $org = Organization::find($channel->organization_id);
-                    }
-                }
-            }
-
-            // 3. Fallback to channel's organization
-            if (! $org && $phoneNumberId) {
-                $channel = WhatsAppChannel::where('phone_number_id', $phoneNumberId)->first();
-                $org = $channel ? Organization::find($channel->organization_id) : null;
-            }
-
-            $org = $org ?? TenantContext::get() ?? Organization::first();
-
-            if (! $org) {
-                continue;
-            }
-
-            TenantContext::set($org);
-
-            // Find or create active conversation thread in resolved organization
-            $conversation = Conversation::firstOrCreate(
-                [
-                    'organization_id' => $org->id,
-                    'contact_phone' => $normalizedPhone,
-                ],
-                [
-                    'contact_name' => $contactName,
-                    'channel_phone_number_id' => $phoneNumberId,
-                    'status' => 'open',
-                ]
-            );
-
-            // Extend 24h customer service window & update last activity
-            $conversation->extendWindow();
-            
-            // Check for WhatsApp standard Opt-In / Opt-Out keywords
-            $cleanText = strtoupper(trim($textBody));
-            $optOutKeywords = ['STOP', 'UNSUBSCRIBE', 'OPTOUT', 'CANCEL', 'STOPALL'];
-            $optInKeywords = ['START', 'UNSTOP', 'YES'];
-
-            if (in_array($cleanText, $optOutKeywords)) {
-                $conversation->update(['is_opted_in' => false, 'last_message_at' => now()]);
-            } elseif (in_array($cleanText, $optInKeywords)) {
-                $conversation->update(['is_opted_in' => true, 'last_message_at' => now()]);
-            } else {
-                $conversation->update(['last_message_at' => now()]);
-            }
-
-            // Store inbound message
-            Message::create([
-                'conversation_id' => $conversation->id,
-                'organization_id' => $org->id,
-                'direction' => 'inbound',
-                'sender_type' => 'contact',
-                'sender_id' => $normalizedPhone,
-                'wamid' => $wamid,
-                'type' => $msgType,
-                'content' => $textBody,
-                'status' => 'received',
-                'meta_cost_paise' => 0,
-            ]);
-
-            // If real WhatsApp cart order, record into CommerceOrder
-            if ($msgType === 'order' && !empty($orderItems)) {
-                $newOrder = \App\Modules\Commerce\Models\CommerceOrder::create([
-                    'organization_id' => $org->id,
-                    'order_number' => 'WA-' . rand(10000, 99999),
-                    'customer_name' => $contactName,
-                    'customer_phone' => $normalizedPhone,
-                    'total_amount' => $totalAmount,
-                    'currency' => $currency,
-                    'status' => 'pending',
-                    'items' => $orderItems,
-                    'meta_order_id' => $wamid,
-                    'notes' => $orderData['text'] ?? 'Placed directly via WhatsApp Catalog Cart.',
-                ]);
-
-                // Send instant WhatsApp order confirmation
-                $confirmMsg = "🎉 *Order Placed Successfully!*\n\n"
-                    . "Order No: *#{$newOrder->order_number}*\n"
-                    . "Total Amount: *₹" . number_format($totalAmount, 2) . "*\n"
-                    . "Items: " . count($orderItems) . "\n\n"
-                    . "Thank you for shopping with us! Our team will contact you shortly to confirm your delivery.";
-
-                Message::create([
-                    'conversation_id' => $conversation->id,
-                    'organization_id' => $org->id,
-                    'direction' => 'outbound',
-                    'sender_type' => 'bot',
-                    'type' => 'text',
-                    'content' => $confirmMsg,
-                    'status' => 'sent',
-                ]);
-                $this->dispatchMetaReply($phoneNumberId, $fromNumber, $confirmMsg);
-            }
-
-            // If customer replied with text like ORDER / BUY / ORDER <SKU>
-            $upperBody = strtoupper(trim($textBody));
-            if ($msgType === 'text' && (str_starts_with($upperBody, 'ORDER') || str_starts_with($upperBody, 'BUY'))) {
-                $matchedProduct = null;
-                $allProducts = \App\Modules\Commerce\Models\CommerceProduct::where('organization_id', $org->id)->get();
-                foreach ($allProducts as $p) {
-                    if (str_contains($upperBody, strtoupper($p->retailer_id)) || str_contains($upperBody, strtoupper($p->name))) {
-                        $matchedProduct = $p;
-                        break;
-                    }
-                }
-
-                // If SKU not specified, match the product sent most recently in this conversation
-                if (!$matchedProduct) {
-                    $lastProductMsg = Message::where('conversation_id', $conversation->id)
-                        ->where('direction', 'outbound')
-                        ->where('content', 'like', '%Product Message Sent:%')
-                        ->latest()
-                        ->first();
-
-                    if ($lastProductMsg) {
-                        foreach ($allProducts as $p) {
-                            if (str_contains($lastProductMsg->content, $p->name)) {
-                                $matchedProduct = $p;
-                                break;
-                            }
-                        }
+        $record = WebhookInbox::findOrFail($recordId);
+        if ($record->status === 'processed') { return; }
+        $org = Organization::find($record->organization_id);
+        if (! $org || ! $org->isActive()) { $record->update(['status' => 'ignored']); return; }
+        TenantContext::set($org);
+        try {
+            $record->increment('attempts');
+            $value = $record->payload['value'] ?? [];
+            $channel = WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $org->id)->where('phone_number_id', $record->phone_number_id)->where('status', 'connected')->first();
+            $rank = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3];
+            foreach ($value['statuses'] ?? [] as $status) {
+                $message = Message::where('wamid', $status['id'] ?? '')->first();
+                if ($message && (($status['status'] ?? '') === 'failed' || ($rank[$status['status'] ?? ''] ?? 0) > ($rank[$message->status] ?? 0))) {
+                    $meta = $message->metadata ?? [];
+                    $errorReason = null;
+                    if (($status['status'] ?? '') === 'failed' && ! empty($status['errors'][0])) {
+                        $err = $status['errors'][0];
+                        $code = $err['code'] ?? null;
+                        $details = $err['error_data']['details'] ?? $err['message'] ?? $err['title'] ?? 'Message delivery failed';
+                        // Add human-friendly tips for common Meta WhatsApp error codes
+                        $friendlyTip = match ((int) $code) {
+                            131047 => '24-hour service window closed. Send a pre-approved template message.',
+                            131026 => 'Undeliverable: Recipient phone number is inactive or not on WhatsApp.',
+                            131042 => 'Payment issue: Check payment method in Meta Business Manager.',
+                            132000 => 'Template format mismatch or variables missing.',
+                            130429 => 'Rate limit exceeded: Too many messages sent too quickly.',
+                            default => $details,
+                        };
+                        $errorReason = ($code ? "[Meta #{$code}] " : '').$friendlyTip;
+                        $meta['failure_reason'] = $errorReason;
                     }
                     $message->update(['status' => $status['status'], 'metadata' => $meta]);
                     DB::table('campaign_recipients')->where('wamid', $status['id'])->update([

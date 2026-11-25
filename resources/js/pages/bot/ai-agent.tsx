@@ -38,6 +38,8 @@ const DEFAULT_SYSTEM_PROMPT =
 
 export default function AIAgent({ settings = {}, initialDocs = [], providerReady = false }: { settings?: any; initialDocs?: KnowledgeDoc[]; providerReady?: boolean }) {
     const [agentEnabled, setAgentEnabled] = useState<boolean>(settings.enabled ?? false);
+    const [provider, setProvider] = useState<'openai' | 'anthropic'>(settings.provider ?? 'openai');
+    const [customerApiKey, setCustomerApiKey] = useState<string>(settings.api_key ?? '');
     const [model, setModel] = useState<string>(settings.model ?? 'gpt-4o-mini');
     const [primaryLanguage, setPrimaryLanguage] = useState<string>(settings.language ?? 'multilingual');
     const [systemPrompt, setSystemPrompt] = useState<string>(settings.system_prompt ?? 'Help our customers using the uploaded business documents. Offer human support if information is missing.');
@@ -60,10 +62,21 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
     const handleSave = async () => {
         setIsSaving(true);
         try {
-            await api('/ai-agent', 'POST', { enabled: agentEnabled, model, language: primaryLanguage, system_prompt: systemPrompt, temperature: Number(temperature) });
-            showToast('AI settings saved.');
-        } catch (error) { showToast((error as Error).message); }
-        finally { setIsSaving(false); }
+            await api('/ai-agent', 'POST', {
+                enabled: agentEnabled,
+                provider,
+                api_key: customerApiKey,
+                model,
+                language: primaryLanguage,
+                system_prompt: systemPrompt,
+                temperature: Number(temperature),
+            });
+            showToast('AI settings saved successfully.');
+        } catch (error) {
+            showToast((error as Error).message);
+        } finally {
+            setIsSaving(false);
+        }
     };
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
@@ -249,17 +262,91 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                                 </div>
                             </CardHeader>
                             <CardContent className="p-4 pt-2 space-y-3.5">
+                                {/* Provider Selection & BYOK API Key */}
+                                <div className="p-3 rounded-lg bg-muted/40 border border-border/80 space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                                            <Zap className="size-3.5 text-amber-500" />
+                                            <span>AI Provider &amp; Customer Token (BYOK)</span>
+                                        </Label>
+                                        <span className="text-[10px] text-muted-foreground font-medium">No markup on customer tokens</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setProvider('openai');
+                                                if (model.includes('claude')) setModel('gpt-4o-mini');
+                                            }}
+                                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                                                provider === 'openai'
+                                                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold'
+                                                    : 'border-border bg-card hover:bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="text-xs">OpenAI (GPT)</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal">GPT-4o, GPT-4o Mini</div>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setProvider('anthropic');
+                                                if (model.includes('gpt')) setModel('claude-3-5-sonnet-20241022');
+                                            }}
+                                            className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                                                provider === 'anthropic'
+                                                    ? 'border-purple-500 bg-purple-500/10 text-purple-700 dark:text-purple-300 font-bold'
+                                                    : 'border-border bg-card hover:bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className="text-xs">Anthropic (Claude)</div>
+                                            <div className="text-[10px] text-muted-foreground font-normal">Claude 3.5 Sonnet, Haiku</div>
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-1 pt-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-[11px] font-semibold text-foreground">
+                                                {provider === 'anthropic' ? 'Anthropic API Key' : 'OpenAI API Key'}
+                                            </Label>
+                                            <span className="text-[10px] text-muted-foreground font-mono">
+                                                {provider === 'anthropic' ? 'sk-ant-...' : 'sk-proj-...'}
+                                            </span>
+                                        </div>
+                                        <Input
+                                            type="password"
+                                            value={customerApiKey}
+                                            onChange={(e) => setCustomerApiKey(e.target.value)}
+                                            placeholder={provider === 'anthropic' ? 'Paste your Anthropic API Key (sk-ant-...)' : 'Paste your OpenAI API Key (sk-...)'}
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Your personal key is stored encrypted and used only for your workspace's bot replies.
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="space-y-1">
-                                        <Label className="text-xs font-medium">Underlying AI Model</Label>
+                                        <Label className="text-xs font-medium">Selected Model</Label>
                                         <select
                                             value={model}
                                             onChange={(e) => setModel(e.target.value)}
                                             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
                                         >
-                                            <option value="gpt-4o-mini">GPT-4o Mini (Fast &amp; Cost-Effective)</option>
-                                            <option value="claude-3-5-haiku">Claude 3.5 Haiku (High Accuracy)</option>
-                                            <option value="llama-3-8b">Meta Llama 3 8B (Open Source)</option>
+                                            {provider === 'openai' ? (
+                                                <>
+                                                    <option value="gpt-4o-mini">GPT-4o Mini (Fast &amp; Cost-Effective)</option>
+                                                    <option value="gpt-4o">GPT-4o (Most Intelligent)</option>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Highest Quality)</option>
+                                                    <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Lightning Fast)</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
 

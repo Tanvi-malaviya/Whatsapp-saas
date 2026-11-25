@@ -27,12 +27,28 @@ class CommerceController extends Controller
     {
         $orgId = $this->resolveTenantId($request);
 
+        $channels = WhatsAppChannel::where('organization_id', $orgId)->get(['id', 'name', 'phone_number', 'waba_id', 'is_default']);
+        $selectedChannelId = $request->query('channel_id');
+
+        $activeChannel = null;
+        if ($selectedChannelId && $selectedChannelId !== 'all') {
+            $activeChannel = $channels->firstWhere('id', $selectedChannelId);
+        }
+        if (! $activeChannel && $channels->isNotEmpty()) {
+            $activeChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
+        }
+
         // Seed demo products if empty
         if (CommerceProduct::where('organization_id', $orgId)->count() === 0) {
-            $this->seedInitialProducts($orgId);
+            $this->seedInitialProducts($orgId, $activeChannel?->id);
         }
 
         $products = CommerceProduct::where('organization_id', $orgId)
+            ->when($selectedChannelId && $selectedChannelId !== 'all', function ($q) use ($selectedChannelId) {
+                $q->where(function ($sub) use ($selectedChannelId) {
+                    $sub->where('channel_id', $selectedChannelId)->orWhereNull('channel_id');
+                });
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -40,26 +56,27 @@ class CommerceController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $channels = WhatsAppChannel::where('organization_id', $orgId)->get(['id', 'name', 'phone_number', 'waba_id', 'is_default']);
-        $defaultChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
-
         $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id")
-            ?: ($products->first()?->meta_catalog_id ?: ($defaultChannel?->waba_id ?: ''));
-        $channelName = $defaultChannel?->name ?: 'WhatsApp Store';
-        $channelPhone = $defaultChannel?->phone_number ?: '';
+            ?: ($products->first()?->meta_catalog_id ?: ($activeChannel?->waba_id ?: ''));
+        $channelName = $activeChannel?->name ?: 'WhatsApp Store';
+        $channelPhone = $activeChannel?->phone_number ?: '';
+        $cleanPhone = preg_replace('/\D/', '', $channelPhone);
 
         return Inertia::render('commerce/index', [
             'products' => $products,
             'orders' => $orders,
             'channels' => $channels,
+            'selected_channel_id' => $selectedChannelId ?: ($activeChannel?->id ?: 'all'),
             'catalogMeta' => [
                 'catalog_id' => $savedCatalogId,
                 'catalog_name' => "{$channelName} Meta Catalog",
                 'linked_phone' => $channelPhone,
                 'linked_channel_name' => $channelName,
-                'linked_waba_id' => $defaultChannel?->waba_id,
+                'linked_channel_id' => $activeChannel?->id,
+                'linked_waba_id' => $activeChannel?->waba_id,
+                'share_catalog_url' => $cleanPhone ? "https://wa.me/c/{$cleanPhone}" : '',
                 'currency' => 'INR',
-                'is_connected' => (bool) $defaultChannel,
+                'is_connected' => (bool) $activeChannel,
                 'last_synced_at' => now()->subHours(2)->toIso8601String(),
             ],
         ]);
@@ -70,6 +87,7 @@ class CommerceController extends Controller
         $orgId = $this->resolveTenantId($request);
 
         $validated = $request->validate([
+            'channel_id' => 'nullable|string',
             'name' => 'required|string|max:150',
             'retailer_id' => 'nullable|string|max:50',
             'description' => 'nullable|string|max:1000',
@@ -114,6 +132,7 @@ class CommerceController extends Controller
 
         CommerceProduct::create([
             'organization_id' => $orgId,
+            'channel_id' => $validated['channel_id'] ?? null,
             'name' => $validated['name'],
             'retailer_id' => $sku,
             'description' => $validated['description'] ?? '',

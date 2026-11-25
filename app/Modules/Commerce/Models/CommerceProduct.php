@@ -15,6 +15,7 @@ class CommerceProduct extends Model
 
     protected $fillable = [
         'organization_id',
+        'channel_id',
         'name',
         'retailer_id',
         'description',
@@ -34,5 +35,10 @@ class CommerceProduct extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(\App\Modules\MetaConnection\Models\WhatsAppChannel::class, 'channel_id');
     }
 }

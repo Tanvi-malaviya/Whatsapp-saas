@@ -24,6 +24,7 @@ class CreateNewUser implements CreatesNewUsers
     {
         Validator::make($input, [
             ...$this->profileRules(),
+            'workspace_name' => ['nullable', 'string', 'max:100'],
             'password' => $this->passwordRules(),
         ])->validate();
 
@@ -45,12 +46,14 @@ class CreateNewUser implements CreatesNewUsers
         }
         $user->generateReferralCode();
 
-        // Auto-create workspace for self-registered user
-        $wsName = $input['name'] . "'s Workspace";
-        $slug = Str::slug($input['name']) . '-' . rand(100, 999);
+        // Custom workspace name provided or fallback to User's Workspace
+        $workspaceName = ! empty(trim($input['workspace_name'] ?? ''))
+            ? trim($input['workspace_name'])
+            : $input['name'] . "'s Workspace";
+        $slug = Str::slug($workspaceName) . '-' . rand(100, 999);
 
         $orgData = [
-            'name' => $wsName,
+            'name' => $workspaceName,
             'slug' => $slug,
             'subscription_plan' => 'annual',
             'status' => 'active',

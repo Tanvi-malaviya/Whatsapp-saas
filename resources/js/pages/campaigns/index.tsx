@@ -26,6 +26,7 @@ import {
     XCircle,
     BarChart2,
     Wallet as WalletIcon,
+    Megaphone,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -416,6 +417,17 @@ export default function CampaignsList({
 
                     <div className="flex items-center gap-2">
                         <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="text-xs h-8.5 sm:h-9 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold"
+                        >
+                            <Link href="/campaigns/ads">
+                                <Megaphone className="size-3.5" />
+                                WhatsApp Ads (CTWA)
+                            </Link>
+                        </Button>
+                        <Button
                             size="sm"
                             onClick={handleNewCampaignClick}
                             className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-8.5 sm:h-9 text-xs font-semibold shadow-xs"
@@ -493,7 +505,14 @@ export default function CampaignsList({
                                         {recentCampaigns.map((camp) => (
                                             <tr key={camp.id} className="hover:bg-muted/30 transition-colors">
                                                 <td className="py-2.5 px-4 font-medium text-foreground">
-                                                    {camp.name}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleViewAnalytics(camp.id)}
+                                                        className="font-semibold text-foreground hover:text-primary hover:underline text-left cursor-pointer"
+                                                        title="Click to view detailed campaign analytics"
+                                                    >
+                                                        {camp.name}
+                                                    </button>
                                                 </td>
                                                 <td className="py-2.5 px-4">
                                                     <span className="font-mono text-[11px] text-foreground">{camp.templateName}</span>
@@ -539,7 +558,7 @@ export default function CampaignsList({
                                                     </span>
                                                 </td>
                                                 <td className="py-2.5 px-4 text-center">
-                                                    <div className="flex items-center justify-center gap-1">
+                                                    <div className="flex items-center justify-center gap-1.5">
                                                         {/* Pause / Resume Controls */}
                                                         {camp.status !== 'completed' && camp.status !== 'cancelled' && (
                                                             <>
@@ -581,13 +600,14 @@ export default function CampaignsList({
                                                         )}
 
                                                         <Button
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            className="size-6 text-primary hover:bg-primary/10"
-                                                            title="View Analytics & Failure Reasons"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-6.5 text-[11px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10 font-semibold cursor-pointer"
+                                                            title="View Delivery Performance, Read Rate & Replies"
                                                             onClick={() => handleViewAnalytics(camp.id)}
                                                         >
                                                             <BarChart2 className="size-3" />
+                                                            Analytics
                                                         </Button>
                                                     </div>
                                                 </td>
@@ -1044,6 +1064,50 @@ export default function CampaignsList({
                                     <div className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                                         {analyticsData.metrics.replies}
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Delivery Funnel Bar */}
+                            <div className="p-3 bg-muted/30 rounded-xl border border-border/70 space-y-2">
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
+                                    <span>Live Delivery &amp; Engagement Funnel</span>
+                                    <span className="text-muted-foreground">
+                                        {analyticsData.metrics.delivery_rate}% Delivered · {analyticsData.metrics.read_rate}% Read
+                                    </span>
+                                </div>
+                                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden flex">
+                                    <div
+                                        style={{ width: `${Math.min(100, analyticsData.metrics.delivery_rate)}%` }}
+                                        className="bg-emerald-500 h-full transition-all"
+                                        title={`Delivered: ${analyticsData.metrics.delivered + analyticsData.metrics.read}`}
+                                    />
+                                    {analyticsData.metrics.failed > 0 && (
+                                        <div
+                                            style={{ width: `${Math.min(100 - analyticsData.metrics.delivery_rate, 15)}%` }}
+                                            className="bg-destructive h-full transition-all"
+                                            title={`Failed: ${analyticsData.metrics.failed}`}
+                                        />
+                                    )}
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground pt-0.5">
+                                    <span className="flex items-center gap-1">
+                                        <span className="size-2 rounded-full bg-emerald-500 inline-block" />
+                                        Delivered: {analyticsData.metrics.delivered + analyticsData.metrics.read}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <span className="size-2 rounded-full bg-blue-500 inline-block" />
+                                        Read: {analyticsData.metrics.read}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <span className="size-2 rounded-full bg-purple-500 inline-block" />
+                                        Replies: {analyticsData.metrics.replies}
+                                    </span>
+                                    {analyticsData.metrics.failed > 0 && (
+                                        <span className="flex items-center gap-1 text-destructive font-medium">
+                                            <span className="size-2 rounded-full bg-destructive inline-block" />
+                                            Failed: {analyticsData.metrics.failed}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
