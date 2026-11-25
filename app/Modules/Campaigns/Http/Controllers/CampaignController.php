@@ -415,28 +415,48 @@ class CampaignController extends Controller
                     ]
                 );
 
+                $recipientIds = [];
                 foreach ($recipients as $recipient) {
-                    $id = DB::table('campaign_recipients')->insertGetId([
+                    $recipientIds[] = DB::table('campaign_recipients')->insertGetId([
                         'campaign_id' => $campaign->id,
                         ...$recipient,
                         'status' => 'queued',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
-                    SendCampaignRecipient::dispatch($id)->afterCommit();
                 }
 
-                return $campaign;
+                return [$campaign, $recipientIds];
             });
+
+            [$campaign, $recipientIds] = $result;
+
+            // If small recipient list (<= 10 recipients), dispatch immediately so messages deliver in real-time without waiting for background worker!
+            if (count($recipientIds) <= 10) {
+                foreach ($recipientIds as $recId) {
+                    try {
+                        SendCampaignRecipient::dispatchSync($recId);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error("Immediate dispatch error for recipient {$recId}: " . $e->getMessage());
+                    }
+                }
+            } else {
+                foreach ($recipientIds as $recId) {
+                    SendCampaignRecipient::dispatch($recId);
+                }
+            }
+
+            // Reload campaign to get latest counts if dispatched synchronously
+            $campaign->refresh();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Broadcast queued. Delivery results will update in real-time as messages are dispatched.',
+                'message' => $campaign->status === 'completed' ? 'Broadcast dispatched and delivered successfully!' : 'Broadcast queued for dispatch.',
                 'campaign_id' => $campaign->id,
                 'cost_paise' => $campaign->cost_paise,
                 'cost_formatted' => '₹' . number_format($campaign->cost_paise / 100, 2),
-                'success_count' => 0,
-                'failed_count' => 0,
+                'success_count' => (int) $campaign->success_count,
+                'failed_count' => (int) $campaign->failed_count,
             ]);
         } catch (ValidationException $e) {
             return response()->json([
