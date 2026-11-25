@@ -303,8 +303,12 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                     setEditingContact(null);
                     showToast(`Contact "${newName}" updated successfully!`);
                 },
-                onError: () => {
+                onError: (errors: any) => {
                     setIsUpdating(false);
+                    const firstError = Object.values(errors || {})[0] as string;
+                    if (firstError) {
+                        alert(firstError);
+                    }
                 },
                 onFinish: () => {
                     setIsUpdating(false);
