@@ -72,12 +72,15 @@ type Props = {
     products: Product[];
     orders: Order[];
     channels: Array<{ id: string; name: string; phone_number: string; is_default: boolean }>;
+    selected_channel_id?: string;
     catalogMeta: {
         catalog_id: string;
         catalog_name: string;
         linked_phone?: string;
         linked_channel_name?: string;
+        linked_channel_id?: string;
         linked_waba_id?: string;
+        share_catalog_url?: string;
         currency: string;
         is_connected: boolean;
         last_synced_at: string;
@@ -88,6 +91,7 @@ export default function CommerceIndex({
     products = [],
     orders = [],
     channels = [],
+    selected_channel_id = 'all',
     catalogMeta,
 }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
@@ -419,7 +423,27 @@ export default function CommerceIndex({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
+                        {catalogMeta.share_catalog_url && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                className="h-8 px-2.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 gap-1.5 font-semibold"
+                            >
+                                <a
+                                    href={catalogMeta.share_catalog_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open Full WhatsApp Business Catalog"
+                                >
+                                    <Store className="size-3.5 text-emerald-600" />
+                                    <span>Share Full Catalog</span>
+                                    <ExternalLink className="size-2.5 opacity-70" />
+                                </a>
+                            </Button>
+                        )}
+
                         <Button
                             variant="outline"
                             size="sm"
@@ -461,6 +485,55 @@ export default function CommerceIndex({
                         </Button>
                     </div>
                 </div>
+
+                {/* Channel Scope Selector */}
+                {channels && channels.length > 0 && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 px-3 rounded-xl bg-card border border-border/70 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <Smartphone className="size-3.5 text-emerald-600" />
+                            <span className="text-xs font-bold text-foreground">Catalog WhatsApp Number:</span>
+                            <span className="text-[11px] text-muted-foreground">
+                                {catalogMeta.linked_channel_name} ({catalogMeta.linked_phone || 'All'})
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                            <button
+                                type="button"
+                                onClick={() => router.get('/commerce', { channel_id: 'all' }, { preserveScroll: true, preserveState: true })}
+                                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                                    selected_channel_id === 'all'
+                                        ? 'bg-primary text-primary-foreground shadow-xs'
+                                        : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                }`}
+                            >
+                                All Numbers
+                            </button>
+                            {channels.map((ch) => (
+                                <button
+                                    key={ch.id}
+                                    type="button"
+                                    onClick={() => router.get('/commerce', { channel_id: ch.id }, { preserveScroll: true, preserveState: true })}
+                                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                                        selected_channel_id === ch.id
+                                            ? 'bg-primary text-primary-foreground shadow-xs'
+                                            : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    }`}
+                                >
+                                    <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                    <span>{ch.phone_number || ch.name}</span>
+                                    {ch.is_default && (
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase ${
+                                            selected_channel_id === ch.id ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                            Default
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {syncMessage && (
                     <div className="p-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center justify-between animate-in fade-in duration-200">

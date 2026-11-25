@@ -23,6 +23,7 @@ class WhatsAppChannel extends Model
         'phone_number_id',
         'waba_id',
         'access_token',
+        'registration_pin',
         'app_id',
         'app_secret',
         'quality_rating',
@@ -33,10 +34,11 @@ class WhatsAppChannel extends Model
         'metadata',
     ];
 
-    protected $hidden = ['access_token', 'app_secret'];
+    protected $hidden = ['access_token', 'app_secret', 'registration_pin'];
 
     protected $casts = [
         'access_token' => 'encrypted',
+        'registration_pin' => 'encrypted',
         'app_secret' => 'encrypted',
         'is_default' => 'boolean',
         'webhook_verified_at' => 'datetime',

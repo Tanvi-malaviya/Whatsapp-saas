@@ -46,9 +46,7 @@ class AdminController extends Controller
     public function showLogin(Request $request): Response|RedirectResponse
     {
 
-        if ($request->user() && $request->user()->isSuperAdmin()) {
-            return redirect()->route('admin.dashboard');
-        }
+        if ($request->user()) { return redirect(\App\Services\PanelNavigation::home($request->user())); }
 
         return Inertia::render('admin/login', [
             'status' => session('status'),
@@ -67,7 +65,7 @@ class AdminController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login')->with('success', 'You have been safely signed out from the Super Admin portal.');
+        return redirect($request->is('agent/logout') ? '/agent/login' : '/admin/login')->with('success', 'You have been signed out.');
     }
 
     /**
@@ -229,6 +227,17 @@ class AdminController extends Controller
             'diagnostics' => $diagnostics,
             'recentOrganizations' => $recentOrganizations,
             'recentChannels' => $recentChannels,
+            'pricingSettings' => [
+                'subscription_annual_price_paise' => (int) \App\Models\PlatformSetting::read('subscription_annual_price_paise', 999900),
+                'subscription_validity_days' => (int) \App\Models\PlatformSetting::read('subscription_validity_days', 365),
+                'welcome_bonus_paise' => (int) \App\Models\PlatformSetting::read('welcome_bonus_paise', 50000),
+                'referral_reward_paise' => (int) \App\Models\PlatformSetting::read('referral_reward_paise', 50000),
+                'campaign_max_contacts' => (int) \App\Models\PlatformSetting::read('campaign_max_contacts', 2000),
+                'min_message_purchase_count' => (int) \App\Models\PlatformSetting::read('min_message_purchase_count', 200),
+                'meta_rate_marketing_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_marketing_paise', 88),
+                'meta_rate_utility_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_utility_paise', 14),
+                'meta_rate_authentication_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_authentication_paise', 14),
+            ],
         ]);
     }
 
@@ -345,10 +354,18 @@ class AdminController extends Controller
         $user = $request->user();
 
         if ($user) {
+            // Ensure user has access and is attached as Owner if not already attached
+            if (! $user->organizations()->where('organizations.id', $org->id)->exists()) {
+                $user->organizations()->attach($org->id, ['role' => 'Owner']);
+            }
             $user->switchOrganization($org);
+            $request->session()->put('support_workspace_id', $org->id);
+            $user->update(['current_organization_id' => $org->id]);
+            $request->session()->put('current_organization_id', $org->id);
+            \App\Shared\TenantContext::set($org);
         }
 
-        return redirect()->route('dashboard')->with('success', "Switched workspace to {$org->name}");
+        return redirect('/dashboard')->with('success', "Opened workspace: {$org->name}");
     }
 
     /**
@@ -624,7 +641,7 @@ class AdminController extends Controller
             'welcome_bonus_paise' => (int) \App\Models\PlatformSetting::read('welcome_bonus_paise', 50000),
             'referral_reward_paise' => (int) \App\Models\PlatformSetting::read('referral_reward_paise', 50000),
             'campaign_max_contacts' => (int) \App\Models\PlatformSetting::read('campaign_max_contacts', 2000),
-            'min_message_purchase_count' => (int) \App\Models\PlatformSetting::read('min_message_purchase_count', 500),
+            'min_message_purchase_count' => (int) \App\Models\PlatformSetting::read('min_message_purchase_count', 200),
             'meta_rate_marketing_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_marketing_paise', 88),
             'meta_rate_utility_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_utility_paise', 14),
             'meta_rate_authentication_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_authentication_paise', 14),
@@ -676,14 +693,20 @@ class AdminController extends Controller
     /**
      * Run Automated Bug Fixes across all workspaces and channels
      */
-    public function autoFixDiagnostics(Request $request, SystemHealthService $healthService): RedirectResponse
+    public function diagnosticsReport(Request $request, SystemHealthService $healthService)
+    {
+        $this->ensureSuperAdmin($request);
+        return response()->json($healthService->diagnose());
+    }
+
+    public function autoFixDiagnostics(Request $request, SystemHealthService $healthService)
     {
         $this->ensureSuperAdmin($request);
 
         $result = $healthService->autoFix();
 
-        // 3. If permanent token provided, dynamically sync details from Meta Graph API for all connected channels!
-        $tokenToUse = $permanentToken ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        // Dynamically sync details from Meta Graph API for all connected channels if token available
+        $tokenToUse = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
         if ($tokenToUse) {
             $channels = WhatsAppChannel::withoutGlobalScopes()->get();
             foreach ($channels as $ch) {
@@ -712,6 +735,14 @@ class AdminController extends Controller
             }
         }
 
-        return response()->json($healthService->diagnose());
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'] ?? 'Auto bug fix completed successfully.',
+                'diagnostics' => $healthService->diagnose(),
+            ]);
+        }
+
+        return back()->with('success', $result['message'] ?? 'Auto bug fix completed successfully.');
     }
 }

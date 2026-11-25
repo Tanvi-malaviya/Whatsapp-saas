@@ -26,6 +26,11 @@ import {
     ExternalLink,
     UserCheck,
     Zap,
+    HelpCircle,
+    ShoppingBag,
+    Calendar,
+    Headphones,
+    BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,6 +68,149 @@ export type BotFlowItem = {
     updated_at?: string;
 };
 
+export const STARTER_TEMPLATES = [
+    {
+        id: 'inquiry_lead',
+        category: 'Lead Capture',
+        name: 'Customer Inquiry & Lead Qualification',
+        description: 'Greets new WhatsApp contacts, showcases services, and collects their project requirements automatically.',
+        keywords: 'hi, hello, hey, inquiry, services, price',
+        greeting: "👋 Welcome to Sathwara InfoTech!\nHow can we help your business today?\n\n1️⃣ Web & Software Development\n2️⃣ WhatsApp API & Automation\n3️⃣ Talk to Support / Sales\n\nReply with 1, 2, or 3.",
+        options: [
+            {
+                id: '1',
+                label: 'Web Development',
+                reply_text: '🌐 We build custom Laravel & React web applications, customer portals, and SaaS platforms tailored to your business needs!',
+                action_type: 'followup' as const,
+                followup_question: 'What type of website or software do you need? Please share your requirement details.',
+                followup_reply: '✅ Thank you! Our technical team at Sathwara InfoTech has recorded your requirement and will contact you shortly.',
+            },
+            {
+                id: '2',
+                label: 'WhatsApp Automation',
+                reply_text: '🚀 Our WhatsApp Cloud API solution enables broadcasts to 10,000+ contacts, shared team inbox, and 24/7 AI chatbots with 98% open rates!',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '3',
+                label: 'Talk to Support / Sales',
+                reply_text: '👨‍💼 Notifying our team at Sathwara InfoTech! A support specialist will connect with you here shortly.',
+                action_type: 'human_handoff' as const,
+            },
+        ],
+    },
+    {
+        id: 'ecommerce_store',
+        category: 'E-Commerce',
+        name: 'E-Commerce & Product Catalog',
+        description: 'Assists buyers with product browsing, order status tracking, and returns.',
+        keywords: 'catalog, order, shop, product, buy, track',
+        greeting: "🛍️ Welcome to our WhatsApp Store!\nHow can we assist your shopping today?\n\n1️⃣ Browse Full Product Catalog\n2️⃣ Track My Order Status\n3️⃣ Return / Exchange Inquiry\n4️⃣ Speak with Sales Executive\n\nReply with 1, 2, 3, or 4.",
+        options: [
+            {
+                id: '1',
+                label: 'Browse Catalog',
+                reply_text: '📦 View our full product collection with prices and photos right on WhatsApp!\nVisit: wa.me/c/store\n\nAdd any item to cart and send your order here in chat.',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '2',
+                label: 'Track Order',
+                reply_text: '🚚 Live Tracking Status:\nPlease reply with your 6-digit Order ID (e.g. #10492) and we will check live tracking status for you.',
+                action_type: 'followup' as const,
+                followup_question: 'What is your Order ID?',
+                followup_reply: '✅ Thank you! Order found. Your delivery is in transit and expected to arrive within 2 business days.',
+            },
+            {
+                id: '3',
+                label: 'Return / Exchange',
+                reply_text: '🔄 We offer a 7-day hassle-free return and exchange policy. Please state your reason and order number.',
+                action_type: 'followup' as const,
+                followup_question: 'Please state the reason for return/exchange and order number.',
+                followup_reply: '✅ Return request logged! Our logistics partner will pick up the package within 24 hours.',
+            },
+            {
+                id: '4',
+                label: 'Sales Executive',
+                reply_text: '👨‍💼 Connecting you with our sales specialist right now. One moment please!',
+                action_type: 'human_handoff' as const,
+            },
+        ],
+    },
+    {
+        id: 'support_faqs',
+        category: 'Support & FAQs',
+        name: 'Customer Support & Business FAQs',
+        description: 'Instantly answers recurring questions about pricing, office timings, address, and live support.',
+        keywords: 'help, support, faq, address, timings, hours, cost',
+        greeting: "👋 Hello! Welcome to Sathwara InfoTech Support.\nChoose a topic below to get instant answers:\n\n1️⃣ Office Address & Location\n2️⃣ Working Hours & Timings\n3️⃣ Pricing & Subscription Plans\n4️⃣ Speak with Live Agent\n\nReply with 1, 2, 3, or 4.",
+        options: [
+            {
+                id: '1',
+                label: 'Office Address',
+                reply_text: '📍 Sathwara InfoTech HQ:\nPlot 42, Tech Park, Satellite Road, Ahmedabad, Gujarat, India - 380015\n\nGoogle Maps: https://maps.google.com',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '2',
+                label: 'Working Hours',
+                reply_text: '🕒 Our office and support lines are open Monday to Saturday, 9:30 AM to 6:30 PM IST. Online tickets are monitored 24/7!',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '3',
+                label: 'Pricing & Plans',
+                reply_text: '💎 Annual Software Subscription: ₹9,999/year with unlimited contacts and multi-agent inbox. WhatsApp Cloud API rates are official Meta at cost (₹0.14 for Utility, ₹0.88 for Marketing).',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '4',
+                label: 'Live Agent Transfer',
+                reply_text: '👨‍💼 Notifying our customer support department! An agent will take over this chat momentarily.',
+                action_type: 'human_handoff' as const,
+            },
+        ],
+    },
+    {
+        id: 'appointments',
+        category: 'Consultation',
+        name: 'Appointment & Consultation Booking',
+        description: 'Guides prospects through scheduling a consultation, service visit, or meeting.',
+        keywords: 'book, appointment, meeting, schedule, slot',
+        greeting: "📅 Welcome! Schedule a consultation with our experts in just a few seconds.\n\n1️⃣ Schedule New Appointment\n2️⃣ Reschedule / Cancel Existing\n3️⃣ Consultation Fees & Services\n4️⃣ Talk to Reception\n\nReply with 1, 2, 3, or 4.",
+        options: [
+            {
+                id: '1',
+                label: 'Schedule Appointment',
+                reply_text: 'Great! We offer consultations Monday to Saturday between 10:00 AM and 5:00 PM.',
+                action_type: 'followup' as const,
+                followup_question: 'Please state your Preferred Date and Time Slot (e.g. Tomorrow at 3:00 PM):',
+                followup_reply: '✅ Appointment slot recorded! Our coordinator will review the schedule and confirm your calendar invite via WhatsApp.',
+            },
+            {
+                id: '2',
+                label: 'Reschedule / Cancel',
+                reply_text: 'Please reply with your name and existing booking date so we can adjust your slot.',
+                action_type: 'followup' as const,
+                followup_question: 'What is your booking reference or name?',
+                followup_reply: '✅ Reschedule request noted! We will contact you with alternative openings shortly.',
+            },
+            {
+                id: '3',
+                label: 'Consultation Fees',
+                reply_text: '💡 Initial 20-minute discovery call is 100% complimentary! In-depth technical architecture audit is ₹2,500.',
+                action_type: 'reply' as const,
+            },
+            {
+                id: '4',
+                label: 'Talk to Reception',
+                reply_text: '📞 Ringing front desk... An associate will join this conversation in a moment.',
+                action_type: 'human_handoff' as const,
+            },
+        ],
+    },
+];
+
 interface Props {
     flows?: BotFlowItem[];
 }
@@ -72,6 +220,7 @@ export default function BotFlows({ flows = [] }: Props) {
     const [selectedFlowId, setSelectedFlowId] = useState<string>(flows[0]?.id || '');
     const [searchQuery, setSearchQuery] = useState('');
     const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
 
     // Keep state synchronized with props
     useEffect(() => {
@@ -258,38 +407,37 @@ export default function BotFlows({ flows = [] }: Props) {
         setPreviewInput('');
     };
 
+    // Load template into form state
+    const applyTemplate = (t: (typeof STARTER_TEMPLATES)[0]) => {
+        setFormName(t.name);
+        setFormDescription(t.description);
+        setFormKeywords(t.keywords);
+        setFormStatus('active');
+        setFormGreeting(t.greeting);
+        setFormOptions(
+            t.options.map((opt) => ({
+                id: opt.id,
+                label: opt.label,
+                reply_text: opt.reply_text,
+                action_type: opt.action_type,
+                followup_question: 'followup_question' in opt ? (opt as any).followup_question || '' : '',
+                followup_reply: 'followup_reply' in opt ? (opt as any).followup_reply || '' : '',
+            }))
+        );
+        showToast(`Loaded "${t.name}" template!`);
+    };
+
+    // Open Form for Create with a selected template pre-filled
+    const openCreateWithTemplate = (t: (typeof STARTER_TEMPLATES)[0]) => {
+        setEditingFlow(null);
+        applyTemplate(t);
+        setFormError(null);
+        setIsFormOpen(true);
+    };
+
     // Load sample template for quick testing
     const loadSampleTemplate = () => {
-        setFormName('Customer Inquiry & Services Flow');
-        setFormDescription('Greets new WhatsApp contacts, presents services menu, and collects project requirements.');
-        setFormKeywords('hi, hello, hey, inquiry, services, price');
-        setFormStatus('active');
-        setFormGreeting("👋 Welcome to Sathwara InfoTech!\nHow can we help you today?\n\n1️⃣ Web & Software Development\n2️⃣ WhatsApp API & Automation\n3️⃣ Talk to Support\n\nReply with 1, 2, or 3.");
-        setFormOptions([
-            {
-                id: '1',
-                label: 'Web Development',
-                reply_text: '🌐 We build custom Laravel & React web applications, portals, and SaaS platforms tailored to your business needs!',
-                action_type: 'followup',
-                followup_question: 'What type of website or software do you need? Please share your requirement.',
-                followup_reply: '✅ Thank you for sharing your requirement! Our technical team at Sathwara InfoTech will review it and get in touch shortly.',
-            },
-            {
-                id: '2',
-                label: 'WhatsApp Automation',
-                reply_text: '🚀 Our WhatsApp Cloud API solution enables broadcasts to 10,000+ contacts, shared team inbox, and 24/7 AI chatbots with 98% open rates!',
-                action_type: 'reply',
-                followup_question: '',
-            },
-            {
-                id: '3',
-                label: 'Human Agent Handoff',
-                reply_text: '👨‍💼 Notifying our team at Sathwara InfoTech! A support specialist will connect with you here shortly.',
-                action_type: 'human_handoff',
-                followup_question: '',
-            },
-        ]);
-        showToast('Sample template loaded!');
+        applyTemplate(STARTER_TEMPLATES[0]);
     };
 
     // Open Form for Create - completely blank by default!
@@ -500,7 +648,16 @@ export default function BotFlows({ flows = [] }: Props) {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowHowItWorksModal(true)}
+                            className="text-xs gap-1.5 border-border h-8.5"
+                        >
+                            <HelpCircle className="size-3.5 text-blue-600" />
+                            How It Works
+                        </Button>
                         <Button
                             size="sm"
                             onClick={openCreateModal}
@@ -514,9 +671,18 @@ export default function BotFlows({ flows = [] }: Props) {
 
                 {/* 3-Step Quick Help Guide */}
                 <div className="rounded-xl border border-[#47b672]/20 bg-[#47b672]/5 p-3.5 sm:p-4 text-xs">
-                    <div className="flex items-center gap-2 font-semibold text-foreground mb-2">
-                        <Sparkles className="size-4 text-[#47b672]" />
-                        <span>How WhatsApp Bot Flows Work in 3 Easy Steps</span>
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 font-semibold text-foreground">
+                            <Sparkles className="size-4 text-[#47b672]" />
+                            <span>How WhatsApp Bot Flows Work in 3 Easy Steps</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowHowItWorksModal(true)}
+                            className="text-[11px] text-[#28804c] dark:text-[#52c480] font-semibold hover:underline"
+                        >
+                            Detailed Walkthrough &rarr;
+                        </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-muted-foreground">
                         <div className="flex items-start gap-2 bg-background/70 p-2.5 rounded-lg border border-border/50">
@@ -540,6 +706,51 @@ export default function BotFlows({ flows = [] }: Props) {
                                 Customer replies with an option number to get instant answers or transfer to staff.
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* 1-Click Starter Template Library */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between px-0.5">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                            <Sparkles className="size-3.5 text-amber-500" />
+                            1-Click Starter Templates (Pick one to start immediately)
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">Pre-configured with industry-proven flows</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        {STARTER_TEMPLATES.map((tmpl) => (
+                            <Card
+                                key={tmpl.id}
+                                className="border-border hover:border-[#47b672]/60 hover:shadow-2xs transition-all flex flex-col justify-between p-3 bg-card"
+                            >
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <Badge variant="outline" className="text-[9px] py-0 bg-muted">
+                                            {tmpl.category}
+                                        </Badge>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{tmpl.options.length} Options</span>
+                                    </div>
+                                    <h4 className="text-xs font-bold text-foreground line-clamp-1">{tmpl.name}</h4>
+                                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                        {tmpl.description}
+                                    </p>
+                                </div>
+                                <div className="pt-2.5 mt-2 border-t border-border/60 flex items-center justify-between">
+                                    <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[120px]">
+                                        {tmpl.keywords.split(',').slice(0, 2).join(',')}...
+                                    </span>
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => openCreateWithTemplate(tmpl)}
+                                        className="h-6 text-[11px] font-semibold text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/10 px-2 gap-1"
+                                    >
+                                        Use Template &rarr;
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
                     </div>
                 </div>
 
@@ -970,6 +1181,27 @@ export default function BotFlows({ flows = [] }: Props) {
                         </DialogDescription>
                     </DialogHeader>
 
+                    {!editingFlow && (
+                        <div className="p-2.5 rounded-lg bg-muted/40 border border-border/70 space-y-1.5 my-1">
+                            <span className="text-[11px] font-semibold text-foreground flex items-center gap-1">
+                                <Sparkles className="size-3 text-amber-500" />
+                                Choose a pre-configured template to autofill:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                                {STARTER_TEMPLATES.map((tmpl) => (
+                                    <button
+                                        key={tmpl.id}
+                                        type="button"
+                                        onClick={() => applyTemplate(tmpl)}
+                                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-background border border-border hover:border-[#47b672] hover:text-[#47b672] transition-colors"
+                                    >
+                                        {tmpl.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {formError && (
                         <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
                             <AlertCircle className="size-4 shrink-0 mt-0.5" />
@@ -1093,9 +1325,9 @@ export default function BotFlows({ flows = [] }: Props) {
                                                     }
                                                     className="rounded border border-input bg-background px-2 py-1 text-[11px] h-7 focus:outline-none"
                                                 >
-                                                    <option value="reply">Auto Reply (મેસેજ)</option>
-                                                    <option value="followup">Ask Follow-up Question (આગળનો સવાલ)</option>
-                                                    <option value="human_handoff">Human Handoff (એજન્ટ)</option>
+                                                    <option value="reply">Instant Auto-Reply</option>
+                                                    <option value="followup">Ask Follow-up Question</option>
+                                                    <option value="human_handoff">Live Agent Handoff</option>
                                                 </select>
 
                                                 {formOptions.length > 1 && (
@@ -1126,7 +1358,7 @@ export default function BotFlows({ flows = [] }: Props) {
                                                 <div className="space-y-1">
                                                     <Label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
                                                         <CornerDownRight className="size-3" />
-                                                        Next Follow-up Question (બોટ આગળ કયો સવાલ પૂછશે):
+                                                        Next Follow-up Question (What the bot asks customer next):
                                                     </Label>
                                                     <Input
                                                         value={opt.followup_question || ''}
@@ -1139,7 +1371,7 @@ export default function BotFlows({ flows = [] }: Props) {
                                                 <div className="space-y-1 pt-1.5 border-t border-amber-500/15">
                                                     <Label className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                                                         <CheckCircle2 className="size-3" />
-                                                        Answer Completion Reply (ગ્રાહક જવાબ આપે ત્યારે બોટ શું રિપ્લાય કરશે):
+                                                        Automated Confirmation Reply (Sent after customer answers):
                                                     </Label>
                                                     <textarea
                                                         rows={2}
@@ -1149,7 +1381,7 @@ export default function BotFlows({ flows = [] }: Props) {
                                                         className="w-full rounded border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
                                                     />
                                                     <p className="text-[9px] text-muted-foreground">
-                                                        જ્યારે ગ્રાહક ઉપરના સવાલનો જવાબ આપશે ત્યારે બોટ આ મેસેજ આપમેળે મોકલી આપશે.
+                                                        Once customer replies to the follow-up question, the bot immediately confirms receipt with this message.
                                                     </p>
                                                 </div>
                                             </div>
@@ -1241,6 +1473,78 @@ export default function BotFlows({ flows = [] }: Props) {
                                     <span>Delete Flow</span>
                                 </>
                             )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* How It Works Walkthrough Dialog */}
+            <Dialog open={showHowItWorksModal} onOpenChange={setShowHowItWorksModal}>
+                <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold flex items-center gap-2">
+                            <GitBranch className="size-5 text-[#47b672]" />
+                            How WhatsApp Bot Flows Work
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground">
+                            A complete breakdown of automated menu bots, keywords, and human agent handoff.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 text-xs py-2">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 font-bold text-foreground">
+                                <span className="size-5 rounded-full bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480] flex items-center justify-center text-[10px] font-bold">1</span>
+                                <span>Inbound Trigger Keywords</span>
+                            </div>
+                            <p className="text-muted-foreground text-[11px] leading-relaxed pl-7">
+                                When a customer sends any message containing your trigger keywords (e.g. <em>hi, hello, menu, price, services</em>), the platform identifies the matched flow and instantly engages them.
+                            </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 font-bold text-foreground">
+                                <span className="size-5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-[10px] font-bold">2</span>
+                                <span>Automated Welcome Greeting &amp; Numbered Menu</span>
+                            </div>
+                            <p className="text-muted-foreground text-[11px] leading-relaxed pl-7">
+                                The bot sends your customized greeting message presenting numbered options (e.g. 1. Web Development, 2. WhatsApp API, 3. Talk to Support).
+                            </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 font-bold text-foreground">
+                                <span className="size-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center text-[10px] font-bold">3</span>
+                                <span>Interactive Decision Branches</span>
+                            </div>
+                            <div className="pl-7 space-y-1.5 text-[11px] text-muted-foreground">
+                                <div>
+                                    <strong className="text-foreground">Instant Auto-Reply:</strong> Answers with pricing, services, or catalog links immediately.
+                                </div>
+                                <div>
+                                    <strong className="text-foreground">Ask Follow-up Question:</strong> Prompts the user (e.g. <em>"What is your project requirement?"</em>) and confirms receipt upon reply.
+                                </div>
+                                <div>
+                                    <strong className="text-foreground">Live Agent Transfer:</strong> Pauses automated bot responses and creates an alert for your human agents in the Shared Team Inbox.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-muted/40 rounded-lg border border-border text-[11px] space-y-1">
+                            <span className="font-bold text-foreground">Pro Tip: Testing your flow</span>
+                            <p className="text-muted-foreground">
+                                Use the Live WhatsApp Simulator on the right of the screen. You can click on the option bubbles directly to simulate user interactions without sending real messages!
+                            </p>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            onClick={() => setShowHowItWorksModal(false)}
+                            className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs h-8 px-4 font-semibold"
+                        >
+                            Got It!
                         </Button>
                     </DialogFooter>
                 </DialogContent>

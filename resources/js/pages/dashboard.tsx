@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, usePage, router } from '@inertiajs/react';
 import {
     MessageSquare,
     Bot,
@@ -30,7 +30,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { dashboard } from '@/routes';
 
 interface DashboardProps {
+    channels?: Array<{
+        id: string;
+        name: string;
+        phone: string;
+        phone_id: string;
+        quality: string;
+        is_default: boolean;
+        status: string;
+    }>;
+    selected_channel_id?: string;
     channel: {
+        id?: string;
         name: string;
         phone: string;
         phone_id: string;
@@ -76,6 +87,8 @@ interface DashboardProps {
 }
 
 export default function Dashboard({
+    channels = [],
+    selected_channel_id = 'all',
     channel,
     metrics = {
         total_messages: 0,
@@ -166,6 +179,57 @@ export default function Dashboard({
                         </div>
                     </div>
                 </div>
+
+                {/* Multi-Number Filter Bar */}
+                {channels && channels.length > 0 && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-card border border-border/70 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <Smartphone className="size-4 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-xs font-bold text-foreground">Filter by Number:</span>
+                            <span className="text-[11px] text-muted-foreground">
+                                {selected_channel_id === 'all'
+                                    ? `Showing aggregated analytics for all ${channels.length} numbers`
+                                    : `Showing metrics for ${channels.find(c => c.id === selected_channel_id)?.phone || 'selected channel'}`}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                            <button
+                                type="button"
+                                onClick={() => router.get('/dashboard', { channel_id: 'all' }, { preserveScroll: true, preserveState: true })}
+                                className={`text-xs px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                                    selected_channel_id === 'all'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                }`}
+                            >
+                                All Numbers ({channels.length})
+                            </button>
+                            {channels.map((ch) => (
+                                <button
+                                    key={ch.id}
+                                    type="button"
+                                    onClick={() => router.get('/dashboard', { channel_id: ch.id }, { preserveScroll: true, preserveState: true })}
+                                    className={`text-xs px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                                        selected_channel_id === ch.id
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    }`}
+                                >
+                                    <span className="size-1.5 rounded-full bg-emerald-400"></span>
+                                    <span>{ch.phone || ch.name}</span>
+                                    {ch.is_default && (
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase ${
+                                            selected_channel_id === ch.id ? 'bg-black/20 text-white' : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                            Default
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* 2. Four Luxury KPI Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

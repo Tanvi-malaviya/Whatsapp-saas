@@ -16,7 +16,7 @@ class EnsureB2BAgent
         $user = $request->user();
 
         if (! $user) {
-            return redirect()->guest(route('login'));
+            return redirect()->guest(route('agent.login'));
         }
 
         if (! $user->isB2BAgent() && ! $user->isSuperAdmin()) {

@@ -1,3 +1,4 @@
+import { PanelLoginLinks } from '@/components/panel-login-links';
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Form, Head, Link } from '@inertiajs/react';
@@ -119,6 +120,49 @@ export default function Login({ status, canResetPassword }: Props) {
                             </div>
                         )}
 
+                        {/* Quick One-Click Fill For Testing */}
+                        <div className="mb-4 p-2.5 rounded-xl bg-muted/40 border border-border/70 space-y-1.5">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                <span>1-Click Test Credentials</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Click to fill</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEmail('user@sathwara.com');
+                                        setPassword('Password@2026!');
+                                    }}
+                                    className="py-1 px-1.5 rounded-lg bg-card border border-border hover:border-emerald-500/50 hover:bg-emerald-500/10 text-left transition-all cursor-pointer group"
+                                >
+                                    <div className="text-[11px] font-bold text-foreground group-hover:text-emerald-600">Client User</div>
+                                    <div className="text-[9px] text-muted-foreground truncate font-mono">user@sathwara</div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEmail('partner@sathwara.com');
+                                        setPassword('Password@2026!');
+                                    }}
+                                    className="py-1 px-1.5 rounded-lg bg-card border border-border hover:border-blue-500/50 hover:bg-blue-500/10 text-left transition-all cursor-pointer group"
+                                >
+                                    <div className="text-[11px] font-bold text-foreground group-hover:text-blue-600">B2B Partner</div>
+                                    <div className="text-[9px] text-muted-foreground truncate font-mono">partner@sathwara</div>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEmail('admin@sathwara.com');
+                                        setPassword('Password@2026!');
+                                    }}
+                                    className="py-1 px-1.5 rounded-lg bg-card border border-border hover:border-rose-500/50 hover:bg-rose-500/10 text-left transition-all cursor-pointer group"
+                                >
+                                    <div className="text-[11px] font-bold text-foreground group-hover:text-rose-600">Super Admin</div>
+                                    <div className="text-[9px] text-muted-foreground truncate font-mono">admin@sathwara</div>
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Form */}
                         <Form
                             {...store.form()}
@@ -239,6 +283,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 </>
                             )}
                         </Form>
+                        <PanelLoginLinks panel="user" />
                     </div>
 
                     {/* Bottom Security Footer */}

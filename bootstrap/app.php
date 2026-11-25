@@ -16,8 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectTo(
-            guests: '/login',
-            users: '/dashboard',
+            guests: fn (Request $request) => \App\Services\PanelNavigation::login($request),
+            users: fn (Request $request) => $request->user() ? \App\Services\PanelNavigation::home($request->user()) : '/login',
         );
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
@@ -28,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             HandleAppearance::class,
+            \App\Http\Middleware\EnsurePanelLanding::class,
             HandleInertiaRequests::class,
             \App\Modules\Foundation\Http\Middleware\EnsureTenantContext::class,
             \App\Http\Middleware\AuthorizeWorkspace::class,

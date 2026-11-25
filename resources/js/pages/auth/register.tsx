@@ -14,6 +14,7 @@ import {
     Moon,
     Zap,
     CheckCheck,
+    Building2,
 } from 'lucide-react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
@@ -144,6 +145,30 @@ export default function Register({ passwordRules }: Props) {
                                         <InputError message={errors.name} />
                                     </div>
 
+                                    {/* Workspace Name */}
+                                    <div className="space-y-1">
+                                        <Label
+                                            htmlFor="workspace_name"
+                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between"
+                                        >
+                                            <span className="flex items-center gap-1.5">
+                                                <Building2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                                                Workspace / Company Name
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground font-normal">Business Name</span>
+                                        </Label>
+                                        <Input
+                                            id="workspace_name"
+                                            type="text"
+                                            name="workspace_name"
+                                            tabIndex={2}
+                                            autoComplete="organization"
+                                            placeholder="e.g. Sathwara Global, Acme Store"
+                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                        />
+                                        <InputError message={errors.workspace_name} />
+                                    </div>
+
                                     {/* Email */}
                                     <div className="space-y-1">
                                         <Label
@@ -158,7 +183,7 @@ export default function Register({ passwordRules }: Props) {
                                             type="email"
                                             name="email"
                                             required
-                                            tabIndex={2}
+                                            tabIndex={3}
                                             autoComplete="email"
                                             placeholder="you@company.com"
                                             className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
@@ -179,7 +204,7 @@ export default function Register({ passwordRules }: Props) {
                                             id="password"
                                             name="password"
                                             required
-                                            tabIndex={3}
+                                            tabIndex={4}
                                             autoComplete="new-password"
                                             placeholder="••••••••••••"
                                             passwordrules={passwordRules}
@@ -201,7 +226,7 @@ export default function Register({ passwordRules }: Props) {
                                             id="password_confirmation"
                                             name="password_confirmation"
                                             required
-                                            tabIndex={4}
+                                            tabIndex={5}
                                             autoComplete="new-password"
                                             placeholder="Repeat password"
                                             passwordrules={passwordRules}
@@ -226,6 +251,7 @@ export default function Register({ passwordRules }: Props) {
                                             id="referral_code"
                                             type="text"
                                             name="referral_code"
+                                            tabIndex={6}
                                             value={referralCode}
                                             onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
                                             placeholder="e.g. REF12345678"

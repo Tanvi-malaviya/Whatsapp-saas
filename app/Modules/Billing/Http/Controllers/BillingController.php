@@ -106,7 +106,7 @@ class BillingController extends Controller
         $data = $request->validate([
             'plan' => 'required|in:annual,starter,growth,business_pro,enterprise,wallet_recharge',
             'amount_paise' => 'nullable|integer|min:100',
-            'messages_count' => 'nullable|integer|min:500',
+            'messages_count' => 'nullable|integer|min:200',
             'category' => 'nullable|string|in:MARKETING,UTILITY,AUTHENTICATION',
         ]);
 
@@ -126,7 +126,7 @@ class BillingController extends Controller
         $description = '';
 
         if ($data['plan'] === 'wallet_recharge') {
-            $minMessages = (int) PlatformSetting::read('min_message_purchase_count', 500);
+            $minMessages = (int) PlatformSetting::read('min_message_purchase_count', 200);
             $msgCount = (int) ($data['messages_count'] ?? 0);
             if ($msgCount > 0 && $msgCount < $minMessages) {
                 abort(422, "Minimum message purchase is {$minMessages} messages.");

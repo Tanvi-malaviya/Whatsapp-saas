@@ -25,6 +25,7 @@ import {
     History,
     CheckSquare,
     Briefcase,
+    Megaphone,
 } from 'lucide-react';
 import {
     Sidebar,
@@ -200,6 +201,24 @@ export function AppSidebar() {
                             <Link href="/templates" prefetch>
                                 <FileText className="size-4" />
                                 <span>Templates</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    {/* Click-to-WhatsApp Ads (CTWA) */}
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isActive('/campaigns/ads')}
+                            className={isActive('/campaigns/ads') ? activeClass : inactiveClass}
+                            tooltip="WhatsApp Ads (CTWA)"
+                        >
+                            <Link href="/campaigns/ads" prefetch className="flex items-center w-full">
+                                <Megaphone className="size-4 text-purple-600 dark:text-purple-400" />
+                                <span>WhatsApp Ads</span>
+                                <span className="ml-auto rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide group-data-[collapsible=icon]:hidden">
+                                    Ads
+                                </span>
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -480,21 +499,6 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Team & Roles Management (NEW) */}
-                    <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isActive('/management/team')}
-                            className={isActive('/management/team') ? activeClass : inactiveClass}
-                            tooltip="Team Management"
-                        >
-                            <Link href="/management/team" prefetch>
-                                <Shield className="size-4 text-indigo-600 dark:text-indigo-400" />
-                                <span>Team &amp; Roles</span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
                     {/* Settings (Workspace & Profile) */}
                     <SidebarMenuItem>
                         <SidebarMenuButton
@@ -510,17 +514,18 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Help & Docs */}
+                    {/* Help & In-App Documentation */}
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            className="text-foreground/70 hover:bg-muted/70 hover:text-foreground"
+                            isActive={isActive('/help')}
+                            className={isActive('/help') ? activeClass : inactiveClass}
                             tooltip="Help & Docs"
                         >
-                            <a href="https://developers.facebook.com/docs/whatsapp" target="_blank" rel="noreferrer">
-                                <HelpCircle className="size-4" />
+                            <Link href="/help" prefetch>
+                                <HelpCircle className="size-4 text-primary" />
                                 <span>Help &amp; Docs</span>
-                            </a>
+                            </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>

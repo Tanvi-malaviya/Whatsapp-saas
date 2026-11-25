@@ -29,35 +29,48 @@ class DashboardController extends Controller
         $org = $this->resolveOrg($request);
         $orgId = $org?->id;
 
-        // 1. Channel
-        $channel = WhatsAppChannel::where('status', 'connected')
-            ->when($orgId, fn ($q) => $q->where('organization_id', $orgId))
-            ->first() ?? WhatsAppChannel::first();
+        // 1. All Connected Channels for this workspace
+        $channels = WhatsAppChannel::when($orgId, fn ($q) => $q->where('organization_id', $orgId))
+            ->where('status', 'connected')
+            ->get();
 
-        // 2. Metrics
-        $totalMessages = Message::when($orgId, function ($q) use ($orgId) {
-            $q->whereHas('conversation', fn ($cq) => $cq->where('organization_id', $orgId));
-        })->count();
+        $selectedChannelId = $request->query('channel_id');
+        $filterBySpecificChannel = $selectedChannelId && $selectedChannelId !== 'all';
 
-        $inboundMessages = Message::where('direction', 'inbound')
-            ->when($orgId, function ($q) use ($orgId) {
-                $q->whereHas('conversation', fn ($cq) => $cq->where('organization_id', $orgId));
-            })->count();
+        $activeChannel = null;
+        if ($filterBySpecificChannel) {
+            $activeChannel = $channels->firstWhere('id', $selectedChannelId);
+        }
+        if (! $activeChannel && $channels->isNotEmpty()) {
+            $activeChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
+        }
 
-        $outboundMessages = Message::where('direction', 'outbound')
-            ->when($orgId, function ($q) use ($orgId) {
-                $q->whereHas('conversation', fn ($cq) => $cq->where('organization_id', $orgId));
-            })->count();
+        // 2. Metrics (Filtered or Workspace-Wide Aggregate across all numbers)
+        $msgQuery = Message::query();
+        if ($filterBySpecificChannel) {
+            $msgQuery->where('channel_id', $selectedChannelId);
+        } elseif ($orgId) {
+            $msgQuery->whereHas('conversation', fn ($cq) => $cq->where('organization_id', $orgId));
+        }
 
-        $activeWindowConvs = Conversation::when($orgId, fn ($q) => $q->where('organization_id', $orgId))
+        $totalMessages = (clone $msgQuery)->count();
+        $inboundMessages = (clone $msgQuery)->where('direction', 'inbound')->count();
+        $outboundMessages = (clone $msgQuery)->where('direction', 'outbound')->count();
+
+        $convQuery = Conversation::when($orgId, fn ($q) => $q->where('organization_id', $orgId));
+        if ($filterBySpecificChannel) {
+            $convQuery->where('channel_id', $selectedChannelId);
+        }
+
+        $activeWindowConvs = (clone $convQuery)
             ->whereNotNull('window_expires_at')
             ->where('window_expires_at', '>', now())
             ->count();
 
-        $totalConvs = Conversation::when($orgId, fn ($q) => $q->where('organization_id', $orgId))->count();
+        $totalConvs = (clone $convQuery)->count();
 
-        // 3. Real Recent Conversations
-        $conversations = Conversation::when($orgId, fn ($q) => $q->where('organization_id', $orgId))
+        // 3. Recent Conversations
+        $conversations = (clone $convQuery)
             ->with(['messages' => fn ($q) => $q->latest()->take(1)])
             ->orderByDesc('last_message_at')
             ->take(10)
@@ -80,12 +93,13 @@ class DashboardController extends Controller
                 ];
             });
 
-        // 4. Real Templates from Meta
+        // 4. Real Templates from Meta (using active or default channel)
         $metaTemplates = [];
-        if ($channel) {
+        $channelForTemplates = $activeChannel ?? $channels->first();
+        if ($channelForTemplates) {
             try {
                 $camp = new CampaignController();
-                $allTpls = $camp->getMetaTemplates($channel);
+                $allTpls = $camp->getMetaTemplates($channelForTemplates);
                 $metaTemplates = array_slice($allTpls, 0, 10);
             } catch (\Throwable $e) {
                 $metaTemplates = [];
@@ -107,14 +121,25 @@ class DashboardController extends Controller
             });
 
         return Inertia::render('dashboard', [
-            'channel' => $channel ? [
-                'name' => $channel->name,
-                'phone' => $channel->phone_number,
-                'phone_id' => $channel->phone_number_id,
-                'waba_id' => $channel->waba_id,
-                'status' => $channel->status,
-                'quality' => $channel->quality_rating ?: 'GREEN',
-                'tier' => $channel->messaging_limit ?: 'UNKNOWN',
+            'channels' => $channels->map(fn ($ch) => [
+                'id' => (string) $ch->id,
+                'name' => $ch->name,
+                'phone' => $ch->phone_number,
+                'phone_id' => $ch->phone_number_id,
+                'quality' => $ch->quality_rating ?: 'GREEN',
+                'is_default' => (bool) $ch->is_default,
+                'status' => $ch->status,
+            ]),
+            'selected_channel_id' => $selectedChannelId ?: 'all',
+            'channel' => $activeChannel ? [
+                'id' => (string) $activeChannel->id,
+                'name' => $activeChannel->name,
+                'phone' => $activeChannel->phone_number,
+                'phone_id' => $activeChannel->phone_number_id,
+                'waba_id' => $activeChannel->waba_id,
+                'status' => $activeChannel->status,
+                'quality' => $activeChannel->quality_rating ?: 'GREEN',
+                'tier' => $activeChannel->messaging_limit ?: 'UNKNOWN',
             ] : null,
             'metrics' => [
                 'total_messages' => $totalMessages,

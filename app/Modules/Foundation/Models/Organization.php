@@ -67,7 +67,7 @@ class Organization extends Model
     public function getMaxChannels(): int
     {
         if (array_key_exists('max_channels', $this->attributes) && $this->attributes['max_channels'] !== null) {
-            return max((int) $this->attributes['max_channels'], 20);
+            return (int) $this->attributes['max_channels'];
         }
 
         return $this->metadata['max_channels'] ?? 20;
@@ -80,7 +80,7 @@ class Organization extends Model
             return true; // 0 or negative represents Unlimited
         }
 
-        $current = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $this->id)->count();
+        $current = \App\Modules\MetaConnection\Models\WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $this->id)->whereNull('deleted_at')->count();
         return $current < $limit;
     }
 

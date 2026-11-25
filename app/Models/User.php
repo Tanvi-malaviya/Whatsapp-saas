@@ -58,7 +58,24 @@ class User extends Authenticatable implements MustVerifyEmail, PasskeyUser
     public function generateReferralCode(): string
     {
         if (! $this->referral_code) {
-            $code = strtoupper('REF' . substr(md5($this->id . $this->email . microtime()), 0, 8));
+            $base = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $this->name ?: explode('@', $this->email)[0]));
+            if (strlen($base) < 3) {
+                $base = 'USER';
+            }
+            $base = substr($base, 0, 6);
+
+            $attempts = 0;
+            do {
+                $suffix = rand(1000, 9999);
+                $code = $base . $suffix;
+                $exists = self::where('referral_code', $code)->exists();
+                $attempts++;
+            } while ($exists && $attempts < 20);
+
+            if ($exists) {
+                $code = $base . strtoupper(substr(md5(uniqid()), 0, 4));
+            }
+
             $this->update(['referral_code' => $code]);
         }
         return $this->referral_code;

@@ -114,7 +114,7 @@ export default function Billing({
     // Recharge Wallet Modal State
     const [showRechargeModal, setShowRechargeModal] = useState(false);
     const [rechargeCategory, setRechargeCategory] = useState<'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('MARKETING');
-    const [rechargeCount, setRechargeCount] = useState<number>(500);
+    const [rechargeCount, setRechargeCount] = useState<number | string>(500);
 
     const activeRate = rechargeCategory === 'MARKETING'
         ? (rates.marketing / 100)
@@ -122,7 +122,8 @@ export default function Billing({
         ? (rates.utility / 100)
         : (rates.authentication / 100);
 
-    const calculatedRechargeAmount = (rechargeCount * activeRate).toFixed(2);
+    const numericRechargeCount = typeof rechargeCount === 'number' ? rechargeCount : (parseInt(rechargeCount, 10) || 0);
+    const calculatedRechargeAmount = (numericRechargeCount * activeRate).toFixed(2);
 
     const copyReferral = () => {
         navigator.clipboard.writeText(referral.referral_link);
@@ -623,19 +624,50 @@ export default function Billing({
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                                 <label className="text-xs font-semibold text-foreground flex justify-between">
                                     <span>Number of Messages</span>
-                                    <span className="text-[10px] text-muted-foreground">Min 500 messages</span>
+                                    <span className="text-[10px] text-muted-foreground font-medium">Min 200 messages</span>
                                 </label>
                                 <Input
                                     type="number"
-                                    min={500}
-                                    step={100}
+                                    min={200}
+                                    step={50}
                                     value={rechargeCount}
-                                    onChange={(e) => setRechargeCount(Math.max(500, parseInt(e.target.value) || 500))}
+                                    onChange={(e) => setRechargeCount(e.target.value)}
+                                    onBlur={() => {
+                                        const parsed = parseInt(String(rechargeCount), 10);
+                                        if (isNaN(parsed) || parsed < 200) {
+                                            setRechargeCount(200);
+                                        } else {
+                                            setRechargeCount(parsed);
+                                        }
+                                    }}
+                                    placeholder="Enter quantity (min 200)"
                                     className="h-9 text-xs"
                                 />
+                                {numericRechargeCount < 200 && rechargeCount !== '' && (
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                                        Minimum order is 200 messages (auto-adjusted on blur or proceed).
+                                    </p>
+                                )}
+                                {/* Quick Presets */}
+                                <div className="flex items-center gap-1.5 pt-1">
+                                    {[200, 500, 1000, 2500, 5000].map((preset) => (
+                                        <button
+                                            key={preset}
+                                            type="button"
+                                            onClick={() => setRechargeCount(preset)}
+                                            className={`text-[10px] px-2 py-0.5 rounded-md border transition-all ${
+                                                numericRechargeCount === preset
+                                                    ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300 font-bold'
+                                                    : 'border-border/70 hover:bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            +{preset.toLocaleString()}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Cost Preview */}
@@ -646,7 +678,7 @@ export default function Billing({
                                 </div>
                                 <div className="flex justify-between text-muted-foreground">
                                     <span>Quantity:</span>
-                                    <span className="font-medium text-foreground">{rechargeCount.toLocaleString()} msgs</span>
+                                    <span className="font-medium text-foreground">{(numericRechargeCount || 0).toLocaleString()} msgs</span>
                                 </div>
                                 <div className="flex justify-between font-bold text-foreground pt-1 border-t border-border/50 text-sm">
                                     <span>Total Amount:</span>
@@ -655,15 +687,16 @@ export default function Billing({
                             </div>
 
                             <Button
-                                disabled={busy || rechargeCount < 500}
-                                onClick={() =>
+                                disabled={busy || numericRechargeCount < 200}
+                                onClick={() => {
+                                    const finalCount = Math.max(200, numericRechargeCount);
                                     triggerCheckout({
                                         plan: 'wallet_recharge',
-                                        messages_count: rechargeCount,
+                                        messages_count: finalCount,
                                         category: rechargeCategory,
-                                    })
-                                }
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9"
+                                    });
+                                }}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 cursor-pointer"
                             >
                                 Pay ₹{calculatedRechargeAmount} via Razorpay
                             </Button>
