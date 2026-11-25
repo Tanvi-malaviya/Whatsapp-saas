@@ -121,7 +121,7 @@ class CommerceController extends Controller
         $savedCatalogId = \Illuminate\Support\Facades\Cache::get("org_{$orgId}_meta_catalog_id")
             ?: ($request->input('meta_catalog_id') ?: 'default_catalog');
 
-        CommerceProduct::create([
+        $newProduct = CommerceProduct::create([
             'organization_id' => $orgId,
             'channel_id' => !empty($validated['channel_id']) ? $validated['channel_id'] : null,
             'name' => $validated['name'],
@@ -134,6 +134,43 @@ class CommerceController extends Controller
             'is_available' => $request->boolean('is_available', true),
             'meta_catalog_id' => $savedCatalogId,
         ]);
+
+        // Attempt instant real-time sync to Meta Catalog
+        $catalogId = $savedCatalogId;
+        if (empty($catalogId) || !is_numeric($catalogId)) {
+            $catalogId = '4612710129017842';
+        }
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+        $globalToken = \Illuminate\Support\Facades\Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+        $token = $channel?->access_token ?: $globalToken;
+
+        if ($token && is_numeric($catalogId)) {
+            try {
+                \Illuminate\Support\Facades\Http::withToken($token)
+                    ->post("https://graph.facebook.com/v22.0/{$catalogId}/items_batch", [
+                        'item_type' => 'PRODUCT_ITEM',
+                        'allow_upsert' => true,
+                        'requests' => [
+                            [
+                                'method' => 'CREATE',
+                                'data' => [
+                                    'id' => $sku,
+                                    'title' => $newProduct->name,
+                                    'description' => $newProduct->description ?: $newProduct->name,
+                                    'availability' => $newProduct->is_available ? 'in stock' : 'out of stock',
+                                    'condition' => 'new',
+                                    'price' => (int) round(((float)$newProduct->price) * 100),
+                                    'currency' => $newProduct->currency ?: 'INR',
+                                    'image_link' => $newProduct->image_url,
+                                    'link' => "https://wa.me/" . preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531'),
+                                    'brand' => $channel?->name ?: 'Dukan Hisab',
+                                ],
+                            ],
+                        ],
+                    ]);
+            } catch (\Throwable $e) {}
+        }
 
         return back()->with('success', "Product '{$validated['name']}' added to WhatsApp Catalog!");
     }
@@ -356,6 +393,108 @@ class CommerceController extends Controller
             'synced_count' => $count,
             'synced_at' => now()->toIso8601String(),
         ]);
+    }
+
+    public function exportMetaCsv(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $orgId = $this->resolveTenantId($request);
+        $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+
+        $senderPhone = preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531');
+        $storeLink = "https://wa.me/{$senderPhone}";
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="meta_catalog_products_' . date('Y-m-d') . '.csv"',
+        ];
+
+        return response()->stream(function () use ($products, $channel, $storeLink) {
+            $handle = fopen('php://output', 'w');
+            // Standard Meta Commerce Manager CSV headers
+            fputcsv($handle, [
+                'id',
+                'title',
+                'description',
+                'availability',
+                'condition',
+                'price',
+                'link',
+                'image_link',
+                'brand',
+                'google_product_category',
+            ]);
+
+            foreach ($products as $p) {
+                fputcsv($handle, [
+                    $p->retailer_id,
+                    $p->name,
+                    $p->description ?: $p->name,
+                    $p->is_available ? 'in stock' : 'out of stock',
+                    'new',
+                    number_format((float)$p->price, 2, '.', '') . ' ' . ($p->currency ?: 'INR'),
+                    $storeLink,
+                    $p->image_url ?: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+                    $channel?->name ?: 'Dukan Hisab',
+                    $p->category ?: 'General',
+                ]);
+            }
+            fclose($handle);
+        }, 200, $headers);
+    }
+
+    public function publicCatalogFeed(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $orgId = $request->query('org_id');
+        if (!$orgId) {
+            $org = \App\Modules\Foundation\Models\Organization::first();
+            $orgId = $org?->id;
+        }
+
+        $products = CommerceProduct::where('organization_id', $orgId)->where('is_available', true)->get();
+        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('is_default', true)->first()
+            ?? WhatsAppChannel::where('organization_id', $orgId)->first();
+
+        $senderPhone = preg_replace('/[^0-9]/', '', $channel?->phone_number ?? '916352709531');
+        $storeLink = "https://wa.me/{$senderPhone}";
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'inline; filename="catalog_feed.csv"',
+        ];
+
+        return response()->stream(function () use ($products, $channel, $storeLink) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, [
+                'id',
+                'title',
+                'description',
+                'availability',
+                'condition',
+                'price',
+                'link',
+                'image_link',
+                'brand',
+                'google_product_category',
+            ]);
+
+            foreach ($products as $p) {
+                fputcsv($handle, [
+                    $p->retailer_id,
+                    $p->name,
+                    $p->description ?: $p->name,
+                    $p->is_available ? 'in stock' : 'out of stock',
+                    'new',
+                    number_format((float)$p->price, 2, '.', '') . ' ' . ($p->currency ?: 'INR'),
+                    $storeLink,
+                    $p->image_url ?: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
+                    $channel?->name ?: 'Dukan Hisab',
+                    $p->category ?: 'General',
+                ]);
+            }
+            fclose($handle);
+        }, 200, $headers);
     }
 
     public function sendCatalogMessage(Request $request): JsonResponse

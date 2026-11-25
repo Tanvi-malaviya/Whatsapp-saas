@@ -26,6 +26,7 @@ import {
     Image as ImageIcon,
     X,
     Send,
+    Download,
     LayoutGrid,
     List,
 } from 'lucide-react';
@@ -440,6 +441,16 @@ export default function CommerceIndex({
                             <RefreshCw className={`size-3 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
                             {isSyncing ? 'Syncing...' : 'Sync'}
                         </Button>
+
+                        <a
+                            href="/commerce/export-csv"
+                            download
+                            className="inline-flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted h-8 px-2.5 text-xs gap-1.5 font-medium text-foreground transition-colors"
+                            title="Download Meta Catalog CSV to upload into Meta Commerce Manager"
+                        >
+                            <Download className="size-3 text-muted-foreground" />
+                            Export Meta CSV
+                        </a>
 
                         <Button
                             onClick={() => setIsAddModalOpen(true)}
@@ -1130,6 +1141,42 @@ export default function CommerceIndex({
                                             </option>
                                         ))}
                                     </select>
+                                </div>
+
+                                {/* Automated Hands-Free Scheduled Data Feed URL */}
+                                <div className="space-y-1.5 p-3 rounded-xl border border-primary/20 bg-primary/5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                                            <Sparkles className="size-3.5" />
+                                            Automated Scheduled Feed URL (Hands-Free Auto Sync)
+                                        </Label>
+                                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-medium">Auto-Sync</span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Paste this URL once in <em>Meta Commerce Manager &gt; Data sources &gt; Add items &gt; Data feed &gt; Scheduled feed</em>. Meta will automatically fetch all products you add to this panel!
+                                    </p>
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <Input
+                                            readOnly
+                                            value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv` : '/commerce/catalog-feed.csv'}
+                                            className="h-8 text-[11px] font-mono bg-background"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (typeof window !== 'undefined') {
+                                                    navigator.clipboard.writeText(`${window.location.origin}/commerce/catalog-feed.csv`);
+                                                    alert('Copied Feed URL to clipboard!');
+                                                }
+                                            }}
+                                            className="h-8 px-2.5 text-xs shrink-0 gap-1"
+                                        >
+                                            <Copy className="size-3" />
+                                            Copy
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 {/* Quick Action Buttons for Meta Integration */}
