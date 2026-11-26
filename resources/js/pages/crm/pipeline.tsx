@@ -494,7 +494,11 @@ export default function PipelinePage({
                                                         key={lead.id}
                                                         draggable
                                                         onDragStart={(e) => handleDragStart(e, lead.id)}
-                                                        className="group relative rounded-xl border border-border bg-card p-3 shadow-2xs hover:shadow-md hover:border-primary/50 cursor-grab active:cursor-grabbing transition-all duration-200 select-none"
+                                                        onClick={() => {
+                                                            setEditLead(lead);
+                                                            setIsEditOpen(true);
+                                                        }}
+                                                        className="group relative rounded-xl border border-border bg-card p-3 shadow-2xs hover:shadow-md hover:border-primary/50 cursor-pointer active:cursor-grabbing transition-all duration-200 select-none"
                                                     >
                                                         {/* Top Row: Name, Phone & Menu */}
                                                         <div className="flex items-start justify-between gap-2">
@@ -513,58 +517,60 @@ export default function PipelinePage({
                                                                 </div>
                                                             </div>
 
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="size-6 text-muted-foreground hover:text-foreground"
-                                                                    >
-                                                                        <MoreVertical className="size-3.5" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end" className="text-xs w-44">
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => {
-                                                                            setEditLead(lead);
-                                                                            setIsEditOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        Edit Deal Value &amp; Schedule
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem asChild>
-                                                                        <Link
-                                                                            href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
-                                                                            className="flex items-center gap-2"
+                                                            <div onClick={(e) => e.stopPropagation()}>
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="size-6 text-muted-foreground hover:text-foreground"
                                                                         >
-                                                                            <MessageSquare className="size-3.5" />
-                                                                            Open in Shared Inbox
-                                                                        </Link>
-                                                                    </DropdownMenuItem>
-                                                                    <div className="my-1 border-t border-border" />
-                                                                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
-                                                                        Move to Stage:
-                                                                    </div>
-                                                                    {stages.map((st) => (
+                                                                            <MoreVertical className="size-3.5" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end" className="text-xs w-44">
                                                                         <DropdownMenuItem
-                                                                            key={st}
-                                                                            disabled={st === lead.stage}
-                                                                            onClick={() => handleQuickMove(lead.id, st)}
-                                                                            className="text-xs"
+                                                                            onClick={() => {
+                                                                                setEditLead(lead);
+                                                                                setIsEditOpen(true);
+                                                                            }}
                                                                         >
-                                                                            Move to {st}
+                                                                            Edit Deal Value &amp; Schedule
                                                                         </DropdownMenuItem>
-                                                                    ))}
-                                                                    <div className="my-1 border-t border-border" />
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => handleDeleteLead(lead.id)}
-                                                                        className="text-rose-600 focus:text-rose-600"
-                                                                    >
-                                                                        <Trash2 className="size-3.5 mr-1" />
-                                                                        Delete Lead
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
+                                                                        <DropdownMenuItem asChild>
+                                                                            <Link
+                                                                                href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
+                                                                                className="flex items-center gap-2"
+                                                                            >
+                                                                                <MessageSquare className="size-3.5" />
+                                                                                Open in Shared Inbox
+                                                                            </Link>
+                                                                        </DropdownMenuItem>
+                                                                        <div className="my-1 border-t border-border" />
+                                                                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+                                                                            Move to Stage:
+                                                                        </div>
+                                                                        {stages.map((st) => (
+                                                                            <DropdownMenuItem
+                                                                                key={st}
+                                                                                disabled={st === lead.stage}
+                                                                                onClick={() => handleQuickMove(lead.id, st)}
+                                                                                className="text-xs"
+                                                                            >
+                                                                                Move to {st}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                        <div className="my-1 border-t border-border" />
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => handleDeleteLead(lead.id)}
+                                                                            className="text-rose-600 focus:text-rose-600"
+                                                                        >
+                                                                            <Trash2 className="size-3.5 mr-1" />
+                                                                            Delete Lead
+                                                                        </DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </div>
                                                         </div>
 
                                                         {/* Deal Value & Source */}
@@ -588,6 +594,7 @@ export default function PipelinePage({
 
                                                             <Link
                                                                 href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
+                                                                onClick={(e) => e.stopPropagation()}
                                                                 className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
                                                             >
                                                                 Chat
@@ -797,18 +804,32 @@ export default function PipelinePage({
                                     />
                                 </div>
 
-                                <DialogFooter className="pt-3">
+                                <DialogFooter className="pt-3 flex flex-row items-center justify-between gap-2">
                                     <Button
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setIsEditOpen(false)}
+                                        asChild
+                                        className="gap-1.5 text-xs text-primary"
                                     >
-                                        Cancel
+                                        <Link href={`/inbox?phone=${encodeURIComponent(editLead.contact_phone)}`}>
+                                            <MessageSquare className="size-3.5" />
+                                            Open WhatsApp Chat
+                                        </Link>
                                     </Button>
-                                    <Button type="submit" size="sm" className="gap-1.5">
-                                        Update Deal
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIsEditOpen(false)}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button type="submit" size="sm" className="gap-1.5 bg-[#47b672] hover:bg-[#3ba060] text-white">
+                                            Update Deal
+                                        </Button>
+                                    </div>
                                 </DialogFooter>
                             </form>
                         )}

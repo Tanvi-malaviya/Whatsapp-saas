@@ -1009,7 +1009,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('crm/pipeline/move', function (\Illuminate\Http\Request $request) {
         $validated = $request->validate([
-            'conversation_id' => 'required|exists:conversations,id',
+            'conversation_id' => 'required|string',
             'stage' => 'required|string',
             'deal_value' => 'nullable|numeric|min:0',
             'followup_date' => 'nullable|string',

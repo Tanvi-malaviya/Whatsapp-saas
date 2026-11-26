@@ -1562,7 +1562,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     <span
                                                         className="inline-flex items-center ml-0.5"
                                                         title={
-                                                            msg.status === 'read' || msg.status === 'seen'
+                                                            msg.status === 'read' || (msg.status as string) === 'seen'
                                                                 ? 'Read (Seen)'
                                                                 : msg.status === 'delivered'
                                                                     ? 'Delivered'
@@ -1571,7 +1571,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                                         : 'Sent'
                                                         }
                                                     >
-                                                        {msg.status === 'read' || msg.status === 'seen' ? (
+                                                        {msg.status === 'read' || (msg.status as string) === 'seen' ? (
                                                             <CheckCheck className="size-3.5 text-[#53bdeb] stroke-[2.5]" />
                                                         ) : msg.status === 'delivered' ? (
                                                             <CheckCheck className="size-3.5 text-muted-foreground/75 stroke-[2]" />
