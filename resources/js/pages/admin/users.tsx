@@ -18,9 +18,11 @@ import {
     EyeOff,
     KeyRound,
     Briefcase,
+    MoreHorizontal,
+    UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,6 +34,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type UserItem = {
     id: number;
@@ -230,34 +239,46 @@ export default function AdminUsers({ users = [] }: Props) {
         );
     };
 
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admins' | 'partners' | 'clients'>('all');
+
     const filtered = useMemo(() => {
         return users.filter((u) => {
-            return (
+            const matchesSearch =
                 u.name.toLowerCase().includes(search.toLowerCase()) ||
-                u.email.toLowerCase().includes(search.toLowerCase())
-            );
+                u.email.toLowerCase().includes(search.toLowerCase());
+            if (!matchesSearch) return false;
+
+            if (roleFilter === 'admins' && !u.is_super_admin) return false;
+            if (roleFilter === 'partners' && !u.is_b2b_agent) return false;
+            if (roleFilter === 'clients' && (u.is_super_admin || u.is_b2b_agent)) return false;
+
+            return true;
         });
-    }, [users, search]);
+    }, [users, search, roleFilter]);
+
+    const superAdminCount = useMemo(() => users.filter((u) => u.is_super_admin).length, [users]);
+    const partnerCount = useMemo(() => users.filter((u) => u.is_b2b_agent).length, [users]);
+    const clientCount = useMemo(() => users.filter((u) => !u.is_super_admin && !u.is_b2b_agent).length, [users]);
 
     return (
         <>
             <Head title="System Users - Super Admin" />
 
-            <div className="space-y-3.5">
-                {/* Compact Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2.5">
-                        <div className="size-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-                            <Users className="size-4" />
-                        </div>
-                        <div>
-                            <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-tight">
-                                System Users &amp; Privileges
+            <div className="space-y-3.5 max-w-7xl mx-auto pb-8">
+                {/* Header Banner */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card border border-border/70 rounded-2xl p-4 sm:p-5 shadow-2xs">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                                System Users Directory
                             </h1>
-                            <p className="text-xs text-muted-foreground">
-                                Manage registered users and Super Administrator privileges ({users.length} Total Users)
-                            </p>
+                            <Badge variant="outline" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25 text-[10px] font-bold uppercase tracking-wider">
+                                Access Control
+                            </Badge>
                         </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            Manage user accounts, B2B partner status, super administrator privileges, and assigned workspaces.
+                        </p>
                     </div>
 
                     <Button
@@ -265,181 +286,323 @@ export default function AdminUsers({ users = [] }: Props) {
                             setFormError('');
                             setIsAddModalOpen(true);
                         }}
-                        className="h-8 px-3 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs shrink-0 self-start sm:self-auto"
+                        size="sm"
+                        className="h-8 px-3 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs rounded-xl self-start sm:self-auto cursor-pointer"
                     >
                         <UserPlus className="size-3.5" />
                         <span>Add New User</span>
                     </Button>
                 </div>
 
+                {/* Sleek, Compact Stat Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                                <Users className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Total Users</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{users.length}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/5 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-rose-500/15 text-rose-600 flex items-center justify-center">
+                                <Crown className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">Super Admins</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-rose-600 dark:text-rose-400">{superAdminCount}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                                <Briefcase className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">B2B Partners</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{partnerCount}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                                <Building2 className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Regular Clients</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{clientCount}</span>
+                    </div>
+                </div>
+
                 {/* Flash Notice */}
                 {flash?.success && (
-                    <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="size-3.5 shrink-0" />
+                    <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3.5 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                        <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
                         <span>{flash.success}</span>
                     </div>
                 )}
                 {flash?.error && (
-                    <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-600 dark:text-rose-400">
+                    <div className="flex items-center gap-2 rounded-xl bg-rose-500/10 border border-rose-500/20 px-3.5 py-2 text-xs text-rose-700 dark:text-rose-300">
                         <span>{flash.error}</span>
                     </div>
                 )}
 
-                {/* Search */}
-                <div className="relative max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                    <Input
-                        placeholder="Search by user name or email..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="pl-8 text-xs h-8 border-border/80"
-                    />
+                {/* Search & Filter Bar */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-card border border-border/70 rounded-xl p-2.5 shadow-2xs">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search by user name or email..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 text-xs h-8 bg-muted/40"
+                        />
+                    </div>
+
+                    {/* Segmented Color-Coded Tabs */}
+                    <div className="inline-flex items-center gap-1 p-1 bg-muted/60 border border-border/60 rounded-xl w-full sm:w-auto overflow-x-auto">
+                        <button
+                            type="button"
+                            onClick={() => setRoleFilter('all')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                roleFilter === 'all'
+                                    ? 'bg-background text-foreground shadow-xs border border-border/60'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <span>All</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                roleFilter === 'all' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                            }`}>
+                                {users.length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setRoleFilter('admins')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                roleFilter === 'admins'
+                                    ? 'bg-rose-600 text-white shadow-xs'
+                                    : 'text-rose-600 hover:bg-rose-500/10'
+                            }`}
+                        >
+                            <span>Admins</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                roleFilter === 'admins' ? 'bg-white/25 text-white' : 'bg-rose-500/15 text-rose-600'
+                            }`}>
+                                {superAdminCount}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setRoleFilter('partners')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                roleFilter === 'partners'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-emerald-600 hover:bg-emerald-500/10'
+                            }`}
+                        >
+                            <span>Partners</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                roleFilter === 'partners' ? 'bg-white/25 text-white' : 'bg-emerald-500/15 text-emerald-600'
+                            }`}>
+                                {partnerCount}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setRoleFilter('clients')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                roleFilter === 'clients'
+                                    ? 'bg-background text-foreground shadow-xs border border-border/60'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <span>Clients</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                                roleFilter === 'clients' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                            }`}>
+                                {clientCount}
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Users Table */}
                 <Card className="border-border/70 shadow-2xs overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-muted/40 border-b border-border text-[11px] uppercase font-semibold text-muted-foreground">
+                        <table className="w-full text-left text-xs">
+                            <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                 <tr>
-                                    <th className="py-2.5 px-3.5">User</th>
-                                    <th className="py-2.5 px-3.5">Workspaces &amp; Role</th>
-                                    <th className="py-2.5 px-3.5">Super Admin Access</th>
-                                    <th className="py-2.5 px-3.5">Registered</th>
-                                    <th className="py-2.5 px-3.5 text-right">Actions</th>
+                                    <th className="py-2.5 px-3">User Profile</th>
+                                    <th className="py-2.5 px-3">Roles &amp; Privileges</th>
+                                    <th className="py-2.5 px-3">Assigned Workspaces</th>
+                                    <th className="py-2.5 px-3">Registered Date</th>
+                                    <th className="py-2.5 px-3 text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/60">
                                 {filtered.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="py-8 text-center text-muted-foreground text-xs">
-                                            No users found.
+                                            No users found matching your search.
                                         </td>
                                     </tr>
                                 ) : (
-                                    filtered.map((u) => (
-                                        <tr key={u.id} className="hover:bg-muted/30 transition-colors">
-                                            {/* User Details */}
-                                            <td className="py-2 px-3.5">
-                                                <div className="font-semibold text-xs text-foreground flex items-center gap-1.5 leading-tight">
-                                                    <span>{u.name}</span>
-                                                    {u.id === 1 && (
-                                                        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold">
-                                                            OWNER #1
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                                <div className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                                                    {u.email}
-                                                </div>
-                                            </td>
+                                    filtered.map((u) => {
+                                        const initials = u.name
+                                            .split(' ')
+                                            .map((part) => part[0])
+                                            .filter(Boolean)
+                                            .join('')
+                                            .slice(0, 2)
+                                            .toUpperCase() || 'U';
 
-                                            {/* Organizations */}
-                                            <td className="py-2 px-3.5">
-                                                <div className="flex flex-wrap gap-1 max-w-sm">
-                                                    {u.organizations.length === 0 ? (
-                                                        <span className="text-[11px] text-muted-foreground italic">No workspace</span>
-                                                    ) : (
-                                                        u.organizations.map((org) => (
-                                                            <span
-                                                                key={org.id}
-                                                                className="inline-flex items-center gap-1 text-[10px] bg-muted px-1.5 py-0.5 rounded border border-border/70 leading-none"
-                                                            >
-                                                                <Building2 className="size-2.5 text-muted-foreground shrink-0" />
-                                                                <span className="truncate max-w-[130px]">{org.name}</span>
-                                                                <span className="text-[9px] text-primary font-bold">({org.role})</span>
-                                                            </span>
-                                                        ))
-                                                    )}
-                                                </div>
-                                            </td>
+                                        return (
+                                            <tr key={u.id} className="hover:bg-muted/30 transition-colors">
+                                                {/* User Profile */}
+                                                <td className="py-2.5 px-3">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="size-8 rounded-xl bg-primary/10 text-primary font-bold text-xs flex items-center justify-center shrink-0 uppercase border border-primary/20">
+                                                            {initials}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-xs text-foreground leading-tight">
+                                                                <span className="truncate">{u.name}</span>
+                                                            </div>
+                                                            <div className="text-[11px] text-muted-foreground truncate leading-tight mt-0.5">
+                                                                {u.email}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
 
-                                            {/* Super Admin & Partner status */}
-                                            <td className="py-2 px-3.5">
-                                                <div className="flex flex-col gap-1 items-start">
-                                                    {u.is_super_admin ? (
-                                                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                                                            <Crown className="size-2.5 text-rose-500" />
-                                                            SUPER ADMIN
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Regular Client
-                                                        </span>
-                                                    )}
+                                                {/* Roles & Privileges */}
+                                                <td className="py-2.5 px-3">
+                                                    <div className="flex flex-wrap items-center gap-1">
+                                                        {u.is_super_admin ? (
+                                                            <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 font-bold gap-1 px-1.5 py-0.5">
+                                                                <Crown className="size-2.5 text-rose-500" />
+                                                                <span>Super Admin</span>
+                                                            </Badge>
+                                                        ) : null}
 
-                                                    {u.is_b2b_agent && (
-                                                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                                            <Briefcase className="size-2.5 text-emerald-600" />
-                                                            B2B PARTNER
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
+                                                        {u.is_b2b_agent ? (
+                                                            <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 font-bold gap-1 px-1.5 py-0.5">
+                                                                <Briefcase className="size-2.5 text-emerald-600" />
+                                                                <span>Partner</span>
+                                                            </Badge>
+                                                        ) : null}
 
-                                            {/* Registered */}
-                                            <td className="py-2 px-3.5 text-xs text-muted-foreground whitespace-nowrap">
-                                                {u.created_at}
-                                            </td>
+                                                        {!u.is_super_admin && !u.is_b2b_agent ? (
+                                                            <Badge variant="secondary" className="text-[10px] text-muted-foreground font-medium px-1.5 py-0.5">
+                                                                Regular Client
+                                                            </Badge>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
 
-                                            {/* Actions */}
-                                            <td className="py-2 px-3.5 text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => openEditModal(u)}
-                                                        className="h-7 text-xs font-medium px-2 gap-1 border-border/80 hover:bg-muted"
-                                                        title="Edit Credentials"
-                                                    >
-                                                        <Pencil className="size-3" />
-                                                        <span>Edit</span>
-                                                    </Button>
+                                                {/* Assigned Workspaces */}
+                                                <td className="py-2.5 px-3">
+                                                    <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                                                        {u.organizations.length === 0 ? (
+                                                            <span className="text-[11px] text-muted-foreground italic">No workspace assigned</span>
+                                                        ) : (
+                                                            u.organizations.map((org) => (
+                                                                <span
+                                                                    key={org.id}
+                                                                    className="inline-flex items-center gap-1.5 text-[11px] bg-muted/60 hover:bg-muted text-foreground px-2 py-0.5 rounded-md border border-border/80 leading-tight transition-colors shadow-2xs"
+                                                                >
+                                                                    <Building2 className="size-3 text-muted-foreground shrink-0" />
+                                                                    <span className="font-medium whitespace-nowrap">{org.name}</span>
+                                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded leading-none ${
+                                                                        org.role === 'Owner'
+                                                                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/25'
+                                                                            : org.role === 'Admin'
+                                                                                ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/25'
+                                                                                : 'bg-primary/10 text-primary border border-primary/20'
+                                                                    }`}>
+                                                                        {org.role}
+                                                                    </span>
+                                                                </span>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </td>
 
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => router.post(`/admin/users/${u.id}/toggle-agent`)}
-                                                        className={`h-7 text-xs font-semibold px-2 gap-1 ${
-                                                            u.is_b2b_agent
-                                                                ? 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20'
-                                                                : 'border-border/80 hover:bg-muted text-muted-foreground'
-                                                        }`}
-                                                        title={u.is_b2b_agent ? 'Revoke Partner Role' : 'Grant Partner Role'}
-                                                    >
-                                                        <Briefcase className="size-3" />
-                                                        <span>{u.is_b2b_agent ? 'Partner' : '+ Partner'}</span>
-                                                    </Button>
+                                                {/* Registered Date */}
+                                                <td className="py-2.5 px-3 text-xs text-muted-foreground whitespace-nowrap">
+                                                    {u.created_at}
+                                                </td>
 
-                                                    <Button
-                                                        size="sm"
-                                                        variant={u.is_super_admin ? 'outline' : 'default'}
-                                                        disabled={u.id === 1}
-                                                        onClick={() => openAdminToggleModal(u)}
-                                                        className={`h-7 text-xs font-semibold px-2 ${
-                                                            u.is_super_admin
-                                                                ? 'text-rose-600 border-rose-500/30 hover:bg-rose-500/10'
-                                                                : 'bg-primary hover:bg-primary/90'
-                                                        }`}
-                                                    >
-                                                        {u.is_super_admin ? 'Revoke Admin' : 'Make Super Admin'}
-                                                    </Button>
-
-                                                    {u.id !== 1 && (
+                                                {/* Actions */}
+                                                <td className="py-2.5 px-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1.5">
                                                         <Button
                                                             size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => openDeleteModal(u)}
-                                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10"
-                                                            title="Delete User"
+                                                            variant="outline"
+                                                            onClick={() => openEditModal(u)}
+                                                            className="h-7 text-xs font-medium px-2 gap-1 border-border/80 hover:bg-muted rounded-lg"
+                                                            title="Edit Credentials"
                                                         >
-                                                            <Trash2 className="size-3.5" />
+                                                            <Pencil className="size-3" />
+                                                            <span>Edit</span>
                                                         </Button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
+
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="size-7 p-0 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+                                                                >
+                                                                    <MoreHorizontal className="size-3.5" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end" className="w-48 text-xs">
+                                                                <DropdownMenuItem
+                                                                    onClick={() => router.post(`/admin/users/${u.id}/toggle-agent`)}
+                                                                    className="cursor-pointer gap-2"
+                                                                >
+                                                                    <Briefcase className="size-3.5 text-emerald-600" />
+                                                                    <span>{u.is_b2b_agent ? 'Revoke B2B Partner' : 'Grant B2B Partner'}</span>
+                                                                </DropdownMenuItem>
+
+                                                                {u.id !== 1 && (
+                                                                    <DropdownMenuItem
+                                                                        onClick={() => openAdminToggleModal(u)}
+                                                                        className="cursor-pointer gap-2"
+                                                                    >
+                                                                        <Crown className="size-3.5 text-rose-500" />
+                                                                        <span>{u.is_super_admin ? 'Revoke Admin Role' : 'Make Super Admin'}</span>
+                                                                    </DropdownMenuItem>
+                                                                )}
+
+                                                                {u.id !== 1 && (
+                                                                    <>
+                                                                        <DropdownMenuSeparator />
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => openDeleteModal(u)}
+                                                                            className="cursor-pointer gap-2 text-rose-600 focus:text-rose-600 focus:bg-rose-500/10"
+                                                                        >
+                                                                            <Trash2 className="size-3.5" />
+                                                                            <span>Delete User Account</span>
+                                                                        </DropdownMenuItem>
+                                                                    </>
+                                                                )}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>

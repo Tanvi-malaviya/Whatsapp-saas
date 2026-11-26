@@ -18,48 +18,48 @@ export function InvoiceList({
     title?: string;
 }) {
     return (
-        <Card className="min-w-0">
-            <CardHeader>
-                <CardTitle>{title}</CardTitle>
-                <CardDescription>
+        <Card className="min-w-0 shadow-2xs">
+            <CardHeader className="p-3.5 pb-1">
+                <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+                <CardDescription className="text-[11px]">
                     Download receipts for completed payments.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3.5 pt-1">
                 {invoices.length ? (
-                    <div className="max-h-96 divide-y divide-border overflow-y-auto">
+                    <div className="max-h-60 divide-y divide-border overflow-y-auto">
                         {invoices.map((invoice) => (
                             <div
                                 key={invoice.id}
-                                className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-4 text-sm"
+                                className="flex min-w-0 flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
                             >
                                 <div className="min-w-0">
                                     <p className="font-medium capitalize">
                                         {invoice.plan.replaceAll('_', ' ')}
                                     </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
+                                    <p className="text-[10px] text-muted-foreground">
                                         {new Date(
                                             invoice.created_at,
                                         ).toLocaleDateString()}
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <span className="font-semibold tabular-nums">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-semibold tabular-nums text-xs">
                                         {money(invoice.amount_paise)}
                                     </span>
                                     {invoice.status === 'paid' ? (
                                         <a
                                             href={`/settings/billing/invoices/${invoice.id}`}
-                                            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium hover:bg-muted"
+                                            className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-medium hover:bg-muted"
                                             aria-label={`Download receipt dated ${new Date(invoice.created_at).toLocaleDateString()}`}
                                         >
-                                            <Download className="size-3.5" />
+                                            <Download className="size-3" />
                                             PDF
                                         </a>
                                     ) : (
                                         <Badge
                                             variant="outline"
-                                            className="capitalize"
+                                            className="capitalize text-[10px] h-5"
                                         >
                                             {invoice.status}
                                         </Badge>
@@ -69,8 +69,8 @@ export function InvoiceList({
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
-                        <FileText className="size-7" />
+                    <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-center text-xs text-muted-foreground">
+                        <FileText className="size-5 text-muted-foreground/50" />
                         <p>No invoices yet. Your payments will appear here.</p>
                     </div>
                 )}

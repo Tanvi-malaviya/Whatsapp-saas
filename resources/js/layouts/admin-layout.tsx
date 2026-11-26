@@ -10,6 +10,9 @@ import {
     LogOut,
     Menu,
     X,
+    CreditCard,
+    Wallet,
+    BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/sonner';
@@ -34,34 +37,44 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
     const navItems = [
         {
-            title: 'Admin Dashboard',
+            title: 'Dashboard',
             href: '/admin',
             icon: LayoutDashboard,
-            badge: null,
         },
         {
-            title: 'Clients & Number Quotas',
+            title: 'Subscriptions',
+            href: '/admin/subscriptions',
+            icon: CreditCard,
+        },
+        {
+            title: 'Wallets & Credits',
+            href: '/admin/wallets',
+            icon: Wallet,
+        },
+        {
+            title: 'Analytics & Usage',
+            href: '/admin/analytics',
+            icon: BarChart3,
+        },
+        {
+            title: 'Client Workspaces',
             href: '/admin/organizations',
             icon: Building2,
-            badge: 'Limits',
         },
         {
-            title: 'All WhatsApp Numbers',
+            title: 'WhatsApp Numbers',
             href: '/admin/channels',
             icon: Smartphone,
-            badge: null,
         },
         {
             title: 'System Users',
             href: '/admin/users',
             icon: Users,
-            badge: null,
         },
         {
-            title: 'Global API & Settings',
+            title: 'Global Settings',
             href: '/admin/settings',
             icon: Settings,
-            badge: null,
         },
     ];
 
@@ -138,27 +151,20 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                 key={item.href}
                                 href={item.href}
                                 onClick={() => setMobileOpen(false)}
-                                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                                     active
                                         ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 font-semibold border border-rose-500/20 shadow-2xs'
                                         : 'text-foreground/80 hover:bg-muted/70 hover:text-foreground'
                                 }`}
                             >
-                                <div className="flex items-center gap-2.5">
-                                    <Icon
-                                        className={`size-4 ${
-                                            active
-                                                ? 'text-rose-600 dark:text-rose-400'
-                                                : 'text-muted-foreground'
-                                        }`}
-                                    />
-                                    <span>{item.title}</span>
-                                </div>
-                                {item.badge && (
-                                    <span className="rounded-full bg-rose-500/15 px-1.5 py-0.2 text-[9px] font-bold text-rose-600 dark:text-rose-400">
-                                        {item.badge}
-                                    </span>
-                                )}
+                                <Icon
+                                    className={`size-4 shrink-0 ${
+                                        active
+                                            ? 'text-rose-600 dark:text-rose-400'
+                                            : 'text-muted-foreground'
+                                    }`}
+                                />
+                                <span className="truncate">{item.title}</span>
                             </Link>
                         );
                     })}

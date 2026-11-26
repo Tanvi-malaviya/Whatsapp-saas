@@ -26,6 +26,9 @@ import {
     Sliders,
     Save,
     Check,
+    CreditCard,
+    BarChart3,
+    ArrowUpRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -343,6 +346,78 @@ export default function AdminDashboard({
                 {/* TAB 1: OVERVIEW & ANALYTICS */}
                 {activeTab === 'overview' && (
                     <div className="space-y-4 animate-in fade-in duration-150">
+                        {/* Quick Command Direct Access Strip */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <Link
+                                href="/admin/subscriptions"
+                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-emerald-500/5 to-transparent hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all flex items-center justify-between shadow-2xs"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="size-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold">
+                                        <CreditCard className="size-4" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-bold text-foreground group-hover:text-emerald-600 flex items-center gap-1">
+                                            <span>Subscriptions & Clients</span>
+                                            <ArrowUpRight className="size-3" />
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            {financials.active_subscriptions} Active • {financials.total_revenue_formatted}
+                                        </div>
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/25">
+                                    Plans
+                                </Badge>
+                            </Link>
+
+                            <Link
+                                href="/admin/wallets"
+                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 hover:bg-amber-500/10 transition-all flex items-center justify-between shadow-2xs"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="size-9 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center font-bold">
+                                        <Wallet className="size-4" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-bold text-foreground group-hover:text-amber-600 flex items-center gap-1">
+                                            <span>Wallets & Manual Credits</span>
+                                            <ArrowUpRight className="size-3" />
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            Manual Deposit • {financials.total_wallet_paid_formatted} Paid
+                                        </div>
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/25">
+                                    Ledger
+                                </Badge>
+                            </Link>
+
+                            <Link
+                                href="/admin/analytics"
+                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-sky-500/5 to-transparent hover:border-sky-500/40 hover:bg-sky-500/10 transition-all flex items-center justify-between shadow-2xs"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="size-9 rounded-xl bg-sky-500/15 text-sky-600 flex items-center justify-center font-bold">
+                                        <BarChart3 className="size-4" />
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-bold text-foreground group-hover:text-sky-600 flex items-center gap-1">
+                                            <span>Daily Usage & Telemetry</span>
+                                            <ArrowUpRight className="size-3" />
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            {messagingAnalytics.delivery_rate}% Delivery • Day-by-Day
+                                        </div>
+                                    </div>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-500/25">
+                                    Telemetry
+                                </Badge>
+                            </Link>
+                        </div>
+
                         {/* 4 Stat Cards */}
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                             <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl hover:border-primary/50 transition-all">

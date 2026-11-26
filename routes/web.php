@@ -64,6 +64,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->group(function () {
             Route::get('/', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard');
             Route::get('dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard.index');
+            Route::get('subscriptions', [\App\Http\Controllers\AdminController::class, 'subscriptions'])->name('subscriptions');
+            Route::post('subscriptions/{id}/update', [\App\Http\Controllers\AdminController::class, 'updateSubscription'])->name('subscriptions.update');
+            Route::get('wallets', [\App\Http\Controllers\AdminController::class, 'wallets'])->name('wallets');
+            Route::post('wallets/credit', [\App\Http\Controllers\AdminController::class, 'creditWalletDirect'])->name('wallets.credit');
+            Route::get('analytics', [\App\Http\Controllers\AdminController::class, 'analytics'])->name('analytics');
             Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
             Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
             Route::match(['get', 'post'], 'organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');

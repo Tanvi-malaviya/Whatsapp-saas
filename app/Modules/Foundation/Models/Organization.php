@@ -64,6 +64,11 @@ class Organization extends Model
         return $this->hasMany(\App\Modules\MetaConnection\Models\WhatsAppChannel::class, 'organization_id');
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(\App\Modules\Messaging\Models\Message::class, 'organization_id');
+    }
+
     public function getMaxChannels(): int
     {
         if (array_key_exists('max_channels', $this->attributes) && $this->attributes['max_channels'] !== null) {
