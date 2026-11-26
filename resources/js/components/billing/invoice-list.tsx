@@ -40,7 +40,12 @@ export function InvoiceList({
                                     <p className="text-[10px] text-muted-foreground">
                                         {new Date(
                                             invoice.created_at,
-                                        ).toLocaleDateString()}
+                                        ).toLocaleDateString('en-IN', {
+                                            timeZone: 'Asia/Kolkata',
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        })}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
@@ -51,7 +56,7 @@ export function InvoiceList({
                                         <a
                                             href={`/settings/billing/invoices/${invoice.id}`}
                                             className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-medium hover:bg-muted"
-                                            aria-label={`Download receipt dated ${new Date(invoice.created_at).toLocaleDateString()}`}
+                                            aria-label={`Download receipt dated ${new Date(invoice.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}`}
                                         >
                                             <Download className="size-3" />
                                             PDF

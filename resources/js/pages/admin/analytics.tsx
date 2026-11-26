@@ -88,18 +88,6 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                             Real-time platform messaging volume, daily dispatch trends, delivery success percentages, and client activity logs.
                         </p>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.reload()}
-                            className="h-8 px-3 text-xs gap-1.5 cursor-pointer rounded-xl border-border/80"
-                        >
-                            <RefreshCw className="size-3.5" />
-                            <span>Refresh Data</span>
-                        </Button>
-                    </div>
                 </div>
 
                 {/* Sleek, Compact Primary KPI Strip */}
@@ -199,56 +187,56 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                 </Card>
 
                 {/* Day-by-Day Detailed Table */}
-                <Card className="shadow-2xs border-border/70 overflow-hidden">
-                    <CardHeader className="p-3.5 pb-2 border-b border-border/70 bg-muted/30">
-                        <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
+                    <div className="p-3.5 pb-2 border-b border-border/70 bg-muted/30">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                             Day-by-Day Message Dispatch Telemetry
-                        </CardTitle>
-                    </CardHeader>
+                        </h2>
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
                             <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                 <tr>
-                                    <th className="py-2.5 px-3">Date</th>
-                                    <th className="py-2.5 px-3">Total Messages</th>
-                                    <th className="py-2.5 px-3">Outbound Sent</th>
-                                    <th className="py-2.5 px-3">Inbound Received</th>
-                                    <th className="py-2.5 px-3">Delivered</th>
-                                    <th className="py-2.5 px-3">Read</th>
-                                    <th className="py-2.5 px-3">Failed</th>
-                                    <th className="py-2.5 px-3 text-right">Delivery Rate</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Date</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Total Messages</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Outbound Sent</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Inbound Received</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Delivered</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Read</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Failed</th>
+                                    <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Delivery Rate</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/60">
                                 {dailyUsage.map((day) => (
                                     <tr key={day.date} className="hover:bg-muted/30 transition-colors">
-                                        <td className="py-2.5 px-3 font-semibold text-foreground">
+                                        <td className="py-2.5 px-3.5 font-semibold text-foreground whitespace-nowrap">
                                             {day.label}
                                             <span className="text-[10px] font-normal text-muted-foreground ml-1.5">
                                                 ({day.date})
                                             </span>
                                         </td>
-                                        <td className="py-2.5 px-3 font-bold tabular-nums text-foreground">
+                                        <td className="py-2.5 px-3.5 font-bold tabular-nums text-foreground whitespace-nowrap">
                                             {day.total}
                                         </td>
-                                        <td className="py-2.5 px-3 font-medium tabular-nums text-primary">
+                                        <td className="py-2.5 px-3.5 font-medium tabular-nums text-primary whitespace-nowrap">
                                             {day.outbound}
                                         </td>
-                                        <td className="py-2.5 px-3 font-medium tabular-nums text-emerald-600 dark:text-emerald-400">
+                                        <td className="py-2.5 px-3.5 font-medium tabular-nums text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                                             {day.inbound}
                                         </td>
-                                        <td className="py-2.5 px-3 tabular-nums text-muted-foreground">
+                                        <td className="py-2.5 px-3.5 tabular-nums text-muted-foreground whitespace-nowrap">
                                             {day.delivered}
                                         </td>
-                                        <td className="py-2.5 px-3 tabular-nums text-muted-foreground">
+                                        <td className="py-2.5 px-3.5 tabular-nums text-muted-foreground whitespace-nowrap">
                                             {day.read}
                                         </td>
-                                        <td className="py-2.5 px-3 tabular-nums">
+                                        <td className="py-2.5 px-3.5 tabular-nums whitespace-nowrap">
                                             <span className={day.failed > 0 ? 'text-rose-600 font-bold' : 'text-muted-foreground'}>
                                                 {day.failed}
                                             </span>
                                         </td>
-                                        <td className="py-2.5 px-3 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                        <td className="py-2.5 px-3.5 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                                             {day.delivery_rate}%
                                         </td>
                                     </tr>
@@ -256,49 +244,49 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                             </tbody>
                         </table>
                     </div>
-                </Card>
+                </div>
 
                 {/* Bottom Row: Top Workspaces & Channel Health */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                     {/* Top Workspaces Table */}
-                    <Card className="shadow-2xs border-border/70 lg:col-span-2 overflow-hidden">
-                        <CardHeader className="p-3.5 pb-2 border-b border-border/70 bg-muted/30">
-                            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <div className="rounded-xl border border-border/70 bg-card lg:col-span-2 overflow-hidden shadow-2xs">
+                        <div className="p-3.5 pb-2 border-b border-border/70 bg-muted/30">
+                            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                                 <Building2 className="size-3.5 text-primary" />
                                 <span>Top Active Workspaces by Message Volume</span>
-                            </CardTitle>
-                        </CardHeader>
+                            </h2>
+                        </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
-                                        <th className="py-2 px-3">Rank</th>
-                                        <th className="py-2 px-3">Workspace Name</th>
-                                        <th className="py-2 px-3">Numbers</th>
-                                        <th className="py-2 px-3">Total Sent</th>
-                                        <th className="py-2 px-3">Delivered</th>
-                                        <th className="py-2 px-3 text-right">Success Rate</th>
+                                        <th className="py-2 px-3.5 whitespace-nowrap">Rank</th>
+                                        <th className="py-2 px-3.5">Workspace Name</th>
+                                        <th className="py-2 px-3.5 whitespace-nowrap">Numbers</th>
+                                        <th className="py-2 px-3.5 whitespace-nowrap">Total Sent</th>
+                                        <th className="py-2 px-3.5 whitespace-nowrap">Delivered</th>
+                                        <th className="py-2 px-3.5 text-right whitespace-nowrap">Success Rate</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
                                     {topOrganizations.map((org, index) => (
                                         <tr key={org.id} className="hover:bg-muted/30 transition-colors">
-                                            <td className="py-2.5 px-3 text-muted-foreground font-mono text-[11px]">
+                                            <td className="py-2.5 px-3.5 text-muted-foreground font-mono text-[11px] whitespace-nowrap">
                                                 #{index + 1}
                                             </td>
-                                            <td className="py-2.5 px-3 font-semibold text-foreground">
+                                            <td className="py-2.5 px-3.5 font-semibold text-foreground">
                                                 {org.name}
                                             </td>
-                                            <td className="py-2.5 px-3 text-muted-foreground">
+                                            <td className="py-2.5 px-3.5 text-muted-foreground whitespace-nowrap">
                                                 {org.channels_count}
                                             </td>
-                                            <td className="py-2.5 px-3 font-bold tabular-nums text-primary">
+                                            <td className="py-2.5 px-3.5 font-bold tabular-nums text-primary whitespace-nowrap">
                                                 {org.outbound_messages}
                                             </td>
-                                            <td className="py-2.5 px-3 tabular-nums text-muted-foreground">
+                                            <td className="py-2.5 px-3.5 tabular-nums text-muted-foreground whitespace-nowrap">
                                                 {org.delivered_messages}
                                             </td>
-                                            <td className="py-2.5 px-3 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                                            <td className="py-2.5 px-3.5 text-right font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                                                 {org.delivery_rate}%
                                             </td>
                                         </tr>
@@ -306,10 +294,10 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                                 </tbody>
                             </table>
                         </div>
-                    </Card>
+                    </div>
 
                     {/* WhatsApp Channel Health */}
-                    <Card className="shadow-2xs border-border/70 p-4 space-y-3">
+                    <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-2xs">
                         <div className="flex items-center justify-between border-b border-border/70 pb-2">
                             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                                 <Smartphone className="size-3.5 text-primary" />
@@ -352,7 +340,7 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                                 <span className="font-semibold text-rose-600">{channelHealth.disconnected}</span>
                             </div>
                         </div>
-                    </Card>
+                    </div>
                 </div>
             </div>
         </>

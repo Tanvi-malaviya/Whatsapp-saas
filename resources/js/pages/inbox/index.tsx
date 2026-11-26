@@ -487,7 +487,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             id: 'temp-tpl-' + Date.now(),
             sender: 'agent',
             text: optimisticContent,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }),
             status: 'pending',
         };
 
@@ -901,7 +901,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             id: 'temp-' + Date.now(),
             sender: 'agent',
             text: fullMessageContent,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }),
             status: 'pending',
             attachment: currentAttachment || undefined,
         };
@@ -1974,163 +1974,272 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
             {/* Start New Conversation Modal */}
             {showNewChatDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 animate-in fade-in-50">
-                    <div role="dialog" aria-modal="true" aria-labelledby="new-chat-title" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-                        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-                            <div className="flex items-center gap-2">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in-50">
+                    <div role="dialog" aria-modal="true" aria-labelledby="new-chat-title" className="flex max-h-[calc(100dvh-2.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl">
+                        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/80 px-4 py-3 sm:px-5">
+                            <div className="flex items-center gap-2.5">
                                 <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#47b672]/15 text-[#47b672]">
                                     <Plus className="size-4" />
                                 </div>
                                 <div>
                                     <h3 id="new-chat-title" className="text-sm font-bold text-foreground">Start New WhatsApp Conversation</h3>
-                                    <p className="text-[11px] text-muted-foreground">Choose a recipient and prepare your message</p>
+                                    <p className="text-[11px] text-muted-foreground">Select recipient details and choose a template or message</p>
                                 </div>
                             </div>
-                            <button type="button" aria-label="Close new chat" onClick={() => setShowNewChatDialog(false)} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                            <button
+                                type="button"
+                                aria-label="Close new chat"
+                                onClick={() => setShowNewChatDialog(false)}
+                                className="size-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+                            >
                                 <X className="size-4" />
                             </button>
                         </div>
                         <form onSubmit={handleStartNewChat} className="flex min-h-0 flex-1 flex-col overflow-hidden">
                             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
                                 {newChatStatus && (
-                                    <div role="status" className={`mb-3 rounded-lg border p-2.5 text-xs ${newChatStatus.success
+                                    <div role="status" className={`mb-3.5 rounded-lg border p-2.5 text-xs ${newChatStatus.success
                                         ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                                         : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'}`}>
                                         {newChatStatus.message}
                                     </div>
                                 )}
-                                <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)]">
-                                    <div className="min-w-0 space-y-3 lg:border-r lg:border-border lg:pr-4">
-                            {channels.length > 1 && (
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold">Send From WhatsApp Number *</label>
-                                    <select
-                                        value={newChatChannelId}
-                                        onChange={(e) => setNewChatChannelId(e.target.value)}
-                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                    >
-                                        {channels.map((ch: any) => (
-                                            <option key={ch.id} value={ch.id}>
-                                                {ch.name} ({ch.phone_number || ch.phone_number_id}) {ch.is_default ? '★ Default' : ''}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                                <div className="grid min-w-0 gap-4 sm:gap-5 md:grid-cols-2">
+                                    <div className="min-w-0 space-y-3.5">
+                                        {channels.length > 1 && (
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                                                    <Phone className="size-3 text-muted-foreground" />
+                                                    Send From WhatsApp Number *
+                                                </label>
+                                                <select
+                                                    value={newChatChannelId}
+                                                    onChange={(e) => setNewChatChannelId(e.target.value)}
+                                                    className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                >
+                                                    {channels.map((ch: any) => (
+                                                        <option key={ch.id} value={ch.id}>
+                                                            {ch.name} ({ch.phone_number || ch.phone_number_id}) {ch.is_default ? '★ Default' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
 
-                            <div className="grid grid-cols-1 gap-3">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold">Recipient Mobile Number *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={newChatPhone}
-                                        onChange={(e) => setNewChatPhone(e.target.value)}
-                                        placeholder="e.g. 919898096798"
-                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
-                                    />
-                                    <span className="text-[10px] text-muted-foreground">Include country code (e.g. 91 for India)</span>
-                                </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                                <span>Recipient Mobile Number *</span>
+                                                <span className="text-[10px] text-muted-foreground font-normal">Include country code</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={newChatPhone}
+                                                onChange={(e) => setNewChatPhone(e.target.value)}
+                                                placeholder="e.g. 919898096798"
+                                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-mono placeholder:text-muted-foreground/60 placeholder:font-sans focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            />
+                                        </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold">Contact Name (Optional)</label>
-                                    <input
-                                        type="text"
-                                        value={newChatName}
-                                        onChange={(e) => setNewChatName(e.target.value)}
-                                        placeholder="e.g. Rahul Patel"
-                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-                                    />
-                                    <span className="text-[10px] text-muted-foreground">Name saved in your contacts</span>
-                                </div>
-                            </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                                <span>Contact Name (Optional)</span>
+                                                <span className="text-[10px] text-muted-foreground font-normal">For address book</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={newChatName}
+                                                onChange={(e) => setNewChatName(e.target.value)}
+                                                placeholder="e.g. Rahul Patel"
+                                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                            />
+                                        </div>
 
-                            {/* Message Type Toggle */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-semibold">Message Type</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setNewChatMsgType('template')}
-                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${newChatMsgType === 'template'
-                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
-                                                : 'border-border bg-background hover:bg-muted/40'
-                                            }`}
-                                    >
-                                        <div className="font-semibold text-foreground">⚡ Approved Template</div>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">For contacts who consented to receive messages</p>
-                                    </button>
+                                        {/* Message Type Toggle */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-semibold text-foreground">Message Type</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewChatMsgType('template')}
+                                                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                                        newChatMsgType === 'template'
+                                                            ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500 shadow-2xs'
+                                                            : 'border-border bg-background hover:bg-muted/40'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                                        <Zap className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                                        <span>Meta Template</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                                                        Initiates new chat with official template
+                                                    </p>
+                                                </button>
 
-                                    <button
-                                        type="button"
-                                        onClick={() => setNewChatMsgType('text')}
-                                        className={`p-2.5 rounded-lg border text-left text-xs transition-all ${newChatMsgType === 'text'
-                                                ? 'border-[#47b672] bg-[#47b672]/10 ring-1 ring-[#47b672]'
-                                                : 'border-border bg-background hover:bg-muted/40'
-                                            }`}
-                                    >
-                                        <div className="font-semibold text-foreground">💬 Custom Text</div>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">If customer messaged in last 24h</p>
-                                    </button>
-                                </div>
-                            </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setNewChatMsgType('text')}
+                                                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                                                        newChatMsgType === 'text'
+                                                            ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500 shadow-2xs'
+                                                            : 'border-border bg-background hover:bg-muted/40'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                                        <MessageSquare className="size-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                                                        <span>Custom Text</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                                                        For contacts active in 24h window
+                                                    </p>
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                        <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-2.5 text-xs leading-relaxed">
-                                            <input type="checkbox" required checked={consentConfirmed} onChange={event => setConsentConfirmed(event.target.checked)} className="mt-0.5 shrink-0" />
-                                            This contact consented to receive messages.
+                                        {/* Consent Confirmation */}
+                                        <label className="flex items-start gap-2.5 rounded-xl border border-border/70 bg-muted/30 p-2.5 text-xs leading-relaxed cursor-pointer select-none hover:bg-muted/50 transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                required
+                                                checked={consentConfirmed}
+                                                onChange={event => setConsentConfirmed(event.target.checked)}
+                                                className="mt-0.5 size-3.5 rounded border-border text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0"
+                                            />
+                                            <span className="text-[11px] text-muted-foreground leading-normal">
+                                                I confirm this contact gave consent to receive WhatsApp messages.
+                                            </span>
                                         </label>
                                     </div>
-                                    <div className="min-w-0">
-                            {newChatMsgType === 'template' ? (
-                                <div className="min-w-0 space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-                                    <label className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-                                        Select Meta Approved Template *
-                                    </label>
-                                    <select
-                                        value={newChatTemplate}
-                                        onChange={(e) => { setNewChatTemplate(e.target.value); setNewValues({ parameters: [] }); setNewHeaderFile(null); }}
-                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                    >
-                                        {metaTemplates.length > 0 ? (
-                                            metaTemplates.map((tpl: any) => (
-                                                <option key={tpl.name + tpl.language} value={tpl.name}>
-                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
-                                                </option>
-                                            ))
-                                        ) : (
-                                            <>
-                                                <option value="">No approved templates available</option>
-                                            </>
-                                        )}
-                                    </select>
-                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
-                                        Pre-approved templates land directly on the user's phone to start the conversation.
-                                    </p>
-                                    <TemplateFields template={metaTemplates.find(t => t.name === newChatTemplate) ?? null} value={newValues} onChange={setNewValues} mediaFile={newHeaderFile} onMediaFileChange={setNewHeaderFile} showContent layout="columns" />
-                                </div>
-                            ) : (
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold">Message Text *</label>
-                                    <textarea
-                                        required
-                                        rows={8}
-                                        value={newChatMessage}
-                                        onChange={(e) => setNewChatMessage(e.target.value)}
-                                        placeholder="Type your WhatsApp message..."
-                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-                                    />
-                                </div>
-                            )}
 
+                                    {/* Right Column: Template Fields / Custom Text Area */}
+                                    <div className="min-w-0">
+                                        {newChatMsgType === 'template' ? (
+                                            <div className="min-w-0 space-y-3 rounded-xl border border-border/80 bg-muted/20 p-3 sm:p-3.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <label className="text-xs font-semibold text-foreground">
+                                                        Select Meta Approved Template *
+                                                    </label>
+                                                    {metaTemplates.length > 0 && (
+                                                        <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-emerald-500/10 text-emerald-600">
+                                                            {metaTemplates.length} available
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {metaTemplates.length > 0 ? (
+                                                    <>
+                                                        <select
+                                                            value={newChatTemplate}
+                                                            onChange={(e) => { setNewChatTemplate(e.target.value); setNewValues({ parameters: [] }); setNewHeaderFile(null); }}
+                                                            className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
+                                                        >
+                                                            {metaTemplates.map((tpl: any) => (
+                                                                <option key={tpl.name + tpl.language} value={tpl.name}>
+                                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <p className="text-[10px] text-muted-foreground">
+                                                            Pre-approved templates deliver directly to the contact to initiate the conversation window.
+                                                        </p>
+                                                        <TemplateFields
+                                                            template={metaTemplates.find(t => t.name === newChatTemplate) ?? null}
+                                                            value={newValues}
+                                                            onChange={setNewValues}
+                                                            mediaFile={newHeaderFile}
+                                                            onMediaFileChange={setNewHeaderFile}
+                                                            showContent
+                                                            layout="stacked"
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <div className="p-4 rounded-xl border border-dashed border-border/80 bg-background text-center space-y-2.5 my-1">
+                                                        <div className="size-9 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                                                            <AlertCircle className="size-4.5" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-xs font-bold text-foreground">No Approved Templates Synced</h4>
+                                                            <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                                                                Your connected number does not have any approved templates synced yet. You can sync templates or switch to Custom Text.
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex flex-col gap-1.5 pt-1">
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => setNewChatMsgType('text')}
+                                                                className="h-7.5 text-xs font-semibold gap-1.5 w-full cursor-pointer hover:bg-muted"
+                                                            >
+                                                                <MessageSquare className="size-3 text-primary" />
+                                                                Switch to Custom Text Message
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                asChild
+                                                                variant="ghost"
+                                                                className="h-7 text-xs text-primary gap-1 w-full hover:bg-primary/10"
+                                                            >
+                                                                <Link href="/templates">
+                                                                    Open Templates Management ↗
+                                                                </Link>
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2 rounded-xl border border-border/80 bg-muted/20 p-3 sm:p-3.5">
+                                                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                                                    <span>Custom Message Text *</span>
+                                                    <span className="text-[10px] text-muted-foreground font-normal">Active 24h Window Required</span>
+                                                </label>
+                                                <textarea
+                                                    required
+                                                    rows={7}
+                                                    value={newChatMessage}
+                                                    onChange={(e) => setNewChatMessage(e.target.value)}
+                                                    placeholder="Type your WhatsApp message here..."
+                                                    className="w-full rounded-lg border border-input bg-background p-2.5 text-xs leading-relaxed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                                                />
+                                                <div className="p-2.5 bg-blue-500/10 rounded-lg border border-blue-500/20 text-[11px] text-blue-800 dark:text-blue-300 flex items-start gap-2 leading-relaxed">
+                                                    <Info className="size-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                                    <span>
+                                                        <strong>Meta Policy Notice:</strong> Freeform messages only deliver if the customer has sent a message to your number within the last 24 hours. For cold/new outreach, please use an Approved Template.
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:px-5">
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setShowNewChatDialog(false)} className="text-xs">Cancel</Button>
-                                <Button type="submit" size="sm" disabled={isStartingChat} className="gap-1.5 bg-[#47b672] px-4 text-xs font-semibold text-white shadow-sm hover:bg-[#349c5e]">
-                                    <Send className="size-3.5" />
-                                    {isStartingChat ? 'Sending & Opening...' : 'Start Chat & Send'}
-                                </Button>
+                            <div className="flex shrink-0 items-center justify-between border-t border-border/80 bg-muted/20 px-4 py-3 sm:px-5">
+                                <div className="text-[11px] text-muted-foreground hidden sm:flex items-center gap-1.5">
+                                    <span className="size-2 rounded-full bg-emerald-500" />
+                                    <span>Sending via <strong>{channels.find((c: any) => c.id === newChatChannelId)?.name || 'Default WhatsApp'}</strong></span>
+                                </div>
+                                <div className="flex items-center gap-2 ml-auto">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowNewChatDialog(false)}
+                                        className="h-8 text-xs rounded-lg cursor-pointer"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        size="sm"
+                                        disabled={isStartingChat}
+                                        className="gap-1.5 bg-[#47b672] hover:bg-[#349c5e] text-white text-xs font-semibold h-8 px-4 rounded-lg shadow-2xs cursor-pointer"
+                                    >
+                                        <Send className="size-3" />
+                                        {isStartingChat ? 'Sending & Opening...' : 'Start Chat & Send'}
+                                    </Button>
+                                </div>
                             </div>
                         </form>
                     </div>
