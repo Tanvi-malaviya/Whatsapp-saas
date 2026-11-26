@@ -6,18 +6,26 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SendCampaignRecipient;
 use App\Models\PlatformSetting;
 use App\Modules\Campaigns\Models\BroadcastCampaign;
+use App\Modules\Crm\Models\Contact;
+use App\Modules\Crm\Models\ContactSegment;
 use App\Modules\Foundation\Models\Organization;
-use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Models\WebhookInbox;
+use App\Modules\MetaConnection\Http\Controllers\MetaWebhookController;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\MetaApi;
+use App\Services\TemplatePayload;
 use App\Services\WalletService;
 use App\Shared\PhoneNumber;
 use App\Shared\TenantContext;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -91,7 +99,7 @@ class CampaignController extends Controller
                             'category' => $category,
                             'status' => strtoupper($tpl['status'] ?? 'APPROVED'),
                             'language' => $tpl['language'] ?? 'en_US',
-                            'costEstimate' => '₹' . number_format($ratePaise / 100, 2) . ' / msg',
+                            'costEstimate' => '₹'.number_format($ratePaise / 100, 2).' / msg',
                             'ratePaise' => $ratePaise,
                             'components' => $tpl['components'] ?? [],
                             'header' => $headerText,
@@ -107,7 +115,7 @@ class CampaignController extends Controller
                     return $formatted;
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("getMetaTemplates error for WABA {$channel->waba_id}: " . $e->getMessage());
+                Log::error("getMetaTemplates error for WABA {$channel->waba_id}: ".$e->getMessage());
             }
 
             return [];
@@ -135,7 +143,7 @@ class CampaignController extends Controller
         $templates = array_values(array_filter($this->getMetaTemplates($channel), fn ($t) => $t['status'] === 'APPROVED'));
 
         // Fetch existing CRM contacts for this workspace
-        $contactsQuery = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id);
+        $contactsQuery = Contact::where('organization_id', $org->id);
 
         if ($request->filled('filter_type')) {
             $fType = $request->query('filter_type');
@@ -168,7 +176,7 @@ class CampaignController extends Controller
             } elseif ($segId === 'sys_active_7d') {
                 $contactsQuery->where('last_message_at', '>=', now()->subDays(7));
             } else {
-                $segment = \App\Modules\Crm\Models\ContactSegment::where('organization_id', $org->id)
+                $segment = ContactSegment::where('organization_id', $org->id)
                     ->where('id', $segId)
                     ->first();
                 if ($segment) {
@@ -205,7 +213,7 @@ class CampaignController extends Controller
                 'successCount' => $c->success_count,
                 'failedCount' => $c->failed_count,
                 'costPaise' => $c->cost_paise,
-                'costFormatted' => '₹' . number_format($c->cost_paise / 100, 2),
+                'costFormatted' => '₹'.number_format($c->cost_paise / 100, 2),
                 'category' => $c->category,
                 'isPaused' => (bool) $c->is_paused,
                 'status' => $c->status,
@@ -274,11 +282,11 @@ class CampaignController extends Controller
             'category' => $category,
             'recipients_count' => $count,
             'rate_per_message_paise' => $ratePaise,
-            'rate_per_message_formatted' => '₹' . number_format($ratePaise / 100, 2),
+            'rate_per_message_formatted' => '₹'.number_format($ratePaise / 100, 2),
             'estimated_cost_paise' => $estimatedCostPaise,
-            'estimated_cost_formatted' => '₹' . number_format($estimatedCostPaise / 100, 2),
+            'estimated_cost_formatted' => '₹'.number_format($estimatedCostPaise / 100, 2),
             'wallet_balance_paise' => $totalBalance,
-            'wallet_balance_formatted' => '₹' . number_format($totalBalance / 100, 2),
+            'wallet_balance_formatted' => '₹'.number_format($totalBalance / 100, 2),
             'has_sufficient_balance' => $totalBalance >= $estimatedCostPaise,
         ]);
     }
@@ -286,6 +294,16 @@ class CampaignController extends Controller
     public function broadcast(Request $request): JsonResponse
     {
         try {
+            if ($request->has('campaign_data')) {
+                $request->validate(['campaign_data' => 'required|json']);
+                $campaignData = json_decode($request->input('campaign_data'), true);
+                if (! is_array($campaignData)) {
+                    throw ValidationException::withMessages(['campaign_data' => 'Provide valid campaign data.']);
+                }
+                unset($campaignData['header_file']);
+                $request->merge($campaignData);
+            }
+
             $org = $this->resolveOrg($request);
 
             // 1. Check subscription validity
@@ -314,14 +332,17 @@ class CampaignController extends Controller
                 'template_name' => 'required|string|max:512',
                 'template_language' => 'required|string|max:30',
                 'campaign_name' => 'nullable|string|max:150',
-                'recipients' => 'required|array|min:1|max:' . $maxAllowed,
+                'recipients' => 'required|array|min:1|max:'.$maxAllowed,
                 'recipients.*.phone' => 'required|string|max:30',
                 'recipients.*.name' => 'nullable|string|max:100',
                 'parameters' => 'nullable|array',
                 'parameters.*' => 'nullable|string|max:2000',
                 'header_url' => 'nullable|url:https|max:2000',
+                'header_file' => 'nullable|file|max:102400',
                 'header_parameters' => 'nullable|array',
+                'header_parameters.*' => 'required|string|max:2000',
                 'button_parameters' => 'nullable|array',
+                'button_parameters.*' => 'required|string|max:2000',
                 'consent_confirmed' => 'nullable',
             ]);
 
@@ -348,8 +369,25 @@ class CampaignController extends Controller
                 throw ValidationException::withMessages(['template_name' => "Template '{$data['template_name']}' is not available or approved on this WhatsApp sender number."]);
             }
 
+            $file = $request->file('header_file');
+            if ($file) {
+                $header = collect($template['components'] ?? [])->firstWhere('type', 'HEADER');
+                $format = strtoupper($template['headerFormat'] ?? $header['format'] ?? '');
+                $rules = match ($format) {
+                    'IMAGE' => ['required', 'file', 'mimetypes:image/jpeg,image/png', 'max:5120'],
+                    'VIDEO' => ['required', 'file', 'mimetypes:video/mp4,video/3gpp', 'max:16384'],
+                    'DOCUMENT' => ['required', 'file', 'mimetypes:application/pdf', 'max:102400'],
+                    default => throw ValidationException::withMessages(['header_file' => 'This template does not support media attachments. Choose an image, video, or document template.']),
+                };
+                $request->validate(['header_file' => $rules]);
+                if (! empty($data['header_url'])) {
+                    throw ValidationException::withMessages(['header_file' => 'Choose either a media upload or an HTTPS URL.']);
+                }
+            }
+
             $category = strtoupper($template['category'] ?? 'MARKETING');
-            $payload = app(\App\Services\TemplatePayload::class)->build($template, $data);
+            // Validate every variable before uploading media or charging the wallet.
+            $payload = app(TemplatePayload::class)->build($template, $file ? [...$data, 'header_media_id' => 'pending-upload'] : $data);
             $recipients = collect($data['recipients'])->map(
                 fn ($r) => ['phone' => (new PhoneNumber($r['phone']))->getE164(), 'name' => $r['name'] ?? null]
             )->unique('phone');
@@ -361,14 +399,14 @@ class CampaignController extends Controller
             }
 
             // Validate opt-out contacts
-            $blocked = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)
+            $blocked = Contact::where('organization_id', $org->id)
                 ->whereIn('contact_phone', $recipients->pluck('phone'))
                 ->where('is_opted_in', false)
                 ->pluck('contact_phone');
 
             if ($blocked->isNotEmpty()) {
                 throw ValidationException::withMessages([
-                    'recipients' => 'Remove ' . $blocked->count() . ' opted-out recipient(s) (' . $blocked->implode(', ') . ') before sending.',
+                    'recipients' => 'Remove '.$blocked->count().' opted-out recipient(s) ('.$blocked->implode(', ').') before sending.',
                 ]);
             }
 
@@ -377,10 +415,31 @@ class CampaignController extends Controller
             $wallet = $this->walletService->getOrCreateWallet($org);
 
             if (! $wallet->hasSufficientBalance($estimatedCostPaise)) {
-                $avail = '₹' . number_format($wallet->totalBalancePaise() / 100, 2);
-                $req = '₹' . number_format($estimatedCostPaise / 100, 2);
+                $avail = '₹'.number_format($wallet->totalBalancePaise() / 100, 2);
+                $req = '₹'.number_format($estimatedCostPaise / 100, 2);
                 throw ValidationException::withMessages([
                     'wallet' => "Insufficient wallet balance (Available: {$avail}, Required: {$req}). Please recharge your wallet to dispatch this campaign.",
+                ]);
+            }
+
+            if ($file) {
+                try {
+                    $media = Http::withToken($channel->access_token)->timeout(60)
+                        ->attach('file', $file->getContent(), basename($file->getClientOriginalName()), ['Content-Type' => $file->getMimeType()])
+                        ->post(MetaApi::base().'/'.$channel->phone_number_id.'/media', [
+                            'messaging_product' => 'whatsapp',
+                            'type' => $file->getMimeType(),
+                        ]);
+                } catch (ConnectionException $e) {
+                    throw ValidationException::withMessages(['header_file' => 'Media upload could not connect to Meta. Please try again.']);
+                }
+                if (! $media->successful() || ! $media->json('id')) {
+                    throw ValidationException::withMessages(['header_file' => $media->json('error.message') ?? 'Meta could not upload the attachment. Please try again.']);
+                }
+                $payload = app(TemplatePayload::class)->build($template, [
+                    ...$data,
+                    'header_media_id' => $media->json('id'),
+                    'header_filename' => basename($file->getClientOriginalName()),
                 ]);
             }
 
@@ -436,7 +495,7 @@ class CampaignController extends Controller
                     try {
                         SendCampaignRecipient::dispatchSync($recId);
                     } catch (\Throwable $e) {
-                        \Illuminate\Support\Facades\Log::error("Immediate dispatch error for recipient {$recId}: " . $e->getMessage());
+                        Log::error("Immediate dispatch error for recipient {$recId}: ".$e->getMessage());
                     }
                 }
             } else {
@@ -453,7 +512,7 @@ class CampaignController extends Controller
                 'message' => $campaign->status === 'completed' ? 'Broadcast dispatched and delivered successfully!' : 'Broadcast queued for dispatch.',
                 'campaign_id' => $campaign->id,
                 'cost_paise' => $campaign->cost_paise,
-                'cost_formatted' => '₹' . number_format($campaign->cost_paise / 100, 2),
+                'cost_formatted' => '₹'.number_format($campaign->cost_paise / 100, 2),
                 'success_count' => (int) $campaign->success_count,
                 'failed_count' => (int) $campaign->failed_count,
             ]);
@@ -464,13 +523,13 @@ class CampaignController extends Controller
                 'errors' => $e->errors(),
             ], 422);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Broadcast error: ' . $e->getMessage(), [
+            Log::error('Broadcast error: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Broadcast dispatch failed: ' . $e->getMessage(),
+                'message' => 'Broadcast dispatch failed: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -573,12 +632,12 @@ class CampaignController extends Controller
         $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
 
         // Process any pending webhooks immediately so latest delivery statuses appear
-        $pendingWebhooks = \App\Modules\Messaging\Models\WebhookInbox::where('organization_id', $org->id)
+        $pendingWebhooks = WebhookInbox::where('organization_id', $org->id)
             ->where('status', 'pending')
             ->take(50)
             ->get();
         if ($pendingWebhooks->isNotEmpty()) {
-            $webhookController = app(\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class);
+            $webhookController = app(MetaWebhookController::class);
             foreach ($pendingWebhooks as $wh) {
                 try {
                     $webhookController->process($wh->id);
@@ -643,7 +702,7 @@ class CampaignController extends Controller
                 'template_language' => $campaign->template_language,
                 'category' => $campaign->category,
                 'cost_paise' => $campaign->cost_paise,
-                'cost_formatted' => '₹' . number_format($campaign->cost_paise / 100, 2),
+                'cost_formatted' => '₹'.number_format($campaign->cost_paise / 100, 2),
                 'status' => $campaign->status,
                 'is_paused' => (bool) $campaign->is_paused,
                 'created_at' => $campaign->created_at->format('d M Y, h:i A'),
@@ -675,7 +734,7 @@ class CampaignController extends Controller
             ->orderBy('id')
             ->get(['phone', 'name', 'status', 'error', 'wamid', 'updated_at']);
 
-        $filename = 'campaign-' . \Illuminate\Support\Str::slug($campaign->name ?: $campaign->id) . '-report.csv';
+        $filename = 'campaign-'.Str::slug($campaign->name ?: $campaign->id).'-report.csv';
 
         return response()->streamDownload(function () use ($rows, $campaign) {
             $out = fopen('php://output', 'w');
