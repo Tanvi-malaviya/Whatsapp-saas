@@ -55,7 +55,7 @@ import { NavUser } from '@/components/nav-user';
 
 export function AppSidebar() {
     const { url } = usePage();
-    const { auth, tenant } = usePage().props as any;
+    const { auth, tenant, inboxUnreadCount } = usePage().props as any;
     const { state } = useSidebar();
     const isCollapsed = state === 'collapsed';
     const currentOrg = tenant?.current;
@@ -126,9 +126,16 @@ export function AppSidebar() {
                             className={isActive('/inbox') ? activeClass : inactiveClass}
                             tooltip="Inbox"
                         >
-                            <Link href="/inbox" prefetch>
-                                <MessageSquare className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                <span>Inbox</span>
+                            <Link href="/inbox" prefetch className="flex items-center justify-between w-full">
+                                <span className="flex items-center gap-2">
+                                    <MessageSquare className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                    <span>Inbox</span>
+                                </span>
+                                {(inboxUnreadCount ?? 0) > 0 && (
+                                    <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[#47b672] text-white text-[10px] font-bold">
+                                        {inboxUnreadCount}
+                                    </span>
+                                )}
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

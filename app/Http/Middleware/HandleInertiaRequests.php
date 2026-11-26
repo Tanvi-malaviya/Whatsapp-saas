@@ -95,6 +95,19 @@ class HandleInertiaRequests extends Middleware
                     ])->values()->all(),
                 ];
             },
+            'inboxUnreadCount' => function () use ($request) {
+                if (! $request->user()) {
+                    return 0;
+                }
+                $orgId = $request->user()?->current_organization_id ?? \App\Shared\TenantContext::id();
+                if (! $orgId) {
+                    return 0;
+                }
+
+                return \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
+                    ->where('unread_count', '>', 0)
+                    ->count();
+            },
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

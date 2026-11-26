@@ -609,6 +609,21 @@ export default function BotFlows({ flows = [] }: Props) {
         });
     };
 
+    const handleClearAllFlows = () => {
+        if (!confirm(`Are you sure you want to delete all ${flowList.length} bot flow(s)? This cannot be undone.`)) return;
+        router.delete('/flows/clear-all', {
+            preserveScroll: true,
+            onSuccess: () => {
+                setFlowList([]);
+                setSelectedFlowId('');
+                showToast('All bot flows cleared.');
+            },
+            onError: () => {
+                showToast('Failed to clear bot flows.');
+            },
+        });
+    };
+
     const totalExecutions = flowList.reduce((acc, curr) => acc + (curr.execution_count || 0), 0);
     const activeCount = flowList.filter((f) => f.status === 'active').length;
 
@@ -637,6 +652,17 @@ export default function BotFlows({ flows = [] }: Props) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {flowList.length > 0 && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleClearAllFlows}
+                                className="text-xs gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 h-9"
+                            >
+                                <Trash2 className="size-3.5" />
+                                Clear All Flows
+                            </Button>
+                        )}
                         <Button
                             variant="outline"
                             size="sm"

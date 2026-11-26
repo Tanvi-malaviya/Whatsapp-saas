@@ -85,6 +85,7 @@ class InboxController extends Controller
                 'stage' => $c->pipeline_stage ?: 'New',
                 'label' => $c->label ?: 'Prospect',
                 'status' => $c->status,
+                '_sortTs' => $c->last_message_at?->getTimestamp() ?? 0,
                 'messages' => $c->messages->map(fn ($m) => [
                     'id' => (string) $m->id,
                     'sender' => $m->direction === 'inbound' ? 'contact' : ($m->sender_type === 'bot' ? 'bot' : 'agent'),
@@ -95,6 +96,16 @@ class InboxController extends Controller
                     'attachment' => ! empty($m->metadata['media_path']) ? ['name' => $m->metadata['filename'] ?? 'Attachment', 'type' => $m->type === 'image' ? 'image' : 'document', 'url' => '/inbox/messages/'.$m->id.'/attachment'] : null,
                 ])->values()->all(),
             ];
+        })->sort(function (array $a, array $b) {
+            $priorityA = (($a['unread'] ?? 0) > 0 ? 2 : 0) + (($a['lastMessageDirection'] ?? null) === 'inbound' ? 1 : 0);
+            $priorityB = (($b['unread'] ?? 0) > 0 ? 2 : 0) + (($b['lastMessageDirection'] ?? null) === 'inbound' ? 1 : 0);
+            if ($priorityA !== $priorityB) {
+                return $priorityB <=> $priorityA;
+            }
+            return ($b['_sortTs'] ?? 0) <=> ($a['_sortTs'] ?? 0);
+        })->map(function (array $t) {
+            unset($t['_sortTs']);
+            return $t;
         })->values()->all();
     }
 

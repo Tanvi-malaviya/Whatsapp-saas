@@ -17,7 +17,14 @@ class AutomationController extends Controller
     public function responder()
     {
         $org = TenantContext::get();
-        return Inertia::render('bot/auto-responder', ['settings' => $org->metadata['auto_responder'] ?? [], 'initialRules' => BotRule::where('organization_id', $org->id)->orderBy('priority')->get()->map(fn ($r) => ['id' => $r->id, 'keyword' => $r->keywords, 'matchType' => $r->match_type, 'reply' => $r->reply_text, 'enabled' => $r->is_enabled])]);
+        $rules = BotRule::where('organization_id', $org->id)->orderBy('priority')->get()->map(fn ($r) => ['id' => $r->id, 'keyword' => $r->keywords, 'matchType' => $r->match_type, 'reply' => $r->reply_text, 'enabled' => $r->is_enabled]);
+        $settings = $org->metadata['auto_responder'] ?? [];
+
+        return Inertia::render('bot/auto-responder', [
+            'settings' => $settings,
+            'initialRules' => $rules,
+            'hasSavedData' => ! empty($settings) || $rules->isNotEmpty(),
+        ]);
     }
     public function saveResponder(Request $request)
     {
@@ -37,13 +44,43 @@ class AutomationController extends Controller
         });
         return response()->json(['success' => true]);
     }
+    public function clearResponder()
+    {
+        DB::transaction(function () {
+            $org = TenantContext::get()->newQuery()->whereKey(TenantContext::id())->lockForUpdate()->firstOrFail();
+            $meta = $org->metadata ?? [];
+            unset($meta['auto_responder']);
+            $org->update(['metadata' => $meta]);
+            BotRule::where('organization_id', $org->id)->delete();
+        });
+
+        return response()->json(['success' => true]);
+    }
+
     public function agent()
     {
+        $settings = TenantContext::get()->metadata['ai_agent'] ?? [];
+        $docs = $this->documents();
+
         return Inertia::render('bot/ai-agent', [
-            'settings' => TenantContext::get()->metadata['ai_agent'] ?? [],
+            'settings' => $settings,
             'providerReady' => (bool) app(AiAgentService::class)->defaultKey(),
-            'initialDocs' => $this->documents(),
+            'initialDocs' => $docs,
+            'hasSavedData' => ! empty($settings) || $docs->isNotEmpty(),
         ]);
+    }
+
+    public function clearAgent()
+    {
+        DB::transaction(function () {
+            $org = TenantContext::get()->newQuery()->whereKey(TenantContext::id())->lockForUpdate()->firstOrFail();
+            $meta = $org->metadata ?? [];
+            unset($meta['ai_agent']);
+            $org->update(['metadata' => $meta]);
+            KnowledgeDocument::where('organization_id', $org->id)->delete();
+        });
+
+        return response()->json(['success' => true]);
     }
     private function documents()
     {

@@ -46,7 +46,8 @@ export type KeywordRule = {
     enabled: boolean;
 };
 
-export default function AutoResponder({ settings = {}, initialRules = [] }: { settings?: any; initialRules?: KeywordRule[] }) {
+export default function AutoResponder({ settings = {}, initialRules = [], hasSavedData = false }: { settings?: any; initialRules?: KeywordRule[]; hasSavedData?: boolean }) {
+    const [hasSaved, setHasSaved] = useState<boolean>(hasSavedData);
     const [welcomeEnabled, setWelcomeEnabled] = useState<boolean>(settings.welcome_enabled ?? false);
     const [welcomeMessage, setWelcomeMessage] = useState<string>(settings.welcome_message ?? 'Hello {{name}}! How can we help?');
     const [awayEnabled, setAwayEnabled] = useState<boolean>(settings.away_enabled ?? false);
@@ -88,11 +89,33 @@ export default function AutoResponder({ settings = {}, initialRules = [] }: { se
         setIsSaving(true);
         try {
             await api('/auto-responder', 'POST', { welcome_enabled: welcomeEnabled, welcome_message: welcomeMessage, away_enabled: awayEnabled, away_message: awayMessage, opens_at: opensAt, closes_at: closesAt, business_days: businessDays, rules: nextRules });
+            setHasSaved(true);
             showToast('Auto responder settings saved.'); return true;
         } catch (error) { showToast((error as Error).message); return false; }
         finally { setIsSaving(false); }
     };
     const handleSaveAll = () => { void persist(); };
+    const handleClearAll = async () => {
+        if (!confirm('Clear all saved Auto Responder settings and keyword rules?')) return;
+        setIsSaving(true);
+        try {
+            await api('/auto-responder/clear', 'POST');
+            setWelcomeEnabled(false);
+            setWelcomeMessage('Hello {{name}}! How can we help?');
+            setAwayEnabled(false);
+            setAwayMessage('Thanks for your message. Our team will reply during business hours.');
+            setOpensAt('09:00');
+            setClosesAt('17:00');
+            setBusinessDays([1, 2, 3, 4, 5]);
+            setRules([]);
+            setHasSaved(false);
+            showToast('Auto responder data cleared.');
+        } catch (error) {
+            showToast((error as Error).message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     // Open Add Rule Modal
     const openAddRuleModal = () => {
@@ -287,12 +310,34 @@ export default function AutoResponder({ settings = {}, initialRules = [] }: { se
                         >
                             Keyword Replies
                         </Badge>
+                        <Badge
+                            variant="outline"
+                            className={`text-[11px] ${
+                                hasSaved
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                    : 'bg-muted text-muted-foreground border-border'
+                            }`}
+                        >
+                            {hasSaved ? `Saved in Database (${rules.length} rules)` : 'No Saved Data (Default Placeholders)'}
+                        </Badge>
                         <p className="text-xs text-muted-foreground">
                             Automatically reply when a customer types specific words (e.g. Hi, Fees, Price) along with welcome &amp; away messages.
                         </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {hasSaved && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleClearAll}
+                                disabled={isSaving}
+                                className="text-xs h-9 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10"
+                            >
+                                <Trash2 className="size-3.5" />
+                                Clear All Data
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             variant="outline"

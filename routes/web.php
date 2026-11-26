@@ -153,7 +153,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return back()->with('success', "Bot Flow '{$validated['name']}' created successfully.");
     })->name('flows.store');
 
-    Route::put('flows/{flow}', function (\Illuminate\Http\Request $request, \App\Modules\Bot\Models\BotFlow $flow) {
+    Route::put('flows/{flow}', function (\Illuminate\Http\Request $request, string $flow) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $botFlow = \App\Modules\Bot\Models\BotFlow::withoutGlobalScope('tenant')
+            ->where('organization_id', $orgId)
+            ->findOrFail($flow);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
@@ -169,26 +177,56 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'options.*.followup_reply' => 'nullable|string|max:2000',
         ]);
 
-        $flow->update($validated);
+        $botFlow->update($validated);
 
-        return back()->with('success', "Bot Flow '{$flow->name}' updated successfully.");
+        return back()->with('success', "Bot Flow '{$botFlow->name}' updated successfully.");
     })->name('flows.update');
 
-    Route::patch('flows/{flow}/toggle', function (\App\Modules\Bot\Models\BotFlow $flow) {
-        $newStatus = $flow->status === 'active' ? 'draft' : 'active';
-        $flow->update(['status' => $newStatus]);
+    Route::patch('flows/{flow}/toggle', function (\Illuminate\Http\Request $request, string $flow) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $botFlow = \App\Modules\Bot\Models\BotFlow::withoutGlobalScope('tenant')
+            ->where('organization_id', $orgId)
+            ->findOrFail($flow);
+
+        $newStatus = $botFlow->status === 'active' ? 'draft' : 'active';
+        $botFlow->update(['status' => $newStatus]);
         return back()->with('success', "Bot Flow status changed to {$newStatus}.");
     })->name('flows.toggle');
 
-    Route::delete('flows/{flow}', function (\App\Modules\Bot\Models\BotFlow $flow) {
-        $name = $flow->name;
-        $flow->delete();
+    Route::delete('flows/clear-all', function (\Illuminate\Http\Request $request) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $deleted = \App\Modules\Bot\Models\BotFlow::withoutGlobalScope('tenant')
+            ->where('organization_id', $orgId)
+            ->delete();
+
+        return back()->with('success', "Cleared {$deleted} bot flow(s).");
+    })->name('flows.clear');
+
+    Route::delete('flows/{flow}', function (\Illuminate\Http\Request $request, string $flow) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $botFlow = \App\Modules\Bot\Models\BotFlow::withoutGlobalScope('tenant')
+            ->where('organization_id', $orgId)
+            ->findOrFail($flow);
+
+        $name = $botFlow->name;
+        $botFlow->delete();
         return back()->with('success', "Bot Flow '{$name}' deleted successfully.");
     })->name('flows.destroy');
     Route::get('auto-responder', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'responder'])->name('auto-responder.index');
     Route::post('auto-responder', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'saveResponder']);
+    Route::post('auto-responder/clear', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'clearResponder'])->name('auto-responder.clear');
     Route::get('ai-agent', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'agent'])->name('ai-agent.index');
     Route::post('ai-agent', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'saveAgent']);
+    Route::post('ai-agent/clear', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'clearAgent'])->name('ai-agent.clear');
     Route::post('ai-agent/documents', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'upload']);
     Route::delete('ai-agent/documents/{id}', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'deleteDocument']);
     Route::post('ai-agent/test', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'test'])->middleware('throttle:10,1');

@@ -36,7 +36,8 @@ export type KnowledgeDoc = {
 const DEFAULT_SYSTEM_PROMPT =
     "You are Sathwara InfoTech's Official AI Assistant. You help customers with software solutions, WhatsApp API automation, and business inquiries.\n\nSpeak politely and warmly. Reply in the same language the customer uses (English, Gujarati, or Hindi).\n\nIf the customer asks for a custom quotation or human support, politely offer to connect them with our team.";
 
-export default function AIAgent({ settings = {}, initialDocs = [], providerReady = false }: { settings?: any; initialDocs?: KnowledgeDoc[]; providerReady?: boolean }) {
+export default function AIAgent({ settings = {}, initialDocs = [], providerReady = false, hasSavedData = false }: { settings?: any; initialDocs?: KnowledgeDoc[]; providerReady?: boolean; hasSavedData?: boolean }) {
+    const [hasSaved, setHasSaved] = useState<boolean>(hasSavedData);
     const [agentEnabled, setAgentEnabled] = useState<boolean>(settings.enabled ?? false);
     const [provider, setProvider] = useState<'openai' | 'anthropic' | 'gemini' | 'groq'>(settings.provider ?? 'openai');
     const [customerApiKey, setCustomerApiKey] = useState<string>(settings.api_key ?? '');
@@ -72,6 +73,28 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                 temperature: Number(temperature),
             });
             showToast('AI settings saved successfully.');
+            setHasSaved(true);
+        } catch (error) {
+            showToast((error as Error).message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    const handleClearAll = async () => {
+        if (!confirm('Clear all saved AI Agent settings and uploaded knowledge documents?')) return;
+        setIsSaving(true);
+        try {
+            await api('/ai-agent/clear', 'POST');
+            setAgentEnabled(false);
+            setProvider('openai');
+            setCustomerApiKey('');
+            setModel('gpt-4o-mini');
+            setPrimaryLanguage('multilingual');
+            setSystemPrompt('Help our customers using the uploaded business documents. Offer human support if information is missing.');
+            setTemperature('0.4');
+            setDocs([]);
+            setHasSaved(false);
+            showToast('AI Agent settings and documents cleared.');
         } catch (error) {
             showToast((error as Error).message);
         } finally {
@@ -132,12 +155,34 @@ export default function AIAgent({ settings = {}, initialDocs = [], providerReady
                         >
                             PDF &amp; Document Knowledge Base
                         </Badge>
+                        <Badge
+                            variant="outline"
+                            className={`text-[11px] ${
+                                hasSaved
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                    : 'bg-muted text-muted-foreground border-border'
+                            }`}
+                        >
+                            {hasSaved ? `Saved in Database (${docs.length} docs)` : 'No Saved Data (Default Placeholders)'}
+                        </Badge>
                         <p className="text-xs text-muted-foreground">
                             Upload your product brochures, pricing PDFs, or company documents. Connect OpenAI, Claude, Gemini, or Groq using your own API key.
                         </p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                        {hasSaved && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleClearAll}
+                                disabled={isSaving}
+                                className="text-xs h-9 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10"
+                            >
+                                <Trash2 className="size-3.5" />
+                                Clear All Data
+                            </Button>
+                        )}
                         <Button
                             size="sm"
                             onClick={handleSave}

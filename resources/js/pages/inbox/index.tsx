@@ -144,7 +144,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     const [selectedThread, setSelectedThread] = useState<ChatThread | null>(initialThreads[0] || null);
     const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
     const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
-    const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'open' | 'resolved'>('all');
+    const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'unread' | 'open' | 'resolved'>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(initialMsgMap);
     const [replyText, setReplyText] = useState('');
@@ -216,6 +216,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     }, [newChatChannelId]);
     useEffect(() => {
         if (!selectedThread?.id) return;
+        setThreads((prev) => prev.map((t) => (t.id === selectedThread.id && t.unread > 0 ? { ...t, unread: 0 } : t)));
         api(`/inbox/conversations/${selectedThread.id}/read`, 'POST').catch(() => {});
         if (selectedThread.channelId) api(`/channels/${selectedThread.channelId}/templates`).then(data => { setDirectTemplates(data.templates); setSelectedDirectTemplate(data.templates[0] ?? null); setDirectValues({ parameters: [] }); setDirectHeaderFile(null); }).catch(() => setDirectTemplates([]));
     }, [selectedThread?.id]);
@@ -984,6 +985,9 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         if (selectedChannelFilter !== 'All channels' && t.channel !== selectedChannelFilter) {
             return false;
         }
+        if (selectedStatusFilter === 'unread' && !(t.unread > 0 || t.lastMessageDirection === 'inbound')) {
+            return false;
+        }
         if (selectedStatusFilter === 'open' && t.status === 'resolved') {
             return false;
         }
@@ -1038,7 +1042,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                             />
                         </div>
 
-                        {/* Status Filter Tabs (All / Open / Resolved) */}
+                        {/* Status Filter Tabs (All / Unread / Open / Resolved) */}
                         <div className="flex items-center gap-1 p-0.5 rounded-lg bg-muted/60 text-xs">
                             <button
                                 type="button"
@@ -1049,6 +1053,16 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     }`}
                             >
                                 All ({threads.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedStatusFilter('unread')}
+                                className={`flex-1 py-1 rounded-md text-[11px] font-semibold transition-all ${selectedStatusFilter === 'unread'
+                                        ? 'bg-card text-amber-600 dark:text-amber-400 shadow-2xs'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                            >
+                                Unread ({threads.filter((t) => t.unread > 0 || t.lastMessageDirection === 'inbound').length})
                             </button>
                             <button
                                 type="button"
@@ -1117,7 +1131,9 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         }}
                                         className={`flex items-start gap-3 p-3.5 cursor-pointer transition-colors relative ${isSelected
                                                 ? 'bg-[#47b672]/10 border-l-4 border-l-[#47b672]'
-                                                : 'hover:bg-muted/40'
+                                                : thread.unread > 0
+                                                    ? 'bg-emerald-500/5 hover:bg-emerald-500/10'
+                                                    : 'hover:bg-muted/40'
                                             }`}
                                     >
                                         {/* Avatar with Initials */}
@@ -1131,13 +1147,22 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     <span className="text-xs font-bold text-foreground truncate">
                                                         {thread.contactName}
                                                     </span>
+                                                    {thread.unread > 0 ? (
+                                                        <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-[#47b672] text-white text-[10px] font-bold shrink-0">
+                                                            {thread.unread}
+                                                        </span>
+                                                    ) : thread.lastMessageDirection === 'inbound' && !isResolved ? (
+                                                        <span className="rounded bg-amber-500/15 px-1.5 py-0.2 text-[9px] font-semibold text-amber-700 dark:text-amber-400 shrink-0 border border-amber-500/30">
+                                                            New Reply
+                                                        </span>
+                                                    ) : null}
                                                     {isResolved && (
                                                         <span className="rounded bg-muted px-1.5 py-0.2 text-[9px] font-semibold text-muted-foreground shrink-0 border border-border/70">
                                                             Resolved
                                                         </span>
                                                     )}
                                                 </div>
-                                                <span className="text-[10px] text-muted-foreground shrink-0 font-medium">
+                                                <span className={`text-[10px] shrink-0 font-medium ${thread.unread > 0 ? 'text-[#28804c] dark:text-[#52c480] font-bold' : 'text-muted-foreground'}`}>
                                                     {thread.time}
                                                 </span>
                                             </div>
