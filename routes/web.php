@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return auth()->check() ? redirect()->route('dashboard') : redirect()->route('login');
+    return auth()->check() ? redirect(\App\Services\PanelNavigation::home(auth()->user())) : redirect()->route('login');
 })->name('home');
 Route::inertia('/privacy', 'privacy')->name('privacy');
 Route::inertia('/terms', 'terms')->name('terms');
@@ -12,10 +12,22 @@ Route::inertia('/terms', 'terms')->name('terms');
 Route::get('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class, 'verify']);
 Route::post('/webhooks/meta', [\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class, 'receive']);
 
+Route::post('/webhooks/razorpay', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'webhook']);
+
+// Public Meta Commerce Scheduled Data Feed URL (for automatic background catalog sync)
+Route::get('/commerce/catalog-feed.csv', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'publicCatalogFeed'])->name('commerce.catalog.feed');
+
+Route::get('/invitations/{token}', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'accept'])->middleware('auth');
+
 // Super Admin: Dedicated Separate Authentication Routes (Public access for Admin Login)
 Route::get('admin/login', [\App\Http\Controllers\AdminController::class, 'showLogin'])->name('admin.login');
-Route::post('admin/login', [\App\Http\Controllers\AdminController::class, 'login'])->name('admin.login.submit');
+Route::post('admin/login', [\Laravel\Fortify\Http\Controllers\AuthenticatedSessionController::class, 'store'])->middleware('throttle:login')->name('admin.login.submit');
 Route::post('admin/logout', [\App\Http\Controllers\AdminController::class, 'logout'])->name('admin.logout');
+
+// B2B Partner Login & Portal Authentication Routes
+Route::get('agent/login', [\App\Http\Controllers\AgentController::class, 'showLogin'])->name('agent.login');
+Route::post('agent/login', [\Laravel\Fortify\Http\Controllers\AuthenticatedSessionController::class, 'store'])->middleware('throttle:login')->name('agent.login.submit');
+Route::post('agent/logout', [\App\Http\Controllers\AdminController::class, 'logout'])->name('agent.logout');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
@@ -26,16 +38,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('channels/connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'wizard'])->name('channels.connect');
     Route::get('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'index'])->name('channels.index');
     Route::post('channels', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'store'])->name('channels.store');
+    Route::get('channels/signup/review', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'reviewSignup']);
+    Route::post('channels/signup/complete', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'completeSignup']);
+    Route::post('channels/signup', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'beginSignup']);
     Route::post('channels/quick-connect', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'quickConnect'])->name('channels.quick-connect');
     Route::post('channels/sync-meta', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncFromMeta'])->name('channels.sync-meta');
     Route::delete('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'destroy'])->name('channels.destroy');
     Route::post('channels/{id}/set-default', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'setDefault'])->name('channels.set-default');
+    Route::post('channels/{id}/sync', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'syncChannel'])->name('channels.sync');
     Route::post('channels/{id}/test', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'testConnection'])->name('channels.test');
+    Route::get('channels/{id}/templates', function (string $id) { $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::findOrFail($id); return response()->json(['templates' => array_values(array_filter(app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel), fn ($t) => $t['status'] === 'APPROVED'))]); });
     Route::get('channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('channels.show');
     Route::get('whatsapp/channels/{id}', [\App\Modules\MetaConnection\Http\Controllers\WhatsAppChannelController::class, 'show'])->name('whatsapp.channels.show');
 
     // Developers redirect to System Logs
-    Route::redirect('developers', '/insights/system-logs')->name('developers.index');
+    Route::get('developers', [\App\Http\Controllers\DeveloperController::class, 'index'])->name('developers.index');
+    Route::post('developers/keys', [\App\Http\Controllers\DeveloperController::class, 'storeKey'])->name('developers.keys.store');
+    Route::delete('developers/keys/{id}', [\App\Http\Controllers\DeveloperController::class, 'revokeKey'])->name('developers.keys.destroy');
+    Route::post('developers/send-test', [\App\Http\Controllers\DeveloperController::class, 'sendTest'])->name('developers.send-test');
 
     // Super Admin: Dedicated Standalone Portal (Strict Auth & SuperAdmin Protection)
     Route::prefix('admin')
@@ -44,9 +64,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->group(function () {
             Route::get('/', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard');
             Route::get('dashboard', [\App\Http\Controllers\AdminController::class, 'dashboard'])->name('dashboard.index');
+            Route::get('subscriptions', [\App\Http\Controllers\AdminController::class, 'subscriptions'])->name('subscriptions');
+            Route::post('subscriptions/{id}/update', [\App\Http\Controllers\AdminController::class, 'updateSubscription'])->name('subscriptions.update');
+            Route::get('wallets', [\App\Http\Controllers\AdminController::class, 'wallets'])->name('wallets');
+            Route::post('wallets/credit', [\App\Http\Controllers\AdminController::class, 'creditWalletDirect'])->name('wallets.credit');
+            Route::get('analytics', [\App\Http\Controllers\AdminController::class, 'analytics'])->name('analytics');
             Route::get('organizations', [\App\Http\Controllers\AdminController::class, 'organizations'])->name('organizations');
             Route::post('organizations/{id}/limit', [\App\Http\Controllers\AdminController::class, 'updateLimit'])->name('organizations.limit');
             Route::match(['get', 'post'], 'organizations/{id}/switch', [\App\Http\Controllers\AdminController::class, 'switchWorkspace'])->name('organizations.switch');
+            Route::post('organizations/{id}/credit-wallet', [\App\Http\Controllers\AdminController::class, 'creditWallet'])->name('organizations.credit-wallet');
             Route::delete('organizations/{id}', [\App\Http\Controllers\AdminController::class, 'destroyOrganization'])->name('organizations.destroy');
             Route::get('channels', [\App\Http\Controllers\AdminController::class, 'channels'])->name('channels');
             Route::get('users', [\App\Http\Controllers\AdminController::class, 'users'])->name('users');
@@ -54,8 +80,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('users/{id}', [\App\Http\Controllers\AdminController::class, 'updateUser'])->name('users.update');
             Route::delete('users/{id}', [\App\Http\Controllers\AdminController::class, 'destroyUser'])->name('users.destroy');
             Route::post('users/{id}/toggle-admin', [\App\Http\Controllers\AdminController::class, 'toggleSuperAdmin'])->name('users.toggle-admin');
+            Route::post('users/{id}/toggle-agent', [\App\Http\Controllers\AdminController::class, 'toggleAgent'])->name('users.toggle-agent');
             Route::get('settings', [\App\Http\Controllers\AdminController::class, 'settings'])->name('settings');
             Route::post('settings', [\App\Http\Controllers\AdminController::class, 'updateSettings'])->name('settings.update');
+            Route::post('diagnostics/autofix', [\App\Http\Controllers\AdminController::class, 'autoFixDiagnostics'])->name('diagnostics.autofix');
+            Route::get('diagnostics', [\App\Http\Controllers\AdminController::class, 'diagnosticsReport'])->name('diagnostics.index');
+        });
+
+    // B2B Agent & Reseller Partner Portal
+    Route::prefix('agent')
+        ->middleware([\App\Http\Middleware\EnsureB2BAgent::class])
+        ->name('agent.')
+        ->group(function () {
+            Route::get('/', [\App\Http\Controllers\AgentController::class, 'dashboard'])->name('dashboard');
+            Route::get('dashboard', [\App\Http\Controllers\AgentController::class, 'dashboard'])->name('dashboard.index');
+            Route::post('customers', [\App\Http\Controllers\AgentController::class, 'createCustomer'])->name('customers.store');
+            Route::post('customers/{id}/assist', [\App\Http\Controllers\AgentController::class, 'assistCustomer'])->name('customers.assist');
+            Route::post('exit-assist', [\App\Http\Controllers\AgentController::class, 'exitAssist'])->name('exit-assist');
+            Route::get('customers/{id}/details', [\App\Http\Controllers\AgentController::class, 'customerDetails'])->name('customers.details');
         });
 
     // Bot Flows, Auto Responder & AI Agent
@@ -63,45 +105,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('flows', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
         \App\Shared\TenantContext::set($org);
-
-        // Check if any flows exist, if not seed 1 clean real starter flow for Sathwara InfoTech
-        $count = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)->count();
-        if ($count === 0) {
-            \App\Modules\Bot\Models\BotFlow::create([
-                'organization_id' => $org->id,
-                'name' => 'Inbound Inquiries & Services Menu',
-                'description' => 'Greets incoming WhatsApp contacts, offers interactive IT services menu, and collects project requirements.',
-                'trigger_keywords' => 'hi, hello, hey, inquiry, services, info',
-                'status' => 'active',
-                'greeting_message' => "👋 Welcome to Sathwara InfoTech!\nHow can we help you grow your business today?\n\n1️⃣ Web & Software Development\n2️⃣ WhatsApp Cloud API & Automation\n3️⃣ Talk to Support / Sales Agent\n\nReply with 1, 2, or 3.",
-                'options' => [
-                    [
-                        'id' => '1',
-                        'label' => 'Web Development',
-                        'reply_text' => '🌐 We design and develop custom Laravel & React web applications, portals, and SaaS platforms tailored to your business needs! Would you like to schedule a consultation?',
-                        'action_type' => 'reply',
-                    ],
-                    [
-                        'id' => '2',
-                        'label' => 'WhatsApp Automation',
-                        'reply_text' => '🚀 With our WhatsApp Cloud API solution, you can send broadcasts to 10,000+ contacts, manage multi-agent shared inbox, and automate customer replies with 98% open rates!',
-                        'action_type' => 'reply',
-                    ],
-                    [
-                        'id' => '3',
-                        'label' => 'Human Agent Handoff',
-                        'reply_text' => '👨‍💼 Notifying our team at Sathwara InfoTech! A representative will connect with you here shortly.',
-                        'action_type' => 'human_handoff',
-                    ],
-                ],
-                'execution_count' => 0,
-            ]);
-        }
 
         $flows = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)
             ->latest()
@@ -115,8 +122,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('flows', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -179,11 +185,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         $flow->delete();
         return back()->with('success', "Bot Flow '{$name}' deleted successfully.");
     })->name('flows.destroy');
-    Route::inertia('auto-responder', 'bot/auto-responder')->name('auto-responder.index');
-    Route::inertia('ai-agent', 'bot/ai-agent')->name('ai-agent.index');
+    Route::get('auto-responder', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'responder'])->name('auto-responder.index');
+    Route::post('auto-responder', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'saveResponder']);
+    Route::get('ai-agent', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'agent'])->name('ai-agent.index');
+    Route::post('ai-agent', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'saveAgent']);
+    Route::post('ai-agent/documents', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'upload']);
+    Route::delete('ai-agent/documents/{id}', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'deleteDocument']);
+    Route::post('ai-agent/test', [\App\Modules\Bot\Http\Controllers\AutomationController::class, 'test'])->middleware('throttle:10,1');
 
     // Chat: Inbox, History, Stages
     Route::get('inbox', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'index'])->name('inbox.index');
+    Route::get('inbox/messages/{id}/attachment', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'attachment']);
+    Route::post('inbox/conversations/{id}/read', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'markRead']);
+    Route::post('inbox/conversations/{id}/assign', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'assign']);
     Route::get('inbox/sync', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'sync'])->name('inbox.sync');
     Route::post('inbox/reply', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'reply'])->name('inbox.reply');
     Route::post('inbox/update-contact', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'updateContact'])->name('inbox.update-contact');
@@ -194,182 +208,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('chat/stages/update-stage', [\App\Modules\Messaging\Http\Controllers\InboxController::class, 'updateStage'])->name('chat.stages.update');
 
     // CRM & Segments
-    Route::get('contacts', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-        \App\Shared\TenantContext::set($org);
-
-        $contacts = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)
-            ->orderByDesc('last_message_at')
-            ->get()
-            ->map(function ($c) {
-                return [
-                    'id' => (string) $c->id,
-                    'name' => $c->contact_name ?: ($c->contact_phone ?: 'Unknown Contact'),
-                    'phone' => $c->contact_phone,
-                    'email' => $c->email ?: '—',
-                    'city' => $c->city ?: '—',
-                    'stage' => $c->pipeline_stage ?: 'New',
-                    'consent' => $c->is_opted_in ? 'opted_in' : 'opted_out',
-                ];
-            })
-            ->values()
-            ->all();
-
-        return \Inertia\Inertia::render('contacts/index', [
-            'initialContacts' => $contacts,
-        ]);
-    })->name('contacts.index');
-
-    Route::post('contacts', function (\Illuminate\Http\Request $request) {
-        $request->validate([
-            'name' => 'required|string|max:100',
-            'phone' => 'required|string|max:30',
-            'email' => 'nullable|string|max:100',
-            'city' => 'nullable|string|max:100',
-            'stage' => 'nullable|string|in:New,Contacted,Interested,Won',
-            'opt_in' => 'nullable|boolean',
-        ]);
-
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        $phone = preg_replace('/[^\d+]/', '', $request->phone);
-        if (!str_starts_with($phone, '+')) {
-            $phone = '+' . ltrim($phone, '0');
-        }
-
-        \App\Modules\Messaging\Models\Conversation::updateOrCreate(
-            [
-                'organization_id' => $org->id,
-                'contact_phone' => $phone,
-            ],
-            [
-                'contact_name' => $request->name,
-                'email' => $request->email,
-                'city' => $request->city,
-                'pipeline_stage' => $request->stage ?? 'New',
-                'is_opted_in' => $request->has('opt_in') ? $request->boolean('opt_in') : true,
-                'status' => 'active',
-                'last_message_at' => now(),
-            ]
-        );
-
-        return back()->with('success', 'Contact created successfully.');
-    })->name('contacts.store');
-
-    Route::post('contacts/bulk', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        $list = $request->input('contacts', []);
-        foreach ($list as $item) {
-            $name = trim($item['name'] ?? '');
-            $phone = trim($item['phone'] ?? '');
-            if (empty($phone)) continue;
-
-            $cleanPhone = preg_replace('/[^\d+]/', '', $phone);
-            if (!str_starts_with($cleanPhone, '+')) {
-                $cleanPhone = '+' . ltrim($cleanPhone, '0');
-            }
-
-            \App\Modules\Messaging\Models\Conversation::updateOrCreate(
-                [
-                    'organization_id' => $org->id,
-                    'contact_phone' => $cleanPhone,
-                ],
-                [
-                    'contact_name' => $name ?: $cleanPhone,
-                    'pipeline_stage' => 'New',
-                    'is_opted_in' => true,
-                    'status' => 'active',
-                    'last_message_at' => now(),
-                ]
-            );
-        }
-
-        return back()->with('success', count($list) . ' contacts imported.');
-    })->name('contacts.bulk');
-
-    Route::put('contacts/{id}', function (\Illuminate\Http\Request $request, string $id) {
-        $validated = $request->validate([
-            'name' => 'required|string|max:100',
-            'phone' => 'required|string|max:30',
-            'email' => 'nullable|string|max:100',
-            'city' => 'nullable|string|max:100',
-            'stage' => 'nullable|string|in:New,Contacted,Interested,Won',
-            'opt_in' => 'nullable|boolean',
-        ]);
-
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $conv = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
-            ->where('id', $id)
-            ->first();
-
-        if ($conv) {
-            $cleanPhone = preg_replace('/[^\d+]/', '', $validated['phone']);
-            if (!str_starts_with($cleanPhone, '+')) {
-                $cleanPhone = '+' . ltrim($cleanPhone, '0');
-            }
-
-            $conv->update([
-                'contact_name' => $validated['name'],
-                'contact_phone' => $cleanPhone,
-                'email' => $validated['email'] ?? null,
-                'city' => $validated['city'] ?? null,
-                'pipeline_stage' => $validated['stage'] ?? $conv->pipeline_stage,
-                'is_opted_in' => $request->has('opt_in') ? $request->boolean('opt_in') : ($conv->is_opted_in ?? true),
-            ]);
-        }
-
-        return back()->with('success', 'Contact updated successfully.');
-    })->name('contacts.update');
-
-    Route::delete('contacts/{id}', function (\Illuminate\Http\Request $request, string $id) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)
-            ->where('id', $id)
-            ->delete();
-
-        return back()->with('success', 'Contact deleted successfully.');
-    })->name('contacts.destroy');
+    Route::get('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'index'])->name('contacts.index');
+    Route::post('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'store'])->name('contacts.store');
+    Route::post('contacts/bulk', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'bulk'])->name('contacts.bulk');
+    Route::put('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'update'])->name('contacts.update');
+    Route::delete('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'destroy'])->name('contacts.destroy');
 
     Route::get('segments', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-        $totalContacts = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->count();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
+        $totalContacts = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->count();
 
         // 1. Built-in Real Dynamic System Segments (computed from live contacts in DB)
-        $optInCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->where('is_opted_in', true)->count();
-        $optOutCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->where('is_opted_in', false)->count();
-        $newLeadsCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->where('pipeline_stage', 'New')->count();
-        $interestedCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->whereIn('pipeline_stage', ['Interested', 'Contacted'])->count();
-        $wonCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->where('pipeline_stage', 'Won')->count();
-        $active7dCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->where('last_message_at', '>=', now()->subDays(7))->count();
+        $optInCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->where('is_opted_in', true)->count();
+        $optOutCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->where('is_opted_in', false)->count();
+        $newLeadsCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->where('pipeline_stage', 'New')->count();
+        $interestedCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->whereIn('pipeline_stage', ['Interested', 'Contacted'])->count();
+        $wonCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->where('pipeline_stage', 'Won')->count();
+        $active7dCount = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)->where('last_message_at', '>=', now()->subDays(7))->count();
 
         // Check if there are any broadcast campaigns for last sent info
         $lastCampaign = \App\Modules\Campaigns\Models\BroadcastCampaign::where('organization_id', $org->id)->latest()->first();
@@ -379,7 +238,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             [
                 'id' => 'sys_opt_in',
                 'name' => 'All Opted-In Contacts',
-                'description' => 'Contacts who gave permission to receive WhatsApp messages. 100% compliant and safe for marketing & updates.',
+                'description' => 'Contacts with recorded permission to receive WhatsApp messages.',
                 'count' => $optInCount,
                 'criteria' => 'Consent = Opted In',
                 'tags' => ['Opted-In', 'Broadcast Safe'],
@@ -508,10 +367,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
 
         $tags = [];
         if (!empty($validated['tag'])) {
@@ -534,8 +392,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('segments/{id}', function (\Illuminate\Http\Request $request, string $id) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
         \App\Modules\Crm\Models\ContactSegment::where('organization_id', $orgId)
             ->where('id', $id)
@@ -547,10 +404,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('segments/preview', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $contactsQuery = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId);
+        $contactsQuery = \App\Modules\Crm\Models\Contact::where('organization_id', $orgId);
 
         if ($request->filled('filter_type')) {
             $fType = $request->query('filter_type');
@@ -615,20 +471,63 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Broadcasts & Templates
     Route::get('campaigns', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'index'])->name('campaigns.index');
+    Route::post('campaigns/estimate', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'estimate'])->name('campaigns.estimate');
     Route::post('campaigns/broadcast', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'broadcast'])->name('campaigns.broadcast');
+    Route::post('campaigns/{id}/pause', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'pause'])->name('campaigns.pause');
+    Route::post('campaigns/{id}/resume', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'resume'])->name('campaigns.resume');
+    Route::post('campaigns/{id}/cancel', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'cancel'])->name('campaigns.cancel');
+    Route::get('campaigns/{id}/analytics', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'analytics'])->name('campaigns.analytics');
+    Route::get('campaigns/{id}/export', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'export'])->name('campaigns.export');
+    Route::get('campaigns/ads', function (\Illuminate\Http\Request $request) {
+        $orgId = \App\Shared\TenantContext::id()
+            ?? $request->user()?->current_organization_id
+            ?? $request->user()?->organizations()->first()?->id;
+
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
+        \App\Shared\TenantContext::set($org);
+
+        $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
+            ->where('status', 'connected')
+            ->orderByDesc('is_default')
+            ->get();
+
+        $flows = \App\Modules\Bot\Models\BotFlow::where('organization_id', $org->id)
+            ->where('status', 'active')
+            ->get(['id', 'name', 'trigger_keywords']);
+
+        return \Inertia\Inertia::render('campaigns/ads', [
+            'channels' => $channels->map(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'phoneNumber' => $c->phone_number,
+                'cleanPhone' => preg_replace('/\D+/', '', $c->phone_number ?? ''),
+                'isDefault' => (bool) $c->is_default,
+            ])->values()->all(),
+            'flows' => $flows,
+        ]);
+    })->name('campaigns.ads');
+
+    Route::get('help', function () {
+        return \Inertia\Inertia::render('help/index');
+    })->name('help.index');
     // Templates Management (Live Meta Templates)
     Route::get('templates', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
         \App\Shared\TenantContext::set($org);
 
-        $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
+        $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
             ->where('status', 'connected')
-            ->first();
+            ->orderByDesc('is_default')
+            ->get();
+
+        $selectedChannelId = $request->query('channel_id');
+        $channel = ($selectedChannelId ? $channels->firstWhere('id', $selectedChannelId) : null)
+            ?? $channels->firstWhere('is_default', true)
+            ?? $channels->first();
 
         $templates = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel);
 
@@ -641,11 +540,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'status' => $channel->status,
                 'wabaId' => $channel->waba_id,
             ] : null,
+            'channels' => $channels->map(fn ($c) => [
+                'id' => (string) $c->id,
+                'name' => $c->name,
+                'phoneNumber' => $c->phone_number,
+                'wabaId' => $c->waba_id,
+                'isDefault' => (bool) $c->is_default,
+            ])->values()->all(),
         ]);
     })->name('templates.index');
 
     Route::post('templates', function (\Illuminate\Http\Request $request) {
         $validated = $request->validate([
+            'channel_id' => 'nullable|uuid',
             'name' => 'required|string|regex:/^[a-z0-9_]+$/|max:100',
             'category' => 'required|string|in:UTILITY,MARKETING,AUTHENTICATION',
             'language' => 'required|string|max:10',
@@ -665,11 +572,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
+        $targetChannelId = $request->input('channel_id');
         $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
             ->where('status', 'connected')
+            ->when($targetChannelId, fn ($q) => $q->where('id', $targetChannelId))
+            ->orderByDesc('is_default')
             ->first();
 
         if (! $channel || empty($channel->access_token) || empty($channel->waba_id)) {
@@ -842,17 +751,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('templates/sync', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
+        $targetChannelId = $request->input('channel_id');
         $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
             ->where('status', 'connected')
+            ->when($targetChannelId, fn ($q) => $q->where('id', $targetChannelId))
+            ->orderByDesc('is_default')
             ->first();
 
         if ($channel) {
             \Illuminate\Support\Facades\Cache::forget("meta_templates_{$channel->waba_id}");
             $templates = app(\App\Modules\Campaigns\Http\Controllers\CampaignController::class)->getMetaTemplates($channel);
-            return back()->with('success', count($templates) . ' templates synchronized from Meta WhatsApp Business Account.');
+            return back()->with('success', count($templates) . ' templates synchronized from Meta for ' . ($channel->name ?: $channel->phone_number) . '.');
         }
 
         return back()->with('success', 'Templates cache refreshed.');
@@ -870,8 +781,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
         $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
             ->where('status', 'connected')
@@ -990,8 +900,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('templates/{name}', function (\Illuminate\Http\Request $request, string $name) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
         $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
             ->where('status', 'connected')
@@ -1044,6 +953,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('commerce/products/{id}', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'deleteProduct'])->name('commerce.products.destroy');
     Route::patch('commerce/orders/{id}/status', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateOrderStatus'])->name('commerce.orders.status');
     Route::post('commerce/sync', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'syncCatalog'])->name('commerce.sync');
+    Route::get('commerce/export-csv', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'exportMetaCsv'])->name('commerce.export.csv');
+    Route::post('commerce/settings', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'updateSettings'])->name('commerce.settings.update');
+    Route::post('commerce/link-catalog', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'linkCatalogToMeta'])->name('commerce.catalog.link');
     Route::post('commerce/send-catalog', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'sendCatalogMessage'])->name('commerce.send.catalog');
     Route::post('commerce/send-product', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'sendProductMessage'])->name('commerce.send.product');
     Route::post('commerce/simulate-order', [\App\Modules\Commerce\Http\Controllers\CommerceController::class, 'simulateOrder'])->name('commerce.simulate.order');
@@ -1054,44 +966,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('crm/pipeline', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
         \App\Shared\TenantContext::set($org);
 
         $stages = ['New', 'Contacted', 'Interested', 'Qualified', 'Negotiation', 'Won', 'Lost'];
 
-        // Check if leads exist; if none or all stages empty, seed realistic leads for immediate Kanban experience
-        $convCount = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)->count();
-        if ($convCount === 0) {
-            $sampleLeads = [
-                ['name' => 'Rajesh Sharma', 'phone' => '+919825012345', 'stage' => 'New', 'val' => 25000, 'source' => 'Website Inbound', 'date' => now()->addDays(2)],
-                ['name' => 'Amit Patel', 'phone' => '+919879023456', 'stage' => 'Contacted', 'val' => 45000, 'source' => 'WhatsApp Broadcast', 'date' => now()->addDays(1)],
-                ['name' => 'Pooja Mehta', 'phone' => '+919909034567', 'stage' => 'Interested', 'val' => 60000, 'source' => 'Catalog Inbound', 'date' => now()->addHours(6)],
-                ['name' => 'Vikram Shah', 'phone' => '+919824045678', 'stage' => 'Qualified', 'val' => 120000, 'source' => 'Referral', 'date' => now()->addDays(3)],
-                ['name' => 'Sanjay Verma', 'phone' => '+919712056789', 'stage' => 'Negotiation', 'val' => 85000, 'source' => 'Google Ad Campaign', 'date' => now()->addDay()],
-                ['name' => 'Kavita Joshi', 'phone' => '+919898067890', 'stage' => 'Won', 'val' => 150000, 'source' => 'Direct WhatsApp', 'date' => now()->subDays(2)],
-                ['name' => 'Manish Dave', 'phone' => '+919974078901', 'stage' => 'Lost', 'val' => 30000, 'source' => 'Cold Outreach', 'date' => now()->subDays(5)],
-            ];
-
-            foreach ($sampleLeads as $s) {
-                \App\Modules\Messaging\Models\Conversation::create([
-                    'organization_id' => $org->id,
-                    'contact_name' => $s['name'],
-                    'contact_phone' => $s['phone'],
-                    'pipeline_stage' => $s['stage'],
-                    'deal_value' => $s['val'],
-                    'lead_source' => $s['source'],
-                    'followup_date' => $s['date'],
-                    'is_opted_in' => true,
-                    'status' => 'active',
-                    'last_message_at' => now(),
-                ]);
-            }
-        }
-
-        $conversations = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)
+        $conversations = \App\Modules\Crm\Models\Contact::where('organization_id', $org->id)
             ->orderByDesc('last_message_at')
             ->get()
             ->map(function ($c) {
@@ -1132,13 +1014,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('crm/pipeline/move', function (\Illuminate\Http\Request $request) {
         $validated = $request->validate([
-            'conversation_id' => 'required|exists:conversations,id',
+            'conversation_id' => 'required|string',
             'stage' => 'required|string',
             'deal_value' => 'nullable|numeric|min:0',
             'followup_date' => 'nullable|string',
         ]);
 
-        $conv = \App\Modules\Messaging\Models\Conversation::findOrFail($validated['conversation_id']);
+        $conv = \App\Modules\Crm\Models\Contact::findOrFail($validated['conversation_id']);
         $updateData = ['pipeline_stage' => $validated['stage']];
         if (isset($validated['deal_value'])) {
             $updateData['deal_value'] = $validated['deal_value'];
@@ -1161,8 +1043,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('crm/pipeline/lead', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
         $validated = $request->validate([
             'name' => 'required|string|max:100',
@@ -1180,7 +1061,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             $phone = '+' . ltrim($phone, '0');
         }
 
-        $lead = \App\Modules\Messaging\Models\Conversation::updateOrCreate(
+        $lead = \App\Modules\Crm\Models\Contact::updateOrCreate(
             [
                 'organization_id' => $orgId,
                 'contact_phone' => $phone,
@@ -1207,10 +1088,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('crm/pipeline/lead/{id}', function (\Illuminate\Http\Request $request, string $id) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $conv = \App\Modules\Messaging\Models\Conversation::where('organization_id', $orgId)->where('id', $id)->first();
+        $conv = \App\Modules\Crm\Models\Contact::where('organization_id', $orgId)->where('id', $id)->first();
         if ($conv) {
             $conv->delete();
             \App\Modules\Foundation\Models\AuditLog::record('lead_deleted', null, ['id' => $id]);
@@ -1225,10 +1105,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('management/team', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
         \App\Shared\TenantContext::set($org);
 
         $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
@@ -1325,118 +1204,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('management.team');
 
-    Route::post('management/team/invite', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        $validated = $request->validate([
-            'email' => 'required|email',
-            'role' => 'required|string|in:Owner,Admin,Manager,Agent,Viewer',
-            'channel_access' => 'nullable|array',
-        ]);
-
-        // Check if existing user
-        $existingUser = \App\Models\User::where('email', $validated['email'])->first();
-        if ($existingUser) {
-            if (!$org->users()->where('users.id', $existingUser->id)->exists()) {
-                $org->users()->attach($existingUser->id, [
-                    'role' => $validated['role'],
-                    'channel_access' => json_encode($validated['channel_access'] ?? []),
-                ]);
-                return back()->with('success', "User '{$validated['email']}' added as {$validated['role']}.");
-            } else {
-                $org->users()->updateExistingPivot($existingUser->id, [
-                    'role' => $validated['role'],
-                    'channel_access' => json_encode($validated['channel_access'] ?? []),
-                ]);
-                return back()->with('success', "User '{$validated['email']}' permissions updated.");
-            }
-        }
-
-        // Store invitation
-        \App\Modules\Foundation\Models\OrganizationInvitation::create([
-            'organization_id' => $org->id,
-            'email' => $validated['email'],
-            'role' => $validated['role'],
-            'token' => \Illuminate\Support\Str::random(32),
-            'expires_at' => now()->addDays(7),
-        ]);
-
-        \App\Modules\Foundation\Models\AuditLog::record('team_member_invited', null, [
-            'email' => $validated['email'],
-            'role' => $validated['role'],
-        ]);
-
-        return back()->with('success', "Invitation sent to {$validated['email']}.");
-    })->name('management.team.invite');
-
-    Route::post('management/team/update-member', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'role' => 'required|string|in:Owner,Admin,Manager,Agent,Viewer',
-            'channel_access' => 'nullable|array',
-        ]);
-
-        $org->users()->updateExistingPivot($validated['user_id'], [
-            'role' => $validated['role'],
-            'channel_access' => json_encode($validated['channel_access'] ?? []),
-        ]);
-
-        \App\Modules\Foundation\Models\AuditLog::record('team_member_updated', null, [
-            'user_id' => $validated['user_id'],
-            'role' => $validated['role'],
-        ]);
-
-        return back()->with('success', 'Member role & channel access updated.');
-    })->name('management.team.update-member');
-
-    Route::delete('management/team/member/{id}', function (\Illuminate\Http\Request $request, string $id) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        if ($request->user()->id == $id) {
-            return back()->withErrors(['message' => 'You cannot remove yourself from the organization.']);
-        }
-
-        $org->users()->detach($id);
-
-        \App\Modules\Foundation\Models\AuditLog::record('team_member_removed', null, ['user_id' => $id]);
-
-        return back()->with('success', 'Team member removed from organization.');
-    })->name('management.team.remove-member');
-
-    Route::post('management/team/permissions', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        $matrix = $request->input('matrix', []);
-        $meta = $org->metadata ?? [];
-        $meta['role_permissions'] = $matrix;
-        $org->update(['metadata' => $meta]);
-
-        \App\Modules\Foundation\Models\AuditLog::record('role_permissions_updated', null);
-
-        return back()->with('success', 'Role & Permission Matrix updated successfully.');
-    })->name('management.team.permissions');
+    Route::post('management/team/invite', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'invite'])->name('management.team.invite');
+    Route::post('management/team/update-member', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'update'])->name('management.team.update-member');
+    Route::delete('management/team/member/{id}', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'remove'])->name('management.team.remove-member');
+    Route::post('management/team/permissions', [\App\Modules\Foundation\Http\Controllers\TeamController::class, 'permissions'])->name('management.team.permissions');
 
     // ==========================================
     // 3. System Logs & Webhook Inspector
@@ -1444,15 +1215,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('insights/system-logs', function (\Illuminate\Http\Request $request) {
         $orgId = \App\Shared\TenantContext::id()
             ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+            ?? $request->user()?->organizations()->first()?->id;
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
+        $org = \App\Modules\Foundation\Models\Organization::find($orgId);
         \App\Shared\TenantContext::set($org);
 
         // Webhook Logs
         $statusFilter = $request->input('status', 'all');
-        $webhookQuery = \App\Modules\Messaging\Models\WebhookInbox::query()->latest();
+        $webhookQuery = \App\Modules\Messaging\Models\WebhookInbox::where('organization_id', $org->id)->latest();
         if ($statusFilter !== 'all') {
             $webhookQuery->where('status', $statusFilter);
         }
@@ -1543,279 +1313,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('insights.system-logs.simulate');
 
     Route::post('insights/system-logs/clear', function () {
-        \App\Modules\Messaging\Models\WebhookInbox::truncate();
+        \App\Modules\Messaging\Models\WebhookInbox::where('organization_id', \App\Shared\TenantContext::id())->delete();
         return back()->with('success', 'Webhook logs cleared.');
     })->name('insights.system-logs.clear');
 
     // ==========================================
     // 4. Contact Deduplication & Merge
     // ==========================================
-    Route::get('contacts/duplicates', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+    Route::get('contacts/duplicates', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'duplicates'])->name('contacts.duplicates');
+    Route::post('contacts/merge', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'merge'])->name('contacts.merge');
 
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-
-        // Find duplicates by matching digits of phone
-        $all = \App\Modules\Messaging\Models\Conversation::where('organization_id', $org->id)
-            ->get(['id', 'contact_name', 'contact_phone', 'email', 'pipeline_stage', 'deal_value', 'last_message_at']);
-
-        $grouped = [];
-        foreach ($all as $c) {
-            $normPhone = substr(preg_replace('/[^\d]/', '', $c->contact_phone), -10);
-            if (!empty($normPhone)) {
-                $grouped[$normPhone][] = [
-                    'id' => (string) $c->id,
-                    'name' => $c->contact_name ?: 'Unknown',
-                    'phone' => $c->contact_phone,
-                    'email' => $c->email ?: '—',
-                    'stage' => $c->pipeline_stage ?: 'New',
-                    'deal_value' => (float) ($c->deal_value ?? 0),
-                    'last_active' => $c->last_message_at ? $c->last_message_at->diffForHumans() : '—',
-                ];
-            }
-        }
-
-        $duplicateGroups = [];
-        foreach ($grouped as $phoneKey => $list) {
-            if (count($list) > 1) {
-                $duplicateGroups[] = [
-                    'normalized_phone' => $phoneKey,
-                    'count' => count($list),
-                    'records' => $list,
-                ];
-            }
-        }
-
-        return response()->json([
-            'duplicates' => $duplicateGroups,
-            'total_duplicates' => count($duplicateGroups),
-        ]);
-    })->name('contacts.duplicates');
-
-    Route::post('contacts/merge', function (\Illuminate\Http\Request $request) {
-        $validated = $request->validate([
-            'primary_id' => 'required|exists:conversations,id',
-            'duplicate_ids' => 'required|array|min:1',
-            'duplicate_ids.*' => 'required|exists:conversations,id',
-        ]);
-
-        $primary = \App\Modules\Messaging\Models\Conversation::findOrFail($validated['primary_id']);
-        $duplicates = \App\Modules\Messaging\Models\Conversation::whereIn('id', $validated['duplicate_ids'])->get();
-
-        foreach ($duplicates as $dup) {
-            // Re-assign messages to primary conversation
-            \App\Modules\Messaging\Models\Message::where('conversation_id', $dup->id)
-                ->update(['conversation_id' => $primary->id]);
-
-            // Combine deal values
-            if (($dup->deal_value ?? 0) > 0) {
-                $primary->deal_value = ($primary->deal_value ?? 0) + $dup->deal_value;
-            }
-
-            // Fill missing email or city
-            if (empty($primary->email) && !empty($dup->email)) {
-                $primary->email = $dup->email;
-            }
-            if (empty($primary->city) && !empty($dup->city)) {
-                $primary->city = $dup->city;
-            }
-
-            $dup->delete();
-        }
-
-        $primary->save();
-
-        \App\Modules\Foundation\Models\AuditLog::record('contacts_merged', $primary, [
-            'merged_count' => count($validated['duplicate_ids']),
-        ]);
-
-        return back()->with('success', 'Contacts merged successfully without data loss.');
-    })->name('contacts.merge');
-
-    // ==========================================
-    // 5. Billing & Subscription Management
-    // ==========================================
-    Route::get('settings/billing', function (\Illuminate\Http\Request $request) {
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-        \App\Shared\TenantContext::set($org);
-
-        // Usage Metrics
-        $currentMonthStart = now()->startOfMonth();
-        $monthlyMessagesUsed = \App\Modules\Messaging\Models\Message::where('organization_id', $org->id)
-            ->where('created_at', '>=', $currentMonthStart)
-            ->count();
-        if ($monthlyMessagesUsed === 0) {
-            $monthlyMessagesUsed = 1240; // realistic active demo usage
-        }
-
-        $channelsCount = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $org->id)
-            ->where('status', 'connected')
-            ->count();
-        if ($channelsCount === 0) {
-            $channelsCount = 1;
-        }
-
-        $teamSeatsUsed = $org->users()->count();
-        if ($teamSeatsUsed === 0) {
-            $teamSeatsUsed = 2;
-        }
-
-        $currentPlanKey = $org->subscription_plan ?: 'growth';
-
-        $plans = [
-            'starter' => [
-                'name' => 'Starter',
-                'price' => '₹999',
-                'period' => '/month',
-                'description' => 'Ideal for solopreneurs & small businesses starting out with WhatsApp marketing.',
-                'features' => [
-                    'Up to 5,000 Messages / month',
-                    '1 Connected WhatsApp Number',
-                    '2 Team Members',
-                    'Meta Resumable Video Templates',
-                    'Community Support',
-                ],
-                'limits' => [
-                    'messages' => 5000,
-                    'channels' => 1,
-                    'seats' => 2,
-                ],
-            ],
-            'growth' => [
-                'name' => 'Growth',
-                'price' => '₹2,499',
-                'period' => '/month',
-                'popular' => true,
-                'description' => 'Most popular for growing brands scaling multi-agent sales & broadcasts.',
-                'features' => [
-                    'Up to 25,000 Messages / month',
-                    '3 Connected WhatsApp Numbers',
-                    '10 Team Members & Role Matrix',
-                    'CRM Kanban & Deal Tracking',
-                    'Full Automation & Bot Flows',
-                    'Meta Catalog & Commerce Integration',
-                    'Priority Email & Chat Support',
-                ],
-                'limits' => [
-                    'messages' => 25000,
-                    'channels' => 3,
-                    'seats' => 10,
-                ],
-            ],
-            'business_pro' => [
-                'name' => 'Business Pro',
-                'price' => '₹4,999',
-                'period' => '/month',
-                'description' => 'For high-volume operations requiring advanced multi-channel routing & AI.',
-                'features' => [
-                    'Up to 100,000 Messages / month',
-                    '10 Connected WhatsApp Numbers',
-                    'Unlimited Team Seats',
-                    'OpenAI Powered Intelligent Agent',
-                    'Dedicated Webhook & Developer API',
-                    'Dedicated Account Manager',
-                ],
-                'limits' => [
-                    'messages' => 100000,
-                    'channels' => 10,
-                    'seats' => 50,
-                ],
-            ],
-            'enterprise' => [
-                'name' => 'Enterprise Custom',
-                'price' => 'Custom',
-                'period' => '',
-                'description' => 'Custom SLA, on-premise cloud deployment, and tailored volume tiers.',
-                'features' => [
-                    'Unlimited Monthly Messages',
-                    'Unlimited WhatsApp Channels',
-                    'Custom SLA & 99.99% Uptime',
-                    'Custom ERP / CRM Webhooks & DB Sync',
-                    'Dedicated Technical Architect',
-                ],
-                'limits' => [
-                    'messages' => 1000000,
-                    'channels' => 100,
-                    'seats' => 999,
-                ],
-            ],
-        ];
-
-        // Sample Invoices
-        $invoices = [
-            [
-                'id' => 'INV-2026-004',
-                'date' => now()->format('M 01, Y'),
-                'amount' => '₹2,499.00',
-                'plan' => 'Growth Plan (Monthly)',
-                'status' => 'Paid',
-            ],
-            [
-                'id' => 'INV-2026-003',
-                'date' => now()->subMonth()->format('M 01, Y'),
-                'amount' => '₹2,499.00',
-                'plan' => 'Growth Plan (Monthly)',
-                'status' => 'Paid',
-            ],
-            [
-                'id' => 'INV-2026-002',
-                'date' => now()->subMonths(2)->format('M 01, Y'),
-                'amount' => '₹2,499.00',
-                'plan' => 'Growth Plan (Monthly)',
-                'status' => 'Paid',
-            ],
-        ];
-
-        return \Inertia\Inertia::render('settings/billing', [
-            'currentPlan' => $currentPlanKey,
-            'plans' => $plans,
-            'usage' => [
-                'messages' => [
-                    'used' => $monthlyMessagesUsed,
-                    'limit' => $plans[$currentPlanKey]['limits']['messages'] ?? 25000,
-                    'percentage' => min(100, round(($monthlyMessagesUsed / ($plans[$currentPlanKey]['limits']['messages'] ?? 25000)) * 100)),
-                ],
-                'channels' => [
-                    'used' => $channelsCount,
-                    'limit' => $plans[$currentPlanKey]['limits']['channels'] ?? 3,
-                    'percentage' => min(100, round(($channelsCount / ($plans[$currentPlanKey]['limits']['channels'] ?? 3)) * 100)),
-                ],
-                'seats' => [
-                    'used' => $teamSeatsUsed,
-                    'limit' => $plans[$currentPlanKey]['limits']['seats'] ?? 10,
-                    'percentage' => min(100, round(($teamSeatsUsed / ($plans[$currentPlanKey]['limits']['seats'] ?? 10)) * 100)),
-                ],
-            ],
-            'invoices' => $invoices,
-            'organizationName' => $org->name,
-        ]);
-    })->name('settings.billing');
-
-    Route::post('settings/billing/change-plan', function (\Illuminate\Http\Request $request) {
-        $validated = $request->validate([
-            'plan' => 'required|string|in:starter,growth,business_pro,enterprise',
-        ]);
-
-        $orgId = \App\Shared\TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? $request->user()?->organizations()->first()?->id
-            ?? \App\Modules\Foundation\Models\Organization::first()?->id;
-
-        $org = \App\Modules\Foundation\Models\Organization::find($orgId) ?? \App\Modules\Foundation\Models\Organization::first();
-        $org->update(['subscription_plan' => $validated['plan']]);
-
-        \App\Modules\Foundation\Models\AuditLog::record('subscription_plan_changed', null, ['new_plan' => $validated['plan']]);
-
-        return back()->with('success', "Subscription plan updated to " . ucfirst(str_replace('_', ' ', $validated['plan'])) . ".");
-    })->name('settings.billing.change-plan');
+    Route::get('wallet', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'wallet'])->name('wallet.index');
+    Route::get('subscription', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'subscription'])->name('subscription.index');
+    Route::get('settings/billing', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'index'])->name('settings.billing');
+    Route::post('settings/billing/checkout', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'checkout'])->middleware('throttle:10,1');
+    Route::post('settings/billing/verify', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'verify']);
+    Route::put('settings/billing/profile', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'profile']);
+    Route::get('settings/billing/invoices/{id}', [\App\Modules\Billing\Http\Controllers\BillingController::class, 'download']);
 
     Route::post('/workspace/switch/{organization}', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'switch'])->name('workspace.switch');
     Route::post('/workspace/store', [\App\Modules\Foundation\Http\Controllers\WorkspaceController::class, 'store'])->name('workspace.store');

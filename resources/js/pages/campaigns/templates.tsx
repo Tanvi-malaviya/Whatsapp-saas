@@ -48,6 +48,7 @@ export type TemplateItem = {
     costEstimate?: string;
     header?: string | null;
     headerFormat?: string | null;
+    headerText?: string;
     headerType?: 'TEXT' | 'IMAGE' | 'DOCUMENT';
     headerUrl?: string | null;
     headerMediaId?: string | null;
@@ -69,6 +70,13 @@ interface Props {
         status: string;
         wabaId?: string;
     } | null;
+    channels?: {
+        id: string;
+        name: string;
+        phoneNumber?: string;
+        wabaId?: string;
+        isDefault?: boolean;
+    }[];
     flash?: {
         success?: string;
         error?: string;
@@ -79,6 +87,7 @@ interface Props {
 export default function MessageTemplates({
     initialTemplates = [],
     channel,
+    channels = [],
     flash,
     errors = {},
 }: Props) {
@@ -155,7 +164,7 @@ export default function MessageTemplates({
         setIsSyncing(true);
         router.post(
             '/templates/sync',
-            {},
+            channel?.id ? { channel_id: channel.id } : {},
             {
                 preserveScroll: true,
                 onSuccess: () => {
@@ -210,6 +219,9 @@ export default function MessageTemplates({
         }
 
         const formData = new FormData();
+        if (channel?.id) {
+            formData.append('channel_id', channel.id);
+        }
         formData.append('name', cleanName);
         formData.append('category', newCategory);
         formData.append('language', newLanguage);
@@ -417,46 +429,46 @@ export default function MessageTemplates({
             )}
 
             <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6 min-w-0">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="h-7 text-xs text-muted-foreground p-0 hover:text-foreground"
-                            >
-                                <Link href="/campaigns">
-                                    <ArrowLeft className="size-3.5 mr-1" />
-                                    Campaigns
-                                </Link>
-                            </Button>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                <FileText className="size-6 text-[#47b672]" />
-                                Meta Approved Message Templates (HSM)
-                            </h1>
-                            <Badge
-                                variant="outline"
-                                className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
-                            >
-                                {templates.length} Real Meta Templates
-                            </Badge>
-                        </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge
+                            variant="outline"
+                            className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30"
+                        >
+                            {templates.length} Real Meta Templates
+                        </Badge>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
                             Official Meta WhatsApp Cloud API templates verified for broadcast campaigns and automated customer alerts.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {channels.length > 0 && (
+                            <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 h-9 rounded-lg text-xs shadow-2xs">
+                                <Smartphone className="size-3.5 text-[#47b672]" />
+                                <span className="text-[11px] text-muted-foreground font-medium">Number:</span>
+                                <select
+                                    value={channel?.id || ''}
+                                    onChange={(e) => router.get('/templates', { channel_id: e.target.value }, { preserveState: false })}
+                                    className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+                                    aria-label="Filter templates by WhatsApp number"
+                                >
+                                    {channels.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} {c.phoneNumber ? `(${c.phoneNumber})` : ''} {c.isDefault ? '★ Default' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <Button
                             variant="outline"
                             size="sm"
                             disabled={isSyncing}
                             onClick={handleSyncMeta}
-                            className="text-xs h-8 border-border hover:bg-muted gap-1.5"
+                            className="text-xs h-9 border-border hover:bg-muted gap-1.5"
                             title="Re-fetch templates from Meta Graph API"
                         >
                             <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin text-[#47b672]' : ''}`} />

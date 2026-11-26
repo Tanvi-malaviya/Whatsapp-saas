@@ -24,6 +24,7 @@ class CreateNewUser implements CreatesNewUsers
     {
         Validator::make($input, [
             ...$this->profileRules(),
+            'workspace_name' => ['nullable', 'string', 'max:100'],
             'password' => $this->passwordRules(),
         ])->validate();
 
@@ -35,24 +36,46 @@ class CreateNewUser implements CreatesNewUsers
         ]);
         $user->markEmailAsVerified();
 
-        // Auto-create workspace for self-registered user
-        $wsName = $input['name'] . "'s Workspace";
-        $slug = Str::slug($input['name']) . '-' . rand(100, 999);
+        // Handle referral code if provided
+        $referrer = null;
+        if (! empty($input['referral_code'])) {
+            $code = strtoupper(trim($input['referral_code']));
+            $referrer = User::where('referral_code', $code)->first();
+            if ($referrer && $referrer->id !== $user->id) {
+                $user->update(['referred_by_id' => $referrer->id]);
+            }
+        }
+        $user->generateReferralCode();
+
+        // Custom workspace name provided or fallback to User's Workspace
+        $workspaceName = ! empty(trim($input['workspace_name'] ?? ''))
+            ? trim($input['workspace_name'])
+            : $input['name'] . "'s Workspace";
+        $slug = Str::slug($workspaceName) . '-' . rand(100, 999);
 
         $orgData = [
-            'name' => $wsName,
+            'name' => $workspaceName,
             'slug' => $slug,
-            'subscription_plan' => 'starter',
+            'subscription_plan' => 'annual',
             'status' => 'active',
         ];
+
+        if ($referrer && $referrer->isB2BAgent()) {
+            $orgData['b2b_agent_id'] = $referrer->id;
+        }
 
         if (Schema::hasColumn('organizations', 'max_channels')) {
             $orgData['max_channels'] = 1; // Default to Single Number
         }
 
         $org = Organization::create($orgData);
+        $org->getOrCreateWallet();
         $user->organizations()->attach($org->id, ['role' => 'Owner']);
         $user->update(['current_organization_id' => $org->id]);
+
+        if ($referrer) {
+            app(\App\Services\ReferralService::class)->rewardOnSubscription($user, $org);
+        }
 
         return $user;
     }

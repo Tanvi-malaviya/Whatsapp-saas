@@ -36,6 +36,15 @@ type Props = {
         php_version: string;
         laravel_version: string;
         environment: string;
+        subscription_annual_price_paise?: number;
+        subscription_validity_days?: number;
+        welcome_bonus_paise?: number;
+        referral_reward_paise?: number;
+        campaign_max_contacts?: number;
+        min_message_purchase_count?: number;
+        meta_rate_marketing_paise?: number;
+        meta_rate_utility_paise?: number;
+        meta_rate_authentication_paise?: number;
     };
 };
 
@@ -47,6 +56,23 @@ export default function AdminSettings({ settings }: Props) {
     const [configId, setConfigId] = useState(settings.config_id);
     const [verifyToken, setVerifyToken] = useState(settings.verify_token);
     const [permanentToken, setPermanentToken] = useState(settings.permanent_token || '');
+    const [appSecret, setAppSecret] = useState('');
+    const [openaiKey, setOpenaiKey] = useState('');
+    const [razorpayKeyId, setRazorpayKeyId] = useState('');
+    const [razorpaySecret, setRazorpaySecret] = useState('');
+    const [razorpayWebhook, setRazorpayWebhook] = useState('');
+
+    // Subscription & Financial Configuration States
+    const [annualPrice, setAnnualPrice] = useState((settings.subscription_annual_price_paise ?? 999900) / 100);
+    const [validityDays, setValidityDays] = useState(settings.subscription_validity_days ?? 365);
+    const [welcomeBonus, setWelcomeBonus] = useState((settings.welcome_bonus_paise ?? 50000) / 100);
+    const [referralReward, setReferralReward] = useState((settings.referral_reward_paise ?? 50000) / 100);
+    const [campaignMaxContacts, setCampaignMaxContacts] = useState(settings.campaign_max_contacts ?? 2000);
+    const [minMessages, setMinMessages] = useState(settings.min_message_purchase_count ?? 500);
+    const [rateMarketing, setRateMarketing] = useState((settings.meta_rate_marketing_paise ?? 88) / 100);
+    const [rateUtility, setRateUtility] = useState((settings.meta_rate_utility_paise ?? 14) / 100);
+    const [rateAuth, setRateAuth] = useState((settings.meta_rate_authentication_paise ?? 14) / 100);
+
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccessNotice, setSaveSuccessNotice] = useState(false);
 
@@ -55,13 +81,32 @@ export default function AdminSettings({ settings }: Props) {
         setConfigId(settings.config_id);
         setVerifyToken(settings.verify_token);
         setPermanentToken(settings.permanent_token || '');
-    }, [settings.app_id, settings.config_id, settings.verify_token, settings.permanent_token]);
+        setAnnualPrice((settings.subscription_annual_price_paise ?? 999900) / 100);
+        setValidityDays(settings.subscription_validity_days ?? 365);
+        setWelcomeBonus((settings.welcome_bonus_paise ?? 50000) / 100);
+        setReferralReward((settings.referral_reward_paise ?? 50000) / 100);
+        setCampaignMaxContacts(settings.campaign_max_contacts ?? 2000);
+        setMinMessages(settings.min_message_purchase_count ?? 500);
+        setRateMarketing((settings.meta_rate_marketing_paise ?? 88) / 100);
+        setRateUtility((settings.meta_rate_utility_paise ?? 14) / 100);
+        setRateAuth((settings.meta_rate_authentication_paise ?? 14) / 100);
+    }, [
+        settings.app_id,
+        settings.config_id,
+        settings.verify_token,
+        settings.permanent_token,
+        settings.subscription_annual_price_paise,
+        settings.subscription_validity_days,
+        settings.welcome_bonus_paise,
+        settings.referral_reward_paise,
+        settings.campaign_max_contacts,
+        settings.min_message_purchase_count,
+        settings.meta_rate_marketing_paise,
+        settings.meta_rate_utility_paise,
+        settings.meta_rate_authentication_paise,
+    ]);
 
-    const hasChanges =
-        appId !== settings.app_id ||
-        configId !== settings.config_id ||
-        verifyToken !== settings.verify_token ||
-        permanentToken !== (settings.permanent_token || '');
+    const hasChanges = true;
 
     const handleSaveSettings = () => {
         setIsSaving(true);
@@ -71,13 +116,27 @@ export default function AdminSettings({ settings }: Props) {
                 app_id: appId,
                 config_id: configId,
                 verify_token: verifyToken,
-                permanent_token: permanentToken,
+                app_secret: appSecret,
+                openai_api_key: openaiKey,
+                razorpay_key_id: razorpayKeyId,
+                razorpay_key_secret: razorpaySecret,
+                razorpay_webhook_secret: razorpayWebhook,
+                subscription_annual_price_paise: Math.round(annualPrice * 100),
+                subscription_validity_days: validityDays,
+                welcome_bonus_paise: Math.round(welcomeBonus * 100),
+                referral_reward_paise: Math.round(referralReward * 100),
+                campaign_max_contacts: campaignMaxContacts,
+                min_message_purchase_count: minMessages,
+                meta_rate_marketing_paise: Math.round(rateMarketing * 100),
+                meta_rate_utility_paise: Math.round(rateUtility * 100),
+                meta_rate_authentication_paise: Math.round(rateAuth * 100),
             },
             {
                 preserveScroll: true,
                 onSuccess: () => {
                     setIsSaving(false);
                     setSaveSuccessNotice(true);
+                    setAppSecret(''); setOpenaiKey(''); setRazorpayKeyId(''); setRazorpaySecret(''); setRazorpayWebhook('');
                     setTimeout(() => setSaveSuccessNotice(false), 5000);
                 },
                 onError: () => {
@@ -98,7 +157,9 @@ export default function AdminSettings({ settings }: Props) {
         <>
             <Head title="Global Settings - Super Admin" />
 
-            <div className="space-y-3.5 w-full">
+            <div className="space-y-3.5 w-full"><Card><CardHeader><CardTitle>AI and payment providers</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2">{[
+                ['OpenAI API key', openaiKey, setOpenaiKey], ['Razorpay key ID', razorpayKeyId, setRazorpayKeyId], ['Razorpay key secret', razorpaySecret, setRazorpaySecret], ['Razorpay webhook secret', razorpayWebhook, setRazorpayWebhook],
+            ].map(([label, value, setter]) => <label key={label as string} className="text-sm">{label as string}<Input autoComplete="new-password" type="password" value={value as string} onChange={e => (setter as (value: string) => void)(e.target.value)} placeholder="Leave blank to keep existing" /></label>)}<p className="text-xs text-muted-foreground sm:col-span-2">Razorpay webhook URL: {window.location.origin}/webhooks/razorpay</p></CardContent></Card>
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/70">
                     <div className="flex items-center gap-2.5">
@@ -110,7 +171,7 @@ export default function AdminSettings({ settings }: Props) {
                                 Global Platform &amp; API Settings
                             </h1>
                             <p className="text-xs text-muted-foreground">
-                                System-wide Meta WhatsApp Cloud API credentials, webhook endpoints &amp; runtime specs
+                                Manage provider credentials and webhooks. Leave secret fields blank to keep their current values.
                             </p>
                         </div>
                     </div>
@@ -159,7 +220,7 @@ export default function AdminSettings({ settings }: Props) {
                     <div className="flex items-center gap-2 p-3 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg animate-in fade-in">
                         <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                         <span className="font-medium">
-                            Settings and Meta Permanent Access Token saved successfully! All connected channels have been synced with Meta Graph API.
+                            Settings and Meta Meta App Secret saved successfully! All connected channels have been synced with Meta Graph API.
                         </span>
                     </div>
                 )}
@@ -249,11 +310,11 @@ export default function AdminSettings({ settings }: Props) {
                                         </div>
                                     </div>
 
-                                    {/* Permanent Access Token */}
+                                    {/* Meta App Secret */}
                                     <div className="space-y-1 sm:col-span-2">
                                         <div className="flex items-center justify-between">
                                             <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                                <span>Permanent Access Token (System User Token)</span>
+                                                <span>Meta App Secret (System User Token)</span>
                                                 <span className="text-[10px] text-muted-foreground font-normal">(Used for dynamic auto-fetching phone numbers &amp; templates)</span>
                                             </Label>
                                             {copiedField === 'permtoken' && (
@@ -264,8 +325,8 @@ export default function AdminSettings({ settings }: Props) {
                                             <div className="relative flex-1">
                                                 <Input
                                                     type={showPermanentToken ? 'text' : 'password'}
-                                                    value={permanentToken}
-                                                    onChange={(e) => setPermanentToken(e.target.value)}
+                                                    value={appSecret}
+                                                    onChange={(e) => setAppSecret(e.target.value)}
                                                     placeholder="EAAG... (Paste System User Token from Meta Business Settings)"
                                                     className="font-mono text-xs pr-8 h-8 border-border/80 focus-visible:ring-primary/20"
                                                 />
@@ -282,7 +343,7 @@ export default function AdminSettings({ settings }: Props) {
                                                 size="icon"
                                                 variant="outline"
                                                 className="size-8 shrink-0 hover:bg-muted"
-                                                title="Copy Permanent Token"
+                                                title="Copy App Secret"
                                                 onClick={() => copyToClipboard(permanentToken, 'permtoken')}
                                             >
                                                 {copiedField === 'permtoken' ? (
@@ -407,6 +468,127 @@ export default function AdminSettings({ settings }: Props) {
                                                 <span>{f}</span>
                                             </span>
                                         ))}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Subscription & Messaging Economics Configuration */}
+                        <Card className="border-border/70 shadow-2xs">
+                            <CardHeader className="p-4 pb-2">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                        <Sparkles className="size-4 text-emerald-600 dark:text-emerald-400" />
+                                        <span>Subscription &amp; Messaging Economics</span>
+                                    </CardTitle>
+                                    <Badge variant="outline" className="text-[10px] uppercase font-bold text-emerald-600 border-emerald-500/30">
+                                        Dynamic Rules
+                                    </Badge>
+                                </div>
+                                <CardDescription className="text-xs">
+                                    Configure annual subscription pricing, bonuses, campaign limits, and Meta message rates without modifying code.
+                                </CardDescription>
+                            </CardHeader>
+
+                            <CardContent className="p-4 pt-1 space-y-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Annual Subscription (₹)</Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            value={annualPrice}
+                                            onChange={(e) => setAnnualPrice(parseFloat(e.target.value) || 0)}
+                                            className="h-8 text-xs font-semibold"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Validity (Days)</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={validityDays}
+                                            onChange={(e) => setValidityDays(parseInt(e.target.value) || 365)}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Welcome Bonus Credit (₹)</Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            value={welcomeBonus}
+                                            onChange={(e) => setWelcomeBonus(parseFloat(e.target.value) || 0)}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Referral Reward Credit (₹)</Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            value={referralReward}
+                                            onChange={(e) => setReferralReward(parseFloat(e.target.value) || 0)}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Max Contacts / Campaign</Label>
+                                        <Input
+                                            type="number"
+                                            min={10}
+                                            value={campaignMaxContacts}
+                                            onChange={(e) => setCampaignMaxContacts(parseInt(e.target.value) || 2000)}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Min Message Purchase</Label>
+                                        <Input
+                                            type="number"
+                                            min={1}
+                                            value={minMessages}
+                                            onChange={(e) => setMinMessages(parseInt(e.target.value) || 500)}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-border/60">
+                                    <div className="text-[11px] font-semibold text-muted-foreground mb-2">
+                                        Meta Message Pricing Matrix (₹ per message):
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">Marketing</Label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={rateMarketing}
+                                                onChange={(e) => setRateMarketing(parseFloat(e.target.value) || 0)}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">Utility</Label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={rateUtility}
+                                                onChange={(e) => setRateUtility(parseFloat(e.target.value) || 0)}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground uppercase font-semibold">Authentication</Label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={rateAuth}
+                                                onChange={(e) => setRateAuth(parseFloat(e.target.value) || 0)}
+                                                className="h-8 text-xs"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>

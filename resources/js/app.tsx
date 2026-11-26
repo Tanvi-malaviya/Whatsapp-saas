@@ -17,13 +17,12 @@ void createInertiaApp({
             case name === 'auth/login':
             case name === 'auth/register':
             case name === 'admin/login':
+            case name === 'agent/login':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('admin/'):
                 return AdminLayout;
-            case name === 'settings/billing':
-                return AppLayout;
             case name.startsWith('settings/'):
                 return [AppLayout, SettingsLayout];
             default:

@@ -11,13 +11,14 @@ use Illuminate\Http\Request;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectTo(
-            guests: '/login',
-            users: '/dashboard',
+            guests: fn (Request $request) => \App\Services\PanelNavigation::login($request),
+            users: fn (Request $request) => $request->user() ? \App\Services\PanelNavigation::home($request->user()) : '/login',
         );
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
@@ -28,8 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             HandleAppearance::class,
+            \App\Http\Middleware\EnsurePanelLanding::class,
             HandleInertiaRequests::class,
             \App\Modules\Foundation\Http\Middleware\EnsureTenantContext::class,
+            \App\Http\Middleware\AuthorizeWorkspace::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
     })

@@ -28,7 +28,7 @@ export default function Security(props: Props) {
 
             <h1 className="sr-only">Security settings</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
                 <Heading
                     variant="small"
                     title="Update password"
@@ -55,9 +55,9 @@ export default function Security(props: Props) {
                             currentPasswordInput.current?.focus();
                         }
                     }}
-                    className="space-y-6"
+                    className="grid min-w-0 gap-5 lg:grid-cols-3"
                 >
-                    {({ errors, processing }) => (
+                    {({ errors, processing, recentlySuccessful }) => (
                         <>
                             <div className="grid gap-2">
                                 <Label htmlFor="current_password">
@@ -68,7 +68,7 @@ export default function Security(props: Props) {
                                     id="current_password"
                                     ref={currentPasswordInput}
                                     name="current_password"
-                                    className="mt-1 block w-full"
+                                    className="mt-1 block h-11 w-full text-base md:text-sm"
                                     autoComplete="current-password"
                                     placeholder="Current password"
                                 />
@@ -83,7 +83,7 @@ export default function Security(props: Props) {
                                     id="password"
                                     ref={passwordInput}
                                     name="password"
-                                    className="mt-1 block w-full"
+                                    className="mt-1 block h-11 w-full text-base md:text-sm"
                                     autoComplete="new-password"
                                     placeholder="New password"
                                     passwordrules={props.passwordRules}
@@ -100,7 +100,7 @@ export default function Security(props: Props) {
                                 <PasswordInput
                                     id="password_confirmation"
                                     name="password_confirmation"
-                                    className="mt-1 block w-full"
+                                    className="mt-1 block h-11 w-full text-base md:text-sm"
                                     autoComplete="new-password"
                                     placeholder="Confirm password"
                                     passwordrules={props.passwordRules}
@@ -111,29 +111,40 @@ export default function Security(props: Props) {
                                 />
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-4 lg:col-span-3">
                                 <Button
+                                    className="h-11 w-full sm:w-auto"
                                     disabled={processing}
                                     data-test="update-password-button"
                                 >
-                                    Save
+                                    {processing ? 'Saving…' : 'Update password'}
                                 </Button>
+                                {recentlySuccessful && (
+                                    <span
+                                        role="status"
+                                        className="text-sm text-emerald-700 dark:text-emerald-400"
+                                    >
+                                        Password updated.
+                                    </span>
+                                )}
                             </div>
                         </>
                     )}
                 </Form>
             </div>
 
-            <ManageTwoFactor
-                canManageTwoFactor={props.canManageTwoFactor}
-                requiresConfirmation={props.requiresConfirmation}
-                twoFactorEnabled={props.twoFactorEnabled}
-            />
+            <div className="grid min-w-0 gap-6 xl:grid-cols-2 [&>div]:min-w-0 [&>div]:rounded-xl [&>div]:border [&>div]:border-border [&>div]:bg-card [&>div]:p-4 sm:[&>div]:p-6">
+                <ManageTwoFactor
+                    canManageTwoFactor={props.canManageTwoFactor}
+                    requiresConfirmation={props.requiresConfirmation}
+                    twoFactorEnabled={props.twoFactorEnabled}
+                />
 
-            <ManagePasskeys
-                canManagePasskeys={props.canManagePasskeys}
-                passkeys={props.passkeys}
-            />
+                <ManagePasskeys
+                    canManagePasskeys={props.canManagePasskeys}
+                    passkeys={props.passkeys}
+                />
+            </div>
         </>
     );
 }

@@ -26,6 +26,7 @@ import {
     Send,
     Radio,
     Sparkles,
+    QrCode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,8 +59,8 @@ type Props = {
 
 export default function ChannelDetail({
     channel,
-    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
-    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+    defaultWebhookUrl = '',
+    defaultVerifyToken = '',
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current || { name: 'Sathwara InfoTech', slug: 'sathwara-infotech' };
@@ -68,7 +69,22 @@ export default function ChannelDetail({
     const [activeTab, setActiveTab] = useState('meta');
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [isTesting, setIsTesting] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    const cleanPhone = channel.phone_number ? channel.phone_number.replace(/[^0-9]/g, '') : '';
+
+    const handleSyncMeta = () => {
+        setIsSyncing(true);
+        router.post(
+            `/channels/${channel.id}/sync`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setIsSyncing(false),
+            }
+        );
+    };
 
     const copyToClipboard = (text: string, field: string) => {
         navigator.clipboard.writeText(text);
@@ -210,6 +226,17 @@ export default function ChannelDetail({
                                 <Button
                                     variant="outline"
                                     size="sm"
+                                    onClick={handleSyncMeta}
+                                    disabled={isSyncing}
+                                    className="h-8 text-xs font-semibold gap-1.5 border-border hover:bg-muted"
+                                >
+                                    <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                                    {isSyncing ? 'Syncing...' : 'Sync from Meta'}
+                                </Button>
+
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     onClick={handleTestPing}
                                     disabled={isTesting}
                                     className="h-8 text-xs font-semibold gap-1.5 border-border"
@@ -225,6 +252,71 @@ export default function ChannelDetail({
                                 {testResult.message}
                             </div>
                         )}
+                    </CardContent>
+                </Card>
+
+                {/* Scan & Test Live WhatsApp Chat Card */}
+                <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-xs overflow-hidden rounded-xl">
+                    <CardContent className="p-4 sm:p-5">
+                        <div className="flex flex-col sm:flex-row items-center gap-5">
+                            <div className="shrink-0 bg-white p-2.5 rounded-xl border border-emerald-500/20 shadow-xs">
+                                {cleanPhone ? (
+                                    <img
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(`https://wa.me/${cleanPhone}?text=Hello%20from%20Sathwara%20SaaS`)}`}
+                                        alt={`QR Code for ${channel.phone_number}`}
+                                        className="size-28 sm:size-32 rounded-lg"
+                                    />
+                                ) : (
+                                    <div className="size-28 sm:size-32 bg-muted flex items-center justify-center text-muted-foreground text-xs font-medium">
+                                        No phone number
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                                        <QrCode className="size-3" />
+                                        Scan & Test Live Chat
+                                    </span>
+                                    <span className="text-xs text-muted-foreground font-mono">{channel.phone_number}</span>
+                                </div>
+                                <h3 className="text-sm sm:text-base font-bold text-foreground">
+                                    Instant Interactive WhatsApp Test
+                                </h3>
+                                <p className="text-xs text-muted-foreground max-w-xl">
+                                    Scan this QR code with your mobile camera or click below to launch a live WhatsApp conversation directly with this channel. Verify your auto-reply bot, greetings, and message delivery in real-time.
+                                </p>
+                                <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                    {cleanPhone && (
+                                        <Button
+                                            size="sm"
+                                            asChild
+                                            className="h-8 px-3.5 text-xs font-semibold gap-1.5 bg-[#25D366] hover:bg-[#20ba59] text-white rounded-lg shadow-xs"
+                                        >
+                                            <a
+                                                href={`https://wa.me/${cleanPhone}?text=Hello%20from%20Sathwara%20SaaS`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                <Send className="size-3.5" />
+                                                <span>Open WhatsApp Chat</span>
+                                                <ExternalLink className="size-3 opacity-80" />
+                                            </a>
+                                        </Button>
+                                    )}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => copyToClipboard(`https://wa.me/${cleanPhone}?text=Hello`, 'wa_link')}
+                                        className="h-8 px-3 text-xs font-medium gap-1.5 rounded-lg border-border"
+                                    >
+                                        {copiedField === 'wa_link' ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                                        <span>{copiedField === 'wa_link' ? 'Copied Link' : 'Copy Direct Chat Link'}</span>
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
 

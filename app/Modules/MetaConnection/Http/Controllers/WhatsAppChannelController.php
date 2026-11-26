@@ -5,1071 +5,368 @@ namespace App\Modules\MetaConnection\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Foundation\Models\Organization;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\MetaApi;
 use App\Shared\TenantContext;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class WhatsAppChannelController extends Controller
 {
-    private function resolveTenantId(Request $request): string
+    private function org(): Organization
     {
-        return TenantContext::id()
-            ?? $request->user()?->current_organization_id
-            ?? Organization::first()?->id
-            ?? '';
+        return TenantContext::get() ?? abort(403, 'Select an authorized workspace.');
     }
 
-    public function index(Request $request): Response|RedirectResponse
+    public function index(Request $request)
     {
-        $orgId = $this->resolveTenantId($request);
-
-        // Automatically connect if redirected from Meta Embedded Signup popup with OAuth code
-        if ($request->has('code')) {
-            $code = $request->query('code');
-            $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
-            $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
-            $origin = $request->getSchemeAndHttpHost();
-            $redirectUri = "{$origin}/whatsapp/connect";
-
+        if ($request->hasAny(['code', 'error'])) {
             try {
-                $tokenResp = Http::get('https://graph.facebook.com/v22.0/oauth/access_token', [
-                    'client_id' => $appId,
-                    'client_secret' => $appSecret,
-                    'redirect_uri' => $redirectUri,
-                    'code' => $code,
-                ]);
-
-                if ($tokenResp->successful()) {
-                    $userToken = $tokenResp->json('access_token');
-                    if ($userToken) {
-                        // Debug token to find the shared WABA ID
-                        $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
-                            'input_token' => $userToken,
-                            'access_token' => "{$appId}|{$appSecret}",
-                        ]);
-
-                        $wabaId = null;
-                        if ($debugResp->successful()) {
-                            $scopes = $debugResp->json('data.granular_scopes') ?? [];
-                            foreach ($scopes as $scope) {
-                                if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
-                                    $wabaId = $scope['target_ids'][0] ?? null;
-                                    if ($wabaId) break;
-                                }
-                            }
-                        }
-
-                        if ($wabaId) {
-                            $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
-                            if ($phonesResp->successful()) {
-                                $phones = $phonesResp->json('data') ?? [];
-                                foreach ($phones as $p) {
-                                    $pPhone = $p['display_phone_number'] ?? '';
-                                    $pName = $p['verified_name'] ?? ($pPhone ? "WhatsApp ({$pPhone})" : 'WhatsApp Channel');
-                                    WhatsAppChannel::updateOrCreate(
-                                        [
-                                            'organization_id' => $orgId,
-                                            'phone_number_id' => $p['id'],
-                                        ],
-                                        [
-                                            'name' => $pName,
-                                            'phone_number' => $pPhone,
-                                            'waba_id' => $wabaId,
-                                            'access_token' => $userToken,
-                                            'quality_rating' => $p['quality_rating'] ?? 'GREEN',
-                                            'messaging_limit' => 'TIER_1K',
-                                            'status' => 'connected',
-                                            'webhook_verified_at' => now(),
-                                        ]
-                                    );
-                                }
-                            }
-                        }
-                    }
+                $attempt = $this->consumeAttempt($request);
+                if ($request->has('error')) {
+                    throw ValidationException::withMessages(['signup' => 'Facebook signup was cancelled or permission was declined. Please try again.']);
                 }
-            } catch (\Throwable $e) {}
+                $result = $this->connectOAuth((string) $request->query('code'), $attempt, $request);
 
-            return redirect()->route('whatsapp.connect');
-        } elseif ($request->has('phone_number_id') && !str_starts_with($request->query('phone_number_id'), 'phone_')) {
-            $phoneId = $request->query('phone_number_id');
-            $wabaId = $request->query('waba_id');
-            $phoneNumber = trim($request->query('phone_number', ''));
-            $queryName = trim($request->query('name', ''));
-            $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-            $accessToken = $existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-
-            // Try to fetch real display_phone_number and verified_name from Graph API if token available
-            if ($accessToken && empty($phoneNumber)) {
-                try {
-                    $pResp = Http::withToken($accessToken)
-                        ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
-                            'fields' => 'display_phone_number,verified_name,quality_rating',
-                        ]);
-                    if ($pResp->successful()) {
-                        $pData = $pResp->json();
-                        $phoneNumber = $pData['display_phone_number'] ?? $phoneNumber;
-                        if (!empty($pData['verified_name']) && empty($queryName)) {
-                            $queryName = $pData['verified_name'];
-                        }
-                    }
-                } catch (\Throwable $e) {}
-            }
-
-            $targetChannel = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
-            if ($targetChannel) {
-                // If channel exists, NEVER overwrite existing phone_number or name with empty values!
-                $updates = [];
-                if (!empty($wabaId)) $updates['waba_id'] = $wabaId;
-                if (!empty($accessToken)) $updates['access_token'] = $accessToken;
-                if (!empty($phoneNumber)) $updates['phone_number'] = $phoneNumber;
-                if (!empty($queryName)) $updates['name'] = $queryName;
-                if (!empty($updates)) {
-                    $targetChannel->update($updates);
-                }
-            } else {
-                WhatsAppChannel::create([
-                    'organization_id' => $orgId,
-                    'phone_number_id' => $phoneId,
-                    'name' => $queryName ?: ($phoneNumber ? "WhatsApp ({$phoneNumber})" : 'WhatsApp Channel'),
-                    'phone_number' => $phoneNumber ?: '',
-                    'waba_id' => $wabaId ?: ($existing?->waba_id ?: '1600590645151650'),
-                    'access_token' => $accessToken,
-                    'quality_rating' => 'GREEN',
-                    'messaging_limit' => 'TIER_1K',
-                    'status' => 'connected',
-                    'is_default' => false,
-                    'webhook_verified_at' => now(),
-                ]);
-            }
-
-            // Immediately redirect cleanly so query string params are permanently cleared from URL!
-            return redirect()->route('whatsapp.connect');
-        }
-
-        // Clean up only the old legacy dummy placeholder channel
-        WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'phone_9104081291')
-            ->where('waba_id', '168495056789012')
-            ->delete();
-
-        $channels = WhatsAppChannel::where('organization_id', $orgId)
-            ->orderBy('is_default', 'desc')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Dynamically fetch phone number and verified name from Meta Graph API for any channels missing them
-        $globalToken = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-        foreach ($channels as $ch) {
-            $tok = $ch->access_token ?: $globalToken;
-            if ((empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) && !empty($ch->phone_number_id) && !str_starts_with($ch->phone_number_id, 'phone_') && $tok) {
-                try {
-                    $pResp = Http::withToken($tok)->timeout(4)->get("https://graph.facebook.com/v22.0/{$ch->phone_number_id}", [
-                        'fields' => 'display_phone_number,verified_name,quality_rating',
-                    ]);
-                    if ($pResp->successful()) {
-                        $pData = $pResp->json();
-                        if (!empty($pData['display_phone_number'])) {
-                            $ch->phone_number = $pData['display_phone_number'];
-                        }
-                        if (!empty($pData['verified_name'])) {
-                            $ch->name = $pData['verified_name'];
-                        }
-                        if (!empty($pData['quality_rating'])) {
-                            $ch->quality_rating = $pData['quality_rating'];
-                        }
-                        if (empty($ch->access_token)) {
-                            $ch->access_token = $tok;
-                        }
-                        $ch->save();
-                    }
-                } catch (\Throwable $e) {}
+                return response()->view('meta-connected', $result);
+            } catch (\Throwable $error) {
+                return response()->view('meta-connected', ['channel' => null, 'error' => $this->errorMessage($error)]);
             }
         }
-
-        $org = Organization::find($orgId);
-        $maxChannels = $org ? $org->getMaxChannels() : 1;
-        $channelsCount = $channels->count();
-        $canAddMore = $org ? $org->canAddMoreChannels() : ($channelsCount < 1);
+        $org = $this->org();
+        $channels = WhatsAppChannel::where('organization_id', $org->id)->orderByDesc('is_default')->latest()->get();
 
         return Inertia::render('whatsapp/connect', [
-            'channels' => $channels,
-            'defaultWebhookUrl' => url('/webhooks/meta'),
-            'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
-            'maxChannels' => $maxChannels,
-            'channelsCount' => $channelsCount,
-            'canAddMore' => $canAddMore,
+            'channels' => $channels, 'maxChannels' => $org->getMaxChannels(),
+            'channelsCount' => $org->channels()->withoutGlobalScopes()->whereNull('deleted_at')->count(), 'canAddMore' => $org->canAddMoreChannels(),
+            'defaultWebhookUrl' => url('/webhooks/meta'), 'defaultVerifyToken' => '',
+            'metaAppId' => MetaApi::setting('app_id') ?? '', 'metaConfigId' => MetaApi::setting('config_id') ?? '',
+            'graphVersion' => config('release.meta.graph_version'),
         ]);
     }
 
-    public function show(Request $request, string $id): Response
+    public function show(Request $request, string $id)
     {
-        $orgId = $this->resolveTenantId($request);
-        $channel = WhatsAppChannel::where('organization_id', $orgId)
-            ->where('id', $id)
-            ->firstOrFail();
-
-        return Inertia::render('whatsapp/channel-detail', [
-            'channel' => $channel,
-            'defaultWebhookUrl' => url('/webhooks/meta'),
-            'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
-        ]);
+        return Inertia::render('whatsapp/channel-detail', ['channel' => WhatsAppChannel::findOrFail($id), 'defaultWebhookUrl' => url('/webhooks/meta'), 'defaultVerifyToken' => '']);
     }
 
-    public function wizard(Request $request): Response
+    public function wizard(Request $request)
     {
-        $orgId = $this->resolveTenantId($request);
-        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
-
         return Inertia::render('whatsapp/connect-wizard', [
-            'existingChannel' => $existing,
-            'defaultWebhookUrl' => url('/webhooks/meta'),
-            'defaultVerifyToken' => config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b'),
-            'metaAppId' => Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656'),
-            'metaConfigId' => Cache::get('meta_config_id') ?: env('META_CONFIG_ID', '1835889181059188'),
+            'existingChannel' => null, 'defaultWebhookUrl' => url('/webhooks/meta'), 'defaultVerifyToken' => '',
+            'metaAppId' => MetaApi::setting('app_id') ?? '', 'metaConfigId' => MetaApi::setting('config_id') ?? '',
+            'graphVersion' => config('release.meta.graph_version'),
         ]);
     }
 
-    public function quickConnect(Request $request): JsonResponse
+    public function beginSignup(Request $request)
     {
-        $orgId = $this->resolveTenantId($request);
-        $org = Organization::find($orgId);
-        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
+        abort_unless($this->org()->canAddMoreChannels(), 422, 'Number allowance reached. Contact your administrator.');
+        $app = MetaApi::setting('app_id') ?: '1079349601748656';
+        $config = MetaApi::setting('config_id') ?: '1835889181059188';
+        $secret = MetaApi::setting('app_secret') ?: '02d9ac2a37b98b8b29a189f835c13027';
+        abort_unless($app && $config && $secret, 422, 'The administrator must configure Meta app credentials and Embedded Signup first.');
+        $state = Str::random(48);
+        // Bind signup to its starting workspace, user, redirect URI and lifetime.
+        $attempt = ['state' => $state, 'organization_id' => $this->org()->id, 'user_id' => $request->user()->id,
+            'redirect_uri' => url('/whatsapp/connect'), 'expires_at' => now()->addMinutes(10)->timestamp];
+        $request->session()->put('meta_signup', $attempt);
+        $request->session()->forget('meta_signup_pending');
 
-        $phoneNumber = trim($request->input('phone_number', ''));
-        $name = trim($request->input('name', ''));
-        $phoneId = $request->input('phone_number_id');
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: '1600590645151650');
-        $accessToken = $request->input('access_token') ?: ($existing?->access_token ?: '');
-        $code = $request->input('code');
-
-        // Exchange Meta OAuth code if provided from Embedded Signup popup
-        if ($code) {
-            $appId = env('META_APP_ID', '1079349601748656');
-            $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
-            $origin = $request->getSchemeAndHttpHost();
-            $redirectUri = "{$origin}/whatsapp/connect";
-
-            try {
-                $tokenResp = Http::get('https://graph.facebook.com/v22.0/oauth/access_token', [
-                    'client_id' => $appId,
-                    'client_secret' => $appSecret,
-                    'redirect_uri' => $redirectUri,
-                    'code' => $code,
-                ]);
-
-                if ($tokenResp->successful()) {
-                    $userToken = $tokenResp->json('access_token');
-                    if ($userToken) {
-                        $accessToken = $userToken;
-
-                        // Debug token to find the shared WABA ID
-                        $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
-                            'input_token' => $userToken,
-                            'access_token' => "{$appId}|{$appSecret}",
-                        ]);
-
-                        if ($debugResp->successful()) {
-                            $scopes = $debugResp->json('data.granular_scopes') ?? [];
-                            $allWabas = [];
-                            foreach ($scopes as $scope) {
-                                if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
-                                    $allWabas = array_merge($allWabas, $scope['target_ids'] ?? []);
-                                }
-                            }
-                            $allWabas = array_unique(array_filter($allWabas));
-
-                            // Sync ALL phone numbers across ALL shared WABAs (e.g. Tuoora, Sathwara, etc.)
-                            foreach ($allWabas as $targetWaba) {
-                                try {
-                                    $phonesResp = Http::withToken($userToken)->get("https://graph.facebook.com/v22.0/{$targetWaba}/phone_numbers");
-                                    if ($phonesResp->successful()) {
-                                        $metaPhones = $phonesResp->json('data') ?? [];
-                                        foreach ($metaPhones as $mp) {
-                                            $mpId = $mp['id'] ?? null;
-                                            $mpPhone = $mp['display_phone_number'] ?? '';
-                                            $mpName = $mp['verified_name'] ?? ('WhatsApp ' . substr(preg_replace('/\D/', '', $mpPhone), -4));
-                                            $mpQuality = $mp['quality_rating'] ?? 'GREEN';
-
-                                            if ($mpId) {
-                                                $alreadyInDb = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $mpId)->exists();
-                                                if (!$alreadyInDb && $org && !$org->canAddMoreChannels()) {
-                                                    continue;
-                                                }
-
-                                                WhatsAppChannel::updateOrCreate(
-                                                    [
-                                                        'organization_id' => $orgId,
-                                                        'phone_number_id' => $mpId,
-                                                    ],
-                                                    [
-                                                        'name' => $mpName,
-                                                        'phone_number' => $mpPhone,
-                                                        'waba_id' => $targetWaba,
-                                                        'access_token' => $userToken,
-                                                        'quality_rating' => $mpQuality,
-                                                        'messaging_limit' => 'TIER_1K',
-                                                        'status' => 'connected',
-                                                        'is_default' => false,
-                                                        'webhook_verified_at' => now(),
-                                                    ]
-                                                );
-
-                                                // If phoneId is not yet set, track the first discovered phone
-                                                if (!$phoneId) {
-                                                    $phoneId = $mpId;
-                                                    $phoneNumber = $mpPhone;
-                                                    $name = $mpName;
-                                                    $wabaId = $targetWaba;
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (\Throwable $e) {}
-                            }
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        // If phone_number_id is passed directly, fetch details from Graph API
-        if ($phoneId && empty($phoneNumber)) {
-            $queryToken = $accessToken 
-                ?: WhatsAppChannel::where('organization_id', $orgId)->whereNotNull('access_token')->where('access_token', '!=', '')->value('access_token')
-                ?: Cache::get('meta_whatsapp_token')
-                ?: env('META_WHATSAPP_TOKEN', '');
-
-            if ($queryToken) {
-                try {
-                    $pResp = Http::withToken($queryToken)
-                        ->get("https://graph.facebook.com/v22.0/{$phoneId}", [
-                            'fields' => 'display_phone_number,verified_name,quality_rating',
-                        ]);
-                    if ($pResp->successful()) {
-                        $pData = $pResp->json();
-                        $phoneNumber = $pData['display_phone_number'] ?? '';
-                        if (!empty($pData['verified_name'])) {
-                            $name = $pData['verified_name'];
-                        }
-                        if (empty($accessToken)) {
-                            $accessToken = $queryToken;
-                        }
-                    }
-                } catch (\Throwable $e) {}
-            }
-        }
-
-        $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
-
-        // Auto-discover phone number ID from WABA if not yet known
-        if (!$phoneId && $accessToken && $wabaId) {
-            try {
-                $metaPhonesResp = Http::withToken($accessToken)
-                    ->get("https://graph.facebook.com/v22.0/{$wabaId}/phone_numbers");
-
-                if ($metaPhonesResp->successful()) {
-                    $metaPhones = $metaPhonesResp->json('data') ?? [];
-                    foreach ($metaPhones as $mp) {
-                        $mpClean = preg_replace('/\D/', '', $mp['display_phone_number'] ?? '');
-                        if (
-                            empty($cleanPhone) ||
-                            $mpClean === $cleanPhone ||
-                            str_ends_with($cleanPhone, substr($mpClean, -10)) ||
-                            str_ends_with($mpClean, substr($cleanPhone, -10))
-                        ) {
-                            $phoneId = $mp['id'];
-                            $phoneNumber = $mp['display_phone_number'] ?? $phoneNumber;
-                            if (!empty($mp['verified_name'])) {
-                                $name = $mp['verified_name'];
-                            }
-                            break;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        if (!$phoneId || str_starts_with($phoneId, 'phone_')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not automatically retrieve the 15-digit Phone Number ID from Meta. Please enter credentials manually.',
-            ], 422);
-        }
-
-        $isExisting = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
-        if (!$isExisting && $org && !$org->canAddMoreChannels()) {
-            $limit = $org->getMaxChannels();
-            return response()->json([
-                'success' => false,
-                'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
-            ], 422);
-        }
-
-        if (strlen($cleanPhone) === 10) {
-            $formattedPhone = '+91 ' . substr($cleanPhone, 0, 5) . ' ' . substr($cleanPhone, 5);
-        } elseif (strlen($cleanPhone) === 12 && str_starts_with($cleanPhone, '91')) {
-            $formattedPhone = '+91 ' . substr($cleanPhone, 2, 5) . ' ' . substr($cleanPhone, 7);
-        } elseif (str_starts_with($phoneNumber, '+')) {
-            $formattedPhone = $phoneNumber;
-        } elseif (!empty($cleanPhone)) {
-            $formattedPhone = '+' . $cleanPhone;
-        } else {
-            $formattedPhone = '';
-        }
-        $name = $name ?: ($formattedPhone ? ('WhatsApp (' . $formattedPhone . ')') : 'WhatsApp Channel');
-
-        $isDefault = WhatsAppChannel::where('organization_id', $orgId)->count() === 0;
-
-        $channel = WhatsAppChannel::updateOrCreate(
-            [
-                'organization_id' => $orgId,
-                'phone_number_id' => $phoneId,
-            ],
-            [
-                'name' => $name,
-                'phone_number' => $formattedPhone,
-                'waba_id' => $wabaId,
-                'access_token' => $accessToken,
-                'app_id' => $request->input('app_id', $existing?->app_id),
-                'app_secret' => $request->input('app_secret', $existing?->app_secret),
-                'quality_rating' => 'GREEN',
-                'messaging_limit' => 'TIER_1K',
-                'status' => 'connected',
-                'is_default' => $isDefault,
-                'webhook_verified_at' => now(),
-            ]
-        );
-
-        // Also query Meta Graph API directly for any channel missing its phone number
-        $missingChannels = WhatsAppChannel::where('organization_id', $orgId)
-            ->whereNotNull('phone_number_id')
-            ->where('phone_number_id', 'not like', 'phone_%')
-            ->get();
-        foreach ($missingChannels as $mCh) {
-            $useTok = $mCh->access_token ?: $token ?: $globalTok;
-            if ($useTok && (empty($mCh->phone_number) || str_contains($mCh->phone_number, 'Registered'))) {
-                try {
-                    $pResp = Http::withToken($useTok)->timeout(5)->get("https://graph.facebook.com/v22.0/{$mCh->phone_number_id}", [
-                        'fields' => 'display_phone_number,verified_name,quality_rating',
-                    ]);
-                    if ($pResp->successful()) {
-                        $pData = $pResp->json();
-                        $mCh->update(array_filter([
-                            'phone_number' => $pData['display_phone_number'] ?? null,
-                            'name' => $pData['verified_name'] ?? null,
-                            'quality_rating' => $pData['quality_rating'] ?? 'GREEN',
-                            'access_token' => $useTok,
-                        ]));
-                        $added++;
-                    }
-                } catch (\Throwable $e) {}
-            }
-        }
-
-        // Clean up only the old legacy dummy placeholder channel
-        WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'phone_9104081291')
-            ->where('waba_id', '168495056789012')
-            ->delete();
-
-        // Auto-sync all other numbers that belong to this WABA on Meta
-        if ($accessToken && $wabaId) {
-            $this->autoSyncFromMeta($orgId, $wabaId, $accessToken);
-        }
-
-        return response()->json([
-            'success' => true,
-            'message' => "WhatsApp number {$channel->phone_number} successfully connected to Meta Cloud API!",
-            'channel' => $channel,
+        return response()->json(['state' => $state, 'app_id' => $app, 'config_id' => $config, 'graph_version' => config('release.meta.graph_version'),
+            'url' => 'https://www.facebook.com/'.config('release.meta.graph_version').'/dialog/oauth?'.http_build_query([
+                'client_id' => $app, 'config_id' => $config, 'redirect_uri' => $attempt['redirect_uri'],
+                'response_type' => 'code', 'state' => $state, 'override_default_response_type' => 'true',
+                'extras' => json_encode(['featureType' => 'whatsapp_business_app_onboarding']),
+            ]),
         ]);
     }
 
-    public function store(Request $request): mixed
+    private function consumeAttempt(Request $request): array
     {
-        $orgId = $this->resolveTenantId($request);
-        $channelId = $request->input('id');
-        $phoneId = trim($request->input('phone_number_id', ''));
+        $attempt = $request->session()->get('meta_signup');
+        abort_unless(is_array($attempt) && $request->filled('state') && hash_equals($attempt['state'], (string) $request->input('state'))
+            && $attempt['organization_id'] === $this->org()->id && $attempt['user_id'] === $request->user()->id
+            && $attempt['expires_at'] >= now()->timestamp, 403, 'The Facebook signup session expired or does not match this workspace. Start again.');
+        $request->session()->forget('meta_signup');
 
-        $channel = null;
-        if ($channelId) {
-            $channel = WhatsAppChannel::withoutGlobalScopes()->find($channelId);
-        }
-        if (!$channel && $phoneId) {
-            $channel = WhatsAppChannel::withoutGlobalScopes()->where('phone_number_id', $phoneId)->first();
-        }
+        return $attempt;
+    }
 
-        if ($channel) {
-            $orgId = $channel->organization_id;
-        }
-
-        $existing = $channel ?: WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $orgId)->first();
-
-        $phoneNumber = trim($request->input('phone_number', ''));
-        $cleanPhone = preg_replace('/\D/', '', $phoneNumber);
-
-        // Standardize Indian and International phone formats
-        if (strlen($cleanPhone) === 10) {
-            $formattedPhone = '+91 ' . substr($cleanPhone, 0, 5) . ' ' . substr($cleanPhone, 5);
-        } elseif (strlen($cleanPhone) === 12 && str_starts_with($cleanPhone, '91')) {
-            $formattedPhone = '+91 ' . substr($cleanPhone, 2, 5) . ' ' . substr($cleanPhone, 7);
-        } elseif (str_starts_with($phoneNumber, '+')) {
-            $formattedPhone = $phoneNumber;
-        } elseif (!empty($cleanPhone)) {
-            $formattedPhone = '+' . $cleanPhone;
-        } else {
-            $formattedPhone = '';
-        }
-
-        $name = trim($request->input('name', ''));
-        if (empty($name) || $name === 'WhatsApp Channel') {
-            $name = $formattedPhone ? ("WhatsApp (" . $formattedPhone . ")") : 'WhatsApp Channel';
-        }
-
-        $phoneId = $phoneId ?: ('phone_' . ($cleanPhone ?: uniqid()));
-        $wabaId = trim($request->input('waba_id', '')) ?: ($existing?->waba_id ?: '934553439246885');
-        $accessToken = trim($request->input('access_token', '')) ?: ($existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', ''));
-
-        $quality = 'GREEN';
-        $limit = 'TIER_1K';
-        $verifiedAt = now();
-
-        if ($accessToken && $phoneId && !str_starts_with($phoneId, 'phone_')) {
-            try {
-                $response = Http::withToken($accessToken)
-                    ->get("https://graph.facebook.com/v22.0/{$phoneId}");
-
-                if ($response->successful()) {
-                    $data = $response->json();
-                    $quality = $data['quality_rating'] ?? 'GREEN';
-                    if (!empty($data['display_phone_number']) && empty($formattedPhone)) {
-                        $formattedPhone = $data['display_phone_number'];
-                    }
-                    if (!empty($data['verified_name']) && ($name === 'WhatsApp Channel' || empty($name))) {
-                        $name = $data['verified_name'];
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Ignore API ping failure for offline testing
-            }
-        }
-
-        if ($channel) {
-            $channel->update([
-                'name' => $name,
-                'phone_number' => $formattedPhone,
-                'phone_number_id' => $phoneId,
-                'waba_id' => $wabaId,
-                'access_token' => $accessToken,
-                'app_id' => $request->input('app_id', $existing?->app_id),
-                'app_secret' => $request->input('app_secret', $existing?->app_secret),
-                'quality_rating' => $quality,
-                'messaging_limit' => $limit,
-                'status' => 'connected',
-                'webhook_verified_at' => $verifiedAt,
+    private function connectOAuth(string $code, array $attempt, Request $request): array
+    {
+        $app = MetaApi::setting('app_id') ?: '1079349601748656';
+        $secret = MetaApi::setting('app_secret') ?: '02d9ac2a37b98b8b29a189f835c13027';
+        $response = Http::timeout(20)->get(MetaApi::base().'/oauth/access_token', array_filter([
+            'client_id' => $app, 'client_secret' => $secret,
+            // SDK codes are exchanged without a redirect URI; redirect-flow codes use the exact original URI.
+            'redirect_uri' => $request->isMethod('GET') ? $attempt['redirect_uri'] : null, 'code' => $code,
+        ]));
+        if (! $response->successful() || ! $response->json('access_token')) {
+            Log::error('Meta oauth/access_token exchange failed', [
+                'status' => $response->status(),
+                'response' => $response->json() ?? $response->body(),
+                'app_id' => $app,
             ]);
-        } else {
-            $org = Organization::find($orgId);
-            $alreadyExists = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->exists();
-            if (!$alreadyExists && $org && !$org->canAddMoreChannels()) {
-                $limit = $org->getMaxChannels();
-                if ($request->wantsJson()) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
-                    ], 422);
+            $msg = $response->json('error.message') ?? 'Facebook authorization failed. Restart signup and grant WhatsApp access.';
+            throw ValidationException::withMessages(['signup' => $msg]);
+        }
+        $token = $response->json('access_token');
+        $debugResponse = Http::timeout(15)->get(MetaApi::base().'/debug_token', ['input_token' => $token, 'access_token' => $app.'|'.$secret]);
+        $debug = $debugResponse->json('data', []);
+        abort_unless($debugResponse->successful() && ($debug['is_valid'] ?? false) && (string) ($debug['app_id'] ?? '') === (string) $app, 422, 'Facebook returned an invalid authorization for this app.');
+        $wabas = collect($debug['granular_scopes'] ?? [])->whereIn('scope', ['whatsapp_business_management', 'whatsapp_business_messaging'])->flatMap(fn ($scope) => $scope['target_ids'] ?? [])->filter()->unique();
+        if ($wabas->isEmpty()) {
+            throw ValidationException::withMessages(['signup' => 'Facebook did not share a WhatsApp Business Account. Select your account and grant WhatsApp permissions.']);
+        }
+        $selectedWaba = $request->input('waba_id');
+        $selectedPhone = $request->input('phone_number_id');
+        if ($selectedWaba && ! $wabas->contains($selectedWaba)) {
+            throw ValidationException::withMessages(['signup' => 'The selected WhatsApp account was not authorized by Facebook.']);
+        }
+        $choices = [];
+        foreach ($selectedWaba ? [$selectedWaba] : $wabas as $waba) {
+            foreach (app(MetaApi::class)->numbers($waba, $token) as $phone) {
+                if (! $selectedPhone || $phone['id'] === $selectedPhone) {
+                    $choices[] = ['waba_id' => $waba, 'phone_number_id' => $phone['id'], 'phone' => $phone];
                 }
-                return back()->withErrors([
-                    'message' => "WhatsApp number limit reached! Your workspace allows a maximum of {$limit} number(s). Contact administrator to upgrade.",
-                ]);
             }
-
-            $existingCount = WhatsAppChannel::where('organization_id', $orgId)->count();
-            $isDefault = $existingCount === 0;
-
-            $channel = WhatsAppChannel::updateOrCreate(
-                [
-                    'organization_id' => $orgId,
-                    'phone_number_id' => $phoneId,
-                ],
-                [
-                    'name' => $name,
-                    'phone_number' => $formattedPhone,
-                    'waba_id' => $wabaId,
-                    'access_token' => $accessToken,
-                    'app_id' => $request->input('app_id', $existing?->app_id),
-                    'app_secret' => $request->input('app_secret', $existing?->app_secret),
-                    'quality_rating' => $quality,
-                    'messaging_limit' => $limit,
-                    'status' => 'connected',
-                    'is_default' => $isDefault,
-                    'webhook_verified_at' => $verifiedAt,
-                ]
-            );
         }
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => "WhatsApp number ({$channel->name}) successfully connected!",
-                'channel' => $channel,
-            ]);
+        if (! $choices) {
+            throw ValidationException::withMessages(['signup' => 'Facebook did not return the selected number. Complete number verification in Facebook, then try again.']);
         }
+        // Never silently import an unrelated first number when Meta shared several assets.
+        if (count($choices) > 1) {
+            $request->session()->put('meta_signup_pending', ['token' => $token, 'choices' => $choices, 'organization_id' => $this->org()->id,
+                'user_id' => $request->user()->id, 'expires_at' => now()->addMinutes(10)->timestamp]);
 
-        return redirect()->route('whatsapp.connect')->with('success', "WhatsApp Number ({$channel->name} - {$channel->phone_number}) successfully updated!");
+            return ['channel' => null, 'error' => null, 'pendingNumbers' => $this->publicChoices($choices)];
+        }
+        $choice = $choices[0];
+        $channel = $this->persist(['phone_number_id' => $choice['phone_number_id'], 'waba_id' => $choice['waba_id'], 'access_token' => $token], $choice['phone']);
+
+        return ['channel' => $channel, 'error' => null];
     }
 
-    public function syncFromMeta(Request $request): JsonResponse
+    private function publicChoices(array $choices): array
     {
-        $orgId = $this->resolveTenantId($request);
-        $existing = WhatsAppChannel::where('organization_id', $orgId)->first();
+        return array_map(fn ($choice) => ['id' => $choice['phone_number_id'], 'waba_id' => $choice['waba_id'], 'name' => $choice['phone']['verified_name'] ?? 'WhatsApp', 'phone' => $choice['phone']['display_phone_number'] ?? $choice['phone_number_id']], $choices);
+    }
 
-        $wabaId = $request->input('waba_id') ?: ($existing?->waba_id ?: env('META_WABA_ID', '934553439246885'));
-        $token = $request->input('access_token') ?: ($existing?->access_token ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', ''));
+    public function reviewSignup(Request $request)
+    {
+        $pending = $this->pendingSignup($request);
 
-        if (!$token && !$wabaId) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No access token or WABA ID configured. Please configure Permanent Access Token in Admin Settings.',
-            ], 422);
-        }
+        return response()->view('meta-connected', ['channel' => null, 'error' => null, 'pendingNumbers' => $this->publicChoices($pending['choices'])]);
+    }
 
+    private function pendingSignup(Request $request): array
+    {
+        $pending = $request->session()->get('meta_signup_pending');
+        abort_unless($pending && $pending['organization_id'] === $this->org()->id && $pending['user_id'] === $request->user()->id && $pending['expires_at'] >= now()->timestamp, 403, 'Signup expired. Start Facebook signup again.');
+
+        return $pending;
+    }
+
+    public function completeSignup(Request $request)
+    {
+        $data = $request->validate(['phone_number_id' => 'required|string', 'waba_id' => 'required|string']);
         try {
-            $added = $this->autoSyncFromMeta($orgId, $wabaId, $token);
+            $pending = $this->pendingSignup($request);
+            $choice = collect($pending['choices'])->first(fn ($choice) => $choice['phone_number_id'] === $data['phone_number_id'] && $choice['waba_id'] === $data['waba_id']);
+            abort_unless($choice, 403, 'Choose a number authorized by Facebook.');
+            $channel = $this->persist([...$data, 'access_token' => $pending['token']], $choice['phone']);
+            $request->session()->forget('meta_signup_pending');
 
-            return response()->json([
-                'success' => true,
-                'message' => "Successfully synced {$added} WhatsApp number(s) from Meta!",
-                'count' => $added,
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Sync failed: ' . $e->getMessage(),
-            ], 500);
+            return response()->view('meta-connected', ['channel' => $channel, 'error' => null]);
+        } catch (\Throwable $error) {
+            return response()->view('meta-connected', ['channel' => null, 'error' => $this->errorMessage($error)]);
         }
     }
 
-    /**
-     * Internal helper to query Meta Graph API for all registered phone numbers on a WABA
-     */
-    private function autoSyncFromMeta(string $orgId, ?string $wabaId = null, ?string $token = null): int
+    public function quickConnect(Request $request)
     {
-        $added = 0;
-        $globalTok = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-        $token = $token ?: $globalTok;
+        if (! $request->filled('code')) {
+            $channel = $this->save($request);
 
-        $channels = WhatsAppChannel::where('organization_id', $orgId)
-            ->whereNotNull('access_token')
-            ->where('access_token', '!=', '')
-            ->get();
+            return response()->json(['success' => true, 'channel' => $channel, 'message' => 'WhatsApp number connected.']);
+        }
+        $request->validate(['code' => 'required|string|max:4096', 'state' => 'required|string|max:100', 'phone_number_id' => 'nullable|regex:/^\d+$/', 'waba_id' => 'nullable|regex:/^\d+$/']);
+        $attempt = $this->consumeAttempt($request);
+        $result = $this->connectOAuth($request->input('code'), $attempt, $request);
 
-        $wabaPairs = [];
-        foreach ($channels as $ch) {
-            if ($ch->waba_id && $ch->access_token) {
-                $wabaPairs[$ch->waba_id] = $ch->access_token;
+        return response()->json(['success' => ! empty($result['channel']), 'pending' => ! empty($result['pendingNumbers']), 'review_url' => url('/channels/signup/review'), 'channel' => $result['channel']]);
+    }
+
+    private function errorMessage(\Throwable $error): string
+    {
+        // Do not log OAuth codes, tokens, complete query strings or provider request URLs.
+        Log::warning('WhatsApp signup did not complete.', ['exception_type' => $error::class, 'organization_id' => TenantContext::id()]);
+        if ($error instanceof ValidationException) {
+            return (string) collect($error->errors())->flatten()->first();
+        }
+        if ($error instanceof HttpExceptionInterface) {
+            return $error->getMessage() ?: 'Facebook signup could not be completed.';
+        }
+
+        return 'Meta could not complete the connection. Please retry or contact support.';
+    }
+
+    public function store(Request $request)
+    {
+        $channel = $this->save($request);
+
+        return $request->expectsJson() ? response()->json(['success' => true, 'message' => 'WhatsApp number saved.', 'channel' => $channel]) : redirect('/whatsapp/connect')->with('success', 'WhatsApp number saved.');
+    }
+
+    private function save(Request $request): WhatsAppChannel
+    {
+        $data = $request->validate(['id' => 'nullable|uuid', 'name' => 'nullable|string|max:100', 'phone_number_id' => 'required|regex:/^\d+$/|max:40',
+            'waba_id' => 'required|regex:/^\d+$/|max:40', 'access_token' => 'nullable|string|max:10000', 'app_id' => 'nullable|string|max:100', 'app_secret' => 'nullable|string|max:1000']);
+        $existing = ! empty($data['id']) ? WhatsAppChannel::where('organization_id', $this->org()->id)->findOrFail($data['id']) : WhatsAppChannel::where('phone_number_id', $data['phone_number_id'])->first();
+        $data['access_token'] = ($data['access_token'] ?? null) ?: $existing?->access_token;
+        if (! $data['access_token']) {
+            throw ValidationException::withMessages(['access_token' => 'Provide an access token for this number.']);
+        }
+        if (! collect(app(MetaApi::class)->numbers($data['waba_id'], $data['access_token']))->contains('id', $data['phone_number_id'])) {
+            throw ValidationException::withMessages(['waba_id' => 'This number does not belong to this WhatsApp Business Account.']);
+        }
+
+        return $this->persist($data, app(MetaApi::class)->phone($data['phone_number_id'], $data['access_token']));
+    }
+
+    private function persist(array $data, array $phone): WhatsAppChannel
+    {
+        return DB::transaction(function () use ($data, $phone) {
+            $org = Organization::whereKey($this->org()->id)->lockForUpdate()->firstOrFail();
+            abort_unless($org->isActive(), 403, 'This workspace is suspended.');
+            DB::table('platform_settings')->insertOrIgnore(['key' => 'channel_ownership_lock', 'value' => null, 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('platform_settings')->where('key', 'channel_ownership_lock')->lockForUpdate()->first();
+            $claimed = WhatsAppChannel::withoutGlobalScopes()->withTrashed()->where('phone_number_id', $data['phone_number_id'])->first();
+            if ($claimed && $claimed->organization_id !== $org->id) {
+                throw ValidationException::withMessages(['phone_number_id' => 'This number belongs to another workspace. Ask the administrator to transfer it.']);
             }
-        }
-
-        if ($wabaId && $token) {
-            $wabaPairs[$wabaId] = $token;
-        }
-
-        $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
-        $appSecret = env('META_APP_SECRET', '02d9ac2a37b98b8b29a189f835c13027');
-
-        // Auto-discover all other WABAs (like Tuoora) linked to any stored access tokens
-        $uniqueTokens = array_unique(array_filter($channels->pluck('access_token')->toArray()));
-        if ($token) {
-            $uniqueTokens[] = $token;
-        }
-        $uniqueTokens = array_unique(array_filter($uniqueTokens));
-
-        foreach ($uniqueTokens as $tok) {
-            try {
-                $debugResp = Http::get('https://graph.facebook.com/v22.0/debug_token', [
-                    'input_token' => $tok,
-                    'access_token' => "{$appId}|{$appSecret}",
-                ]);
-                if ($debugResp->successful()) {
-                    $scopes = $debugResp->json('data.granular_scopes') ?? [];
-                    foreach ($scopes as $scope) {
-                        if (in_array($scope['scope'] ?? '', ['whatsapp_business_management', 'whatsapp_business_messaging'])) {
-                            foreach (($scope['target_ids'] ?? []) as $targetWaba) {
-                                if (!isset($wabaPairs[$targetWaba])) {
-                                    $wabaPairs[$targetWaba] = $tok;
-                                }
-                            }
-                        }
-                    }
+            $channel = ! empty($data['id']) ? WhatsAppChannel::where('organization_id', $org->id)->findOrFail($data['id']) : $claimed;
+            if ((! $channel || $channel->trashed()) && ! $org->canAddMoreChannels()) {
+                throw ValidationException::withMessages(['message' => 'Your WhatsApp number allowance is full. Contact your administrator.']);
+            }
+            // Confirm actual Cloud API registration/coexistence state, rather than treating an OAuth code as connection proof.
+            $phone = app(MetaApi::class)->phone($data['phone_number_id'], $data['access_token']);
+            $subscription = Http::withToken($data['access_token'])->timeout(15)->post(MetaApi::base().'/'.$data['waba_id'].'/subscribed_apps');
+            if (! $subscription->successful() || $subscription->json('success') !== true) {
+                throw ValidationException::withMessages(['signup' => 'Meta could not enable incoming messages. Check the app’s WhatsApp management permissions and retry.']);
+            }
+            $registrationPin = $channel?->registration_pin;
+            if (($phone['platform_type'] ?? '') !== 'CLOUD_API') {
+                if ($phone['is_on_biz_app'] ?? false) {
+                    throw ValidationException::withMessages(['signup' => 'WhatsApp Business app linking is still pending in Meta. Finish the app confirmation, then reconnect.']);
                 }
-            } catch (\Throwable $e) {}
-        }
-
-        foreach ($wabaPairs as $wid => $tok) {
-            try {
-                $response = Http::withToken($tok)
-                    ->timeout(6)
-                    ->get("https://graph.facebook.com/v22.0/{$wid}/phone_numbers");
-
-                if ($response->successful()) {
-                    $metaPhones = $response->json('data') ?? [];
-                    foreach ($metaPhones as $mp) {
-                        $phoneId = $mp['id'] ?? null;
-                        $displayPhone = $mp['display_phone_number'] ?? '';
-                        $name = $mp['verified_name'] ?? ('WhatsApp ' . substr(preg_replace('/\D/', '', $displayPhone), -4));
-                        $quality = $mp['quality_rating'] ?? 'GREEN';
-
-                        if ($phoneId) {
-                            $existingChan = WhatsAppChannel::where('organization_id', $orgId)->where('phone_number_id', $phoneId)->first();
-                            $org = Organization::find($orgId);
-                            if (!$existingChan && $org && !$org->canAddMoreChannels()) {
-                                continue;
-                            }
-
-                            if ($existingChan) {
-                                $syncUpdates = [
-                                    'waba_id' => $wid,
-                                    'access_token' => $tok,
-                                    'quality_rating' => $quality,
-                                    'status' => 'connected',
-                                ];
-                                if (!empty($displayPhone)) {
-                                    $syncUpdates['phone_number'] = $displayPhone;
-                                }
-                                if (!empty($name) && $name !== 'WhatsApp Channel' && (empty($existingChan->name) || $existingChan->name === 'WhatsApp Channel')) {
-                                    $syncUpdates['name'] = $name;
-                                }
-                                $existingChan->update($syncUpdates);
-                            } else {
-                                WhatsAppChannel::create([
-                                    'organization_id' => $orgId,
-                                    'phone_number_id' => $phoneId,
-                                    'name' => $name,
-                                    'phone_number' => $displayPhone,
-                                    'waba_id' => $wid,
-                                    'access_token' => $tok,
-                                    'quality_rating' => $quality,
-                                    'messaging_limit' => 'TIER_1K',
-                                    'status' => 'connected',
-                                    'webhook_verified_at' => now(),
-                                ]);
-                            }
-                            $added++;
-                        }
-                    }
+                $registrationPin ??= (string) random_int(100000, 999999);
+                $registration = Http::withToken($data['access_token'])->timeout(20)->post(MetaApi::base().'/'.$data['phone_number_id'].'/register', ['messaging_product' => 'whatsapp', 'pin' => $registrationPin]);
+                if (! $registration->successful() || $registration->json('success') !== true) {
+                    throw ValidationException::withMessages(['signup' => 'Meta could not register this phone number for messaging. Complete verification and any required PIN steps in WhatsApp Manager, then retry.']);
                 }
-            } catch (\Throwable $e) {}
-        }
-
-        // Also query Meta Graph API directly for any channel missing its phone number
-        $missingChannels = WhatsAppChannel::where('organization_id', $orgId)
-            ->whereNotNull('phone_number_id')
-            ->where('phone_number_id', 'not like', 'phone_%')
-            ->get();
-        foreach ($missingChannels as $mCh) {
-            $useTok = $mCh->access_token ?: $token ?: $globalTok;
-            if ($useTok && (empty($mCh->phone_number) || str_contains($mCh->phone_number, 'Registered'))) {
-                try {
-                    $pResp = Http::withToken($useTok)->timeout(5)->get("https://graph.facebook.com/v22.0/{$mCh->phone_number_id}", [
-                        'fields' => 'display_phone_number,verified_name,quality_rating',
-                    ]);
-                    if ($pResp->successful()) {
-                        $pData = $pResp->json();
-                        $mCh->update(array_filter([
-                            'phone_number' => $pData['display_phone_number'] ?? null,
-                            'name' => $pData['verified_name'] ?? null,
-                            'quality_rating' => $pData['quality_rating'] ?? 'GREEN',
-                            'access_token' => $useTok,
-                        ]));
-                        $added++;
-                    }
-                } catch (\Throwable $e) {}
             }
-        }
-
-        // Clean up only the old legacy dummy placeholder channel
-        WhatsAppChannel::where('organization_id', $orgId)
-            ->where('phone_number_id', 'phone_9104081291')
-            ->where('waba_id', '168495056789012')
-            ->delete();
-
-        return $added;
-    }
-
-    public function destroy(Request $request, string $id): RedirectResponse
-    {
-        $orgId = $this->resolveTenantId($request);
-        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->first();
-        if ($channel) {
-            $channel->forceDelete();
-        }
-
-        return redirect()->route('whatsapp.connect')->with('success', 'WhatsApp channel disconnected.');
-    }
-
-    public function setDefault(Request $request, string $id): RedirectResponse
-    {
-        $orgId = $this->resolveTenantId($request);
-        WhatsAppChannel::where('organization_id', $orgId)->update(['is_default' => false]);
-        WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->update(['is_default' => true]);
-
-        return back()->with('success', 'Default WhatsApp channel updated.');
-    }
-
-    public function testConnection(Request $request, string $id): JsonResponse
-    {
-        $orgId = $this->resolveTenantId($request);
-        $channel = WhatsAppChannel::where('organization_id', $orgId)->where('id', $id)->firstOrFail();
-
-        // If phone_number_id is a placeholder, try to auto-discover the real 15-digit ID from Meta
-        if (str_starts_with($channel->phone_number_id, 'phone_')) {
-            if ($channel->access_token && $channel->waba_id) {
-                try {
-                    $lookupResp = Http::withToken($channel->access_token)
-                        ->timeout(5)
-                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/phone_numbers");
-                    if ($lookupResp->successful()) {
-                        $phones = $lookupResp->json('data') ?? [];
-                        $clean = preg_replace('/\D/', '', $channel->phone_number);
-                        foreach ($phones as $p) {
-                            $pClean = preg_replace('/\D/', '', $p['display_phone_number'] ?? '');
-                            if (str_ends_with($clean, substr($pClean, -10)) || str_ends_with($pClean, substr($clean, -10))) {
-                                $channel->update([
-                                    'phone_number_id' => $p['id'],
-                                    'quality_rating' => $p['quality_rating'] ?? 'GREEN',
-                                ]);
-                                break;
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {}
+            $restoring = $channel?->trashed() ?? false;
+            if ($restoring) {
+                $channel->restore();
             }
-        }
+            $channel ??= new WhatsAppChannel(['organization_id' => $org->id]);
+            $metadata = $channel->metadata ?? [];
+            $metadata['onboarding'] = ['registered_at' => now()->toIso8601String(), 'webhook_subscribed_at' => now()->toIso8601String(), 'coexistence' => (bool) ($phone['is_on_biz_app'] ?? false)];
+            $channel->fill(['name' => $data['name'] ?? $phone['verified_name'] ?? 'WhatsApp', 'phone_number_id' => $data['phone_number_id'], 'phone_number' => $phone['display_phone_number'] ?? null,
+                'waba_id' => $data['waba_id'], 'access_token' => $data['access_token'], 'registration_pin' => $registrationPin,
+                'quality_rating' => $phone['quality_rating'] ?? 'UNKNOWN', 'status' => 'connected',
+                'app_id' => $data['app_id'] ?? $channel->app_id ?? MetaApi::setting('app_id'),
+                'app_secret' => ! empty($data['app_secret']) ? $data['app_secret'] : $channel->app_secret,
+                'is_default' => $channel->exists && ! $restoring ? $channel->is_default : ! $org->channels()->withoutGlobalScopes()->whereNull('deleted_at')->where('is_default', true)->exists(), 'metadata' => $metadata,
+            ])->save();
+            // Commerce remains available; never create sample products or use another business's catalog during signup.
+            DB::afterCommit(fn () => $this->autoInitializeCommerce($channel));
 
-        // If still a placeholder, explain clearly to the user
-        if (str_starts_with($channel->phone_number_id, 'phone_')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Please enter the real 15-digit Meta Phone Number ID. Click "Edit Credentials" and paste your Phone Number ID from Meta Developer Dashboard (WhatsApp > API Setup).',
-            ], 422);
-        }
+            return $channel;
+        });
+    }
 
+    private function autoInitializeCommerce(WhatsAppChannel $channel): void
+    {
         try {
-            // Attempt 1: Full fields
-            $response = Http::withToken($channel->access_token)
-                ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
-                    'fields' => 'verified_name,code_verification_status,display_phone_number,quality_rating',
-                ]);
-
-            // Attempt 2: Basic fields fallback (if verified_name is not permitted e.g. test numbers or messaging tokens)
-            if (!$response->successful()) {
-                $response = Http::withToken($channel->access_token)
-                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}", [
-                        'fields' => 'display_phone_number,quality_rating',
-                    ]);
+            $response = Http::withToken($channel->access_token)->timeout(6)->post(MetaApi::base().'/'.$channel->phone_number_id.'/whatsapp_commerce_settings', ['is_catalog_visible' => true, 'is_cart_enabled' => true]);
+            if (! $response->successful()) {
+                Log::notice('WhatsApp connected; commerce setup requires attention.', ['channel_id' => $channel->id]);
             }
-
-            // Attempt 3: Bare node query
-            if (!$response->successful()) {
-                $response = Http::withToken($channel->access_token)
-                    ->get("https://graph.facebook.com/v22.0/{$channel->phone_number_id}");
-            }
-
-            if ($response->successful()) {
-                $data = $response->json();
-                $updateData = [
-                    'status' => 'connected',
-                    'quality_rating' => $data['quality_rating'] ?? 'GREEN',
-                    'webhook_verified_at' => now(),
-                ];
-                if (!empty($data['display_phone_number'])) {
-                    $updateData['phone_number'] = $data['display_phone_number'];
-                }
-                $channel->update($updateData);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Connection verified with Meta!',
-                    'data' => $data,
-                ]);
-            }
-
-            // Attempt 4: Query via WABA phone numbers list
-            if ($channel->waba_id) {
-                try {
-                    $wabaResp = Http::withToken($channel->access_token)
-                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}/phone_numbers");
-                    if ($wabaResp->successful()) {
-                        $phones = $wabaResp->json('data') ?? [];
-                        foreach ($phones as $p) {
-                            if (($p['id'] ?? '') === $channel->phone_number_id) {
-                                $channel->update([
-                                    'status' => 'connected',
-                                    'phone_number' => $p['display_phone_number'] ?? $channel->phone_number,
-                                    'quality_rating' => $p['quality_rating'] ?? 'GREEN',
-                                    'webhook_verified_at' => now(),
-                                ]);
-                                return response()->json([
-                                    'success' => true,
-                                    'message' => 'Connection verified with Meta!',
-                                    'data' => $p,
-                                ]);
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {}
-            }
-
-            // Attempt 5: Verify WhatsApp Business Account (WABA) directly
-            if ($channel->waba_id) {
-                try {
-                    $wabaCheck = Http::withToken($channel->access_token)
-                        ->get("https://graph.facebook.com/v22.0/{$channel->waba_id}");
-                    if ($wabaCheck->successful()) {
-                        $channel->update([
-                            'status' => 'connected',
-                            'webhook_verified_at' => now(),
-                        ]);
-                        return response()->json([
-                            'success' => true,
-                            'message' => 'Connection verified with Meta (WABA Account Active)!',
-                            'data' => $wabaCheck->json(),
-                        ]);
-                    }
-                } catch (\Throwable $e) {}
-            }
-
-            // Attempt 6: Verify Access Token validity via /me or /debug_token
-            try {
-                $meCheck = Http::withToken($channel->access_token)
-                    ->get("https://graph.facebook.com/v22.0/me");
-                if ($meCheck->successful()) {
-                    $channel->update([
-                        'status' => 'connected',
-                        'webhook_verified_at' => now(),
-                    ]);
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Connection verified with Meta (Access Token Verified)!',
-                        'data' => $meCheck->json(),
-                    ]);
-                }
-            } catch (\Throwable $e) {}
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Meta API returned error: ' . ($response->json('error.message') ?? 'Unknown error'),
-            ], 422);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not reach Meta API: ' . $e->getMessage(),
-            ], 500);
+        } catch (\Throwable) {
+            Log::notice('WhatsApp connected; commerce setup can be retried.', ['channel_id' => $channel->id]);
         }
     }
 
-    public function sendTestMessage(Request $request): JsonResponse
+    public function syncFromMeta(Request $request)
     {
-        $validated = $request->validate([
-            'phone' => 'required|string',
-            'message' => 'nullable|string',
-            'channel_id' => 'nullable|string',
-            'type' => 'nullable|string|in:text,template',
-            'template_name' => 'nullable|string',
-        ]);
+        $count = 0;
+        $skipped = 0;
+        foreach (WhatsAppChannel::where('status', 'connected')->get()->unique('waba_id') as $source) {
+            foreach (app(MetaApi::class)->numbers($source->waba_id, $source->access_token) as $phone) {
+                if (! $this->org()->canAddMoreChannels() && ! WhatsAppChannel::where('phone_number_id', $phone['id'])->exists()) {
+                    $skipped++;
 
-        $orgId = $this->resolveTenantId($request);
-        
-        $query = WhatsAppChannel::where('organization_id', $orgId);
-        if (!empty($validated['channel_id'])) {
-            $query->where('id', $validated['channel_id']);
-        }
-        $channel = $query->orderBy('is_default', 'desc')->first();
-
-        if (!$channel) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No active WhatsApp channel found in this workspace. Please connect a number first.',
-            ], 422);
-        }
-
-        $cleanPhone = preg_replace('/\D/', '', $validated['phone']);
-        $msgType = $validated['type'] ?? 'template';
-
-        try {
-            if ($msgType === 'template') {
-                $templateName = $validated['template_name'] ?? 'due_reminder_en';
-                $payload = [
-                    'messaging_product' => 'whatsapp',
-                    'to' => $cleanPhone,
-                    'type' => 'template',
-                    'template' => [
-                        'name' => $templateName,
-                        'language' => ['code' => 'en_US'],
-                        'components' => [
-                            [
-                                'type' => 'body',
-                                'parameters' => [
-                                    ['type' => 'text', 'text' => 'Tanvi'],
-                                    ['type' => 'text', 'text' => $channel->name],
-                                    ['type' => 'text', 'text' => 'Rs. 100'],
-                                    ['type' => 'text', 'text' => $channel->phone_number],
-                                ],
-                            ],
-                            [
-                                'type' => 'button',
-                                'sub_type' => 'url',
-                                'index' => '0',
-                                'parameters' => [
-                                    ['type' => 'text', 'text' => 'test-123'],
-                                ],
-                            ],
-                        ],
-                    ],
-                ];
-            } else {
-                $payload = [
-                    'messaging_product' => 'whatsapp',
-                    'recipient_type' => 'individual',
-                    'to' => $cleanPhone,
-                    'type' => 'text',
-                    'text' => [
-                        'preview_url' => false,
-                        'body' => $validated['message'] ?? 'Hello from Sathwara WhatsApp SaaS!',
-                    ],
-                ];
+                    continue;
+                }
+                $this->persist(['phone_number_id' => $phone['id'], 'waba_id' => $source->waba_id, 'access_token' => $source->access_token], $phone);
+                $count++;
             }
-
-            $response = Http::withToken($channel->access_token)
-                ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/messages", $payload);
-
-            $json = $response->json();
-
-            if ($response->successful()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'WhatsApp ' . ($msgType === 'template' ? 'Approved Template' : 'Text Message') . ' successfully delivered via Meta to ' . $cleanPhone,
-                    'channel' => $channel->name,
-                    'from' => $channel->phone_number,
-                    'meta_response' => $json,
-                ]);
-            }
-
-            return response()->json([
-                'success' => false,
-                'message' => $json['error']['message'] ?? 'Meta API error',
-                'meta_response' => $json,
-            ], 422);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not send WhatsApp message: ' . $e->getMessage(),
-            ], 500);
         }
+        $message = "Synced {$count} numbers. {$skipped} skipped because of your allowance.";
+
+        return $request->expectsJson() ? response()->json(['success' => true, 'message' => $message, 'count' => $count]) : back()->with('success', $message);
+    }
+
+    public function syncChannel(Request $request, string $id)
+    {
+        $channel = WhatsAppChannel::findOrFail($id);
+        $phone = app(MetaApi::class)->phone($channel->phone_number_id, $channel->access_token);
+        $this->persist(['id' => $channel->id, 'phone_number_id' => $channel->phone_number_id, 'waba_id' => $channel->waba_id, 'access_token' => $channel->access_token], $phone);
+
+        return back()->with('success', 'Channel synchronized with Meta.');
+    }
+
+    public function testConnection(Request $request, string $id)
+    {
+        $channel = WhatsAppChannel::findOrFail($id);
+        app(MetaApi::class)->phone($channel->phone_number_id, $channel->access_token);
+
+        return response()->json(['success' => true, 'message' => 'Meta verified the number credentials.']);
+    }
+
+    public function destroy(Request $request, string $id)
+    {
+        DB::transaction(function () use ($id) {
+            Organization::whereKey($this->org()->id)->lockForUpdate()->firstOrFail();
+            $channel = WhatsAppChannel::findOrFail($id);
+            $default = $channel->is_default;
+            $channel->update(['status' => 'disconnected', 'is_default' => false]);
+            $channel->delete();
+            if ($default) {
+                WhatsAppChannel::oldest()->first()?->update(['is_default' => true]);
+            }
+        });
+
+        return redirect('/whatsapp/connect')->with('success', 'WhatsApp number disconnected. Message history retained.');
+    }
+
+    public function setDefault(Request $request, string $id)
+    {
+        DB::transaction(function () use ($id) {
+            Organization::whereKey($this->org()->id)->lockForUpdate()->firstOrFail();
+            $channel = WhatsAppChannel::findOrFail($id);
+            WhatsAppChannel::where('organization_id', $this->org()->id)->update(['is_default' => false]);
+            $channel->update(['is_default' => true]);
+        });
+
+        return back()->with('success', 'Default number updated. Existing conversations keep their sender number.');
     }
 }

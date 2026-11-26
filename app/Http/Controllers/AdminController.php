@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillingInvoice;
+use App\Models\ReferralReward;
 use App\Models\User;
+use App\Models\Wallet;
+use App\Models\WalletTransaction;
 use App\Modules\Foundation\Models\Organization;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\SystemHealthService;
 use App\Shared\TenantContext;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\RedirectResponse;
@@ -22,35 +27,8 @@ use Inertia\Response;
 
 class AdminController extends Controller
 {
-    private function ensureSchemaReady(): void
-    {
-        try {
-            if (!Schema::hasColumn('organizations', 'max_channels')) {
-                Schema::table('organizations', function (Blueprint $table) {
-                    $table->integer('max_channels')->default(1)->after('subscription_plan');
-                });
-                DB::table('organizations')
-                    ->where('slug', 'sathwara-infotech')
-                    ->orWhere('name', 'like', '%Sathwara%')
-                    ->update(['max_channels' => 20]);
-            }
-
-            if (!Schema::hasColumn('users', 'is_super_admin')) {
-                Schema::table('users', function (Blueprint $table) {
-                    $table->boolean('is_super_admin')->default(false)->after('email');
-                });
-                DB::table('users')
-                    ->where('email', 'like', '%sathwara%')
-                    ->orWhere('email', 'like', '%malaviya%')
-                    ->orWhere('id', 1)
-                    ->update(['is_super_admin' => true]);
-            }
-        } catch (\Throwable $e) {}
-    }
-
     private function ensureSuperAdmin(Request $request): void
     {
-        $this->ensureSchemaReady();
 
         $user = $request->user();
         if (!$user) {
@@ -67,11 +45,8 @@ class AdminController extends Controller
      */
     public function showLogin(Request $request): Response|RedirectResponse
     {
-        $this->ensureSchemaReady();
 
-        if ($request->user() && $request->user()->isSuperAdmin()) {
-            return redirect()->route('admin.dashboard');
-        }
+        if ($request->user()) { return redirect(\App\Services\PanelNavigation::home($request->user())); }
 
         return Inertia::render('admin/login', [
             'status' => session('status'),
@@ -81,41 +56,6 @@ class AdminController extends Controller
     /**
      * Process Super Admin Login
      */
-    public function login(Request $request): RedirectResponse
-    {
-        $this->ensureSchemaReady();
-
-        $credentials = $request->validate([
-            'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string'],
-        ]);
-
-        $remember = $request->boolean('remember');
-
-        if (!Auth::attempt($credentials, $remember)) {
-            return back()->withErrors([
-                'email' => 'Invalid admin credentials or password.',
-            ])->onlyInput('email');
-        }
-
-        $user = Auth::user();
-
-        // Strictly verify that the user is a Super Administrator
-        if (!$user->isSuperAdmin()) {
-            Auth::logout();
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return back()->withErrors([
-                'email' => 'Access Denied: This account does not have Super Administrator privileges.',
-            ])->onlyInput('email');
-        }
-
-        $request->session()->regenerate();
-
-        return redirect()->intended(route('admin.dashboard'));
-    }
-
     /**
      * Super Admin Logout
      */
@@ -125,13 +65,13 @@ class AdminController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect()->route('admin.login')->with('success', 'You have been safely signed out from the Super Admin portal.');
+        return redirect($request->is('agent/logout') ? '/agent/login' : '/admin/login')->with('success', 'You have been signed out.');
     }
 
     /**
      * Super Admin Overview Dashboard
      */
-    public function dashboard(Request $request): Response
+    public function dashboard(Request $request, SystemHealthService $healthService): Response
     {
         $this->ensureSuperAdmin($request);
 
@@ -151,6 +91,66 @@ class AdminController extends Controller
                 $q->where('max_channels', '>', 1)->orWhere('max_channels', '<=', 0);
             })->count()
             : Organization::all()->filter(fn ($o) => $o->getMaxChannels() > 1 || $o->getMaxChannels() <= 0)->count();
+
+        // Financial Analytics
+        $subscriptionRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->sum('amount_paise')
+            : 0;
+
+        $rechargeRevenuePaise = Schema::hasTable('wallet_transactions')
+            ? (int) WalletTransaction::where('type', 'recharge')->where('amount_paise', '>', 0)->sum('amount_paise')
+            : 0;
+
+        $totalRevenuePaise = $subscriptionRevenuePaise + $rechargeRevenuePaise;
+
+        $monthlySubscriptionRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->where('created_at', '>=', now()->startOfMonth())->sum('amount_paise')
+            : 0;
+
+        $monthlyRechargeRevenuePaise = Schema::hasTable('wallet_transactions')
+            ? (int) WalletTransaction::where('type', 'recharge')->where('amount_paise', '>', 0)->where('created_at', '>=', now()->startOfMonth())->sum('amount_paise')
+            : 0;
+
+        $monthlyTotalRevenuePaise = $monthlySubscriptionRevenuePaise + $monthlyRechargeRevenuePaise;
+
+        $totalWalletPaidPaise = Schema::hasTable('wallets')
+            ? (int) Wallet::sum('paid_balance_paise')
+            : 0;
+
+        $totalWalletPromoPaise = Schema::hasTable('wallets')
+            ? (int) Wallet::sum('promotional_balance_paise')
+            : 0;
+
+        $activeSubscriptions = Organization::where('status', 'active')->count();
+        $expiredSubscriptions = Organization::where('status', 'expired')->count();
+
+        // Global Messaging Delivery Performance
+        $totalOutbound = Message::where('direction', 'outbound')->count();
+        $totalInbound = Message::where('direction', 'inbound')->count();
+        $totalDelivered = Message::where('direction', 'outbound')->whereIn('status', ['delivered', 'read'])->count();
+        $totalRead = Message::where('direction', 'outbound')->where('status', 'read')->count();
+        $totalFailed = Message::where('direction', 'outbound')->where('status', 'failed')->count();
+
+        $deliveryRate = $totalOutbound > 0 ? round(($totalDelivered / $totalOutbound) * 100, 1) : 100.0;
+        $readRate = $totalDelivered > 0 ? round(($totalRead / $totalDelivered) * 100, 1) : 0.0;
+        $failureRate = $totalOutbound > 0 ? round(($totalFailed / $totalOutbound) * 100, 1) : 0.0;
+
+        // WhatsApp Channel Health & Quality Breakdown
+        $channelsGreen = WhatsAppChannel::where('quality_rating', 'GREEN')->count();
+        $channelsYellow = WhatsAppChannel::where('quality_rating', 'YELLOW')->count();
+        $channelsRed = WhatsAppChannel::where('quality_rating', 'RED')->count();
+        $channelsConnected = WhatsAppChannel::where('status', 'connected')->count();
+        $channelsDisconnected = WhatsAppChannel::where('status', '!=', 'connected')->count();
+
+        // B2B Reseller Partner Network Analytics
+        $totalB2BAgents = User::where('is_b2b_agent', true)->count();
+        $managedWorkspaces = Organization::whereNotNull('b2b_agent_id')->count();
+        $referralRewardsPaise = Schema::hasTable('referral_rewards')
+            ? (int) ReferralReward::where('status', 'rewarded')->sum('reward_amount_paise')
+            : 0;
+
+        // Automated Bug Detection Diagnostics Scan
+        $diagnostics = $healthService->diagnose();
 
         $recentOrganizations = Organization::withCount('channels')
             ->latest()
@@ -192,8 +192,52 @@ class AdminController extends Controller
                 'singleNumberClients' => $singleNumberClients,
                 'multiNumberClients' => $multiNumberClients,
             ],
+            'financials' => [
+                'total_revenue_formatted' => '₹' . number_format($totalRevenuePaise / 100, 2),
+                'subscription_revenue_formatted' => '₹' . number_format($subscriptionRevenuePaise / 100, 2),
+                'recharge_revenue_formatted' => '₹' . number_format($rechargeRevenuePaise / 100, 2),
+                'monthly_revenue_formatted' => '₹' . number_format($monthlyTotalRevenuePaise / 100, 2),
+                'total_wallet_paid_formatted' => '₹' . number_format($totalWalletPaidPaise / 100, 2),
+                'total_wallet_promo_formatted' => '₹' . number_format($totalWalletPromoPaise / 100, 2),
+                'active_subscriptions' => $activeSubscriptions,
+                'expired_subscriptions' => $expiredSubscriptions,
+            ],
+            'messagingAnalytics' => [
+                'total_outbound' => $totalOutbound,
+                'total_inbound' => $totalInbound,
+                'total_delivered' => $totalDelivered,
+                'total_read' => $totalRead,
+                'total_failed' => $totalFailed,
+                'delivery_rate' => $deliveryRate,
+                'read_rate' => $readRate,
+                'failure_rate' => $failureRate,
+            ],
+            'channelHealth' => [
+                'green' => $channelsGreen,
+                'yellow' => $channelsYellow,
+                'red' => $channelsRed,
+                'connected' => $channelsConnected,
+                'disconnected' => $channelsDisconnected,
+            ],
+            'partnerMetrics' => [
+                'total_b2b_agents' => $totalB2BAgents,
+                'managed_workspaces' => $managedWorkspaces,
+                'referral_rewards_paid_formatted' => '₹' . number_format($referralRewardsPaise / 100, 2),
+            ],
+            'diagnostics' => $diagnostics,
             'recentOrganizations' => $recentOrganizations,
             'recentChannels' => $recentChannels,
+            'pricingSettings' => [
+                'subscription_annual_price_paise' => (int) \App\Models\PlatformSetting::read('subscription_annual_price_paise', 999900),
+                'subscription_validity_days' => (int) \App\Models\PlatformSetting::read('subscription_validity_days', 365),
+                'welcome_bonus_paise' => (int) \App\Models\PlatformSetting::read('welcome_bonus_paise', 50000),
+                'referral_reward_paise' => (int) \App\Models\PlatformSetting::read('referral_reward_paise', 50000),
+                'campaign_max_contacts' => (int) \App\Models\PlatformSetting::read('campaign_max_contacts', 2000),
+                'min_message_purchase_count' => (int) \App\Models\PlatformSetting::read('min_message_purchase_count', 200),
+                'meta_rate_marketing_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_marketing_paise', 88),
+                'meta_rate_utility_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_utility_paise', 14),
+                'meta_rate_authentication_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_authentication_paise', 14),
+            ],
         ]);
     }
 
@@ -237,11 +281,23 @@ class AdminController extends Controller
                         'name' => $org->users->first()->name,
                         'email' => $org->users->first()->email,
                     ] : null,
+                    'b2b_agent' => $org->b2bAgent ? [
+                        'id' => $org->b2bAgent->id,
+                        'name' => $org->b2bAgent->name,
+                        'email' => $org->b2bAgent->email,
+                    ] : null,
+                    'b2b_agent_id' => $org->b2b_agent_id,
+                    'subscription_expires_at' => $org->subscription_expires_at?->format('d M Y'),
+                    'subscription_price_paise' => $org->subscription_price_paise,
+                    'wallet' => app(\App\Services\WalletService::class)->getBalances($org),
                 ];
             });
 
+        $b2bAgents = User::where('is_b2b_agent', true)->get(['id', 'name', 'email']);
+
         return Inertia::render('admin/organizations', [
             'organizations' => $organizations,
+            'b2bAgents' => $b2bAgents,
             'currentOrgId' => TenantContext::id() ?? $request->user()?->current_organization_id,
         ]);
     }
@@ -257,6 +313,7 @@ class AdminController extends Controller
             'max_channels' => 'required|integer|min:0', // 0 = unlimited, 1 = single, 2+ = multi
             'subscription_plan' => 'nullable|string|max:50',
             'status' => 'nullable|string|in:active,suspended',
+            'b2b_agent_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $org = Organization::findOrFail($id);
@@ -264,6 +321,10 @@ class AdminController extends Controller
             'subscription_plan' => $validated['subscription_plan'] ?? $org->subscription_plan,
             'status' => $validated['status'] ?? $org->status,
         ];
+
+        if (array_key_exists('b2b_agent_id', $validated)) {
+            $data['b2b_agent_id'] = $validated['b2b_agent_id'];
+        }
 
         if (Schema::hasColumn('organizations', 'max_channels')) {
             $data['max_channels'] = (int) $validated['max_channels'];
@@ -293,10 +354,46 @@ class AdminController extends Controller
         $user = $request->user();
 
         if ($user) {
+            // Ensure user has access and is attached as Owner if not already attached
+            if (! $user->organizations()->where('organizations.id', $org->id)->exists()) {
+                $user->organizations()->attach($org->id, ['role' => 'Owner']);
+            }
             $user->switchOrganization($org);
+            $request->session()->put('support_workspace_id', $org->id);
+            $user->update(['current_organization_id' => $org->id]);
+            $request->session()->put('current_organization_id', $org->id);
+            \App\Shared\TenantContext::set($org);
         }
 
-        return redirect()->route('dashboard')->with('success', "Switched workspace to {$org->name}");
+        return redirect('/dashboard')->with('success', "Opened workspace: {$org->name}");
+    }
+
+    /**
+     * Credit Wallet Balance to any workspace manually
+     */
+    public function creditWallet(Request $request, string $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+        $org = Organization::findOrFail($id);
+        $validated = $request->validate([
+            'amount_rupees' => 'required|numeric|min:0.01|max:50000',
+            'type' => 'nullable|string|in:promotional,paid',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $amountPaise = (int) round($validated['amount_rupees'] * 100);
+        $balanceType = $validated['type'] ?? 'promotional';
+        $note = $validated['note'] ?: "Admin manual credit of ₹{$validated['amount_rupees']}";
+
+        app(\App\Services\WalletService::class)->credit(
+            org: $org,
+            amountPaise: $amountPaise,
+            type: 'manual_credit',
+            balanceType: $balanceType,
+            description: $note
+        );
+
+        return back()->with('success', "Credited ₹{$validated['amount_rupees']} to {$org->name}'s wallet successfully.");
     }
 
     /**
@@ -346,6 +443,8 @@ class AdminController extends Controller
                 'name' => $u->name,
                 'email' => $u->email,
                 'is_super_admin' => (bool) $u->is_super_admin,
+                'is_b2b_agent' => (bool) $u->is_b2b_agent,
+                'referral_code' => $u->referral_code,
                 'organizations' => $u->organizations->map(fn ($o) => [
                     'id' => (string) $o->id,
                     'name' => $o->name,
@@ -369,7 +468,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:6'],
+            'password' => ['required', 'string', 'min:12'],
             'workspace_name' => ['nullable', 'string', 'max:255'],
             'max_channels' => ['nullable', 'integer', 'min:0'],
             'is_super_admin' => ['nullable', 'boolean'],
@@ -425,7 +524,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $targetUser->id],
-            'password' => ['nullable', 'string', 'min:6'],
+            'password' => ['nullable', 'string', 'min:12'],
             'is_super_admin' => ['nullable', 'boolean'],
         ]);
 
@@ -440,12 +539,8 @@ class AdminController extends Controller
         }
 
         if (Schema::hasColumn('users', 'is_super_admin')) {
-            // Prevent demoting primary owner ID 1
-            if ($targetUser->id === 1) {
-                $updateData['is_super_admin'] = true;
-            } else {
-                $updateData['is_super_admin'] = (bool) $request->input('is_super_admin', false);
-            }
+            abort_if($targetUser->is_super_admin && ! $request->boolean('is_super_admin') && User::where('is_super_admin', true)->count() <= 1, 422, 'Keep at least one super administrator.');
+            $updateData['is_super_admin'] = $request->boolean('is_super_admin');
         }
 
         $targetUser->update($updateData);
@@ -463,7 +558,7 @@ class AdminController extends Controller
         $targetUser = User::findOrFail($id);
 
         // Protect primary super admin ID 1
-        if ($targetUser->id === 1) {
+        if ($targetUser->is_super_admin && User::where('is_super_admin', true)->count() <= 1) {
             return back()->with('error', 'Primary Super Administrator (ID 1) cannot be deleted.');
         }
 
@@ -524,7 +619,7 @@ class AdminController extends Controller
         $targetUser = User::findOrFail($id);
 
         // Protect primary owner from being demoted
-        if ($targetUser->id === 1 && $targetUser->is_super_admin) {
+        if ($targetUser->is_super_admin && User::where('is_super_admin', true)->count() <= 1) {
             return back()->with('error', 'Primary Super Administrator (ID 1) cannot be revoked.');
         }
 
@@ -539,97 +634,112 @@ class AdminController extends Controller
     }
 
     /**
+     * Toggle B2B Agent & Partner Role for a User
+     */
+    public function toggleAgent(Request $request, int $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $targetUser = User::findOrFail($id);
+        $targetUser->update([
+            'is_b2b_agent' => ! $targetUser->is_b2b_agent,
+        ]);
+
+        $status = $targetUser->is_b2b_agent ? 'granted' : 'revoked';
+        return back()->with('success', "B2B Agent & Partner access {$status} for {$targetUser->name} ({$targetUser->email}).");
+    }
+
+    /**
      * Global Platform & Meta Cloud API Settings Overview
      */
     public function settings(Request $request): Response
     {
         $this->ensureSuperAdmin($request);
-
-        $appId = Cache::get('meta_app_id') ?: env('META_APP_ID', '1079349601748656');
-        $configId = Cache::get('meta_config_id') ?: env('META_CONFIG_ID', '1835889181059188');
-        $permanentToken = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
-        $verifyToken = Cache::get('meta_verify_token') ?: env('META_VERIFY_TOKEN') ?: config('services.meta.verify_token', '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b');
-
-        return Inertia::render('admin/settings', [
-            'settings' => [
-                'app_id' => $appId,
-                'config_id' => $configId,
-                'permanent_token' => $permanentToken,
-                'webhook_url' => url('/webhooks/meta'),
-                'verify_token' => $verifyToken,
-                'graph_version' => 'v22.0',
-                'php_version' => PHP_VERSION,
-                'laravel_version' => app()->version(),
-                'environment' => config('app.env'),
-            ],
-        ]);
+        return Inertia::render('admin/settings', ['settings' => [
+            'app_id' => \App\Services\MetaApi::setting('app_id') ?? '',
+            'config_id' => \App\Services\MetaApi::setting('config_id') ?? '',
+            'permanent_token' => '',
+            'verify_token' => \App\Services\MetaApi::setting('verify_token') ?? '',
+            'webhook_url' => url('/webhooks/meta'),
+            'graph_version' => config('release.meta.graph_version'),
+            'php_version' => PHP_VERSION, 'laravel_version' => app()->version(), 'environment' => config('app.env'),
+            // Subscription & Financial Configuration
+            'subscription_annual_price_paise' => (int) \App\Models\PlatformSetting::read('subscription_annual_price_paise', 999900),
+            'subscription_validity_days' => (int) \App\Models\PlatformSetting::read('subscription_validity_days', 365),
+            'welcome_bonus_paise' => (int) \App\Models\PlatformSetting::read('welcome_bonus_paise', 50000),
+            'referral_reward_paise' => (int) \App\Models\PlatformSetting::read('referral_reward_paise', 50000),
+            'campaign_max_contacts' => (int) \App\Models\PlatformSetting::read('campaign_max_contacts', 2000),
+            'min_message_purchase_count' => (int) \App\Models\PlatformSetting::read('min_message_purchase_count', 200),
+            'meta_rate_marketing_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_marketing_paise', 88),
+            'meta_rate_utility_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_utility_paise', 14),
+            'meta_rate_authentication_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_authentication_paise', 14),
+        ]]);
     }
 
-    /**
-     * Save Meta API Credentials & Webhook Settings
-     */
     public function updateSettings(Request $request): RedirectResponse
     {
         $this->ensureSuperAdmin($request);
-
-        $validated = $request->validate([
-            'app_id' => 'required|string|max:100',
-            'config_id' => 'required|string|max:100',
-            'verify_token' => 'required|string|max:255',
-            'permanent_token' => 'nullable|string',
+        $data = $request->validate([
+            'app_id' => 'nullable|string|max:100', 'config_id' => 'nullable|string|max:100',
+            'verify_token' => 'nullable|string|min:16|max:255',
+            'app_secret' => 'nullable|string|max:1000',
+            'openai_api_key' => 'nullable|string|max:1000',
+            'razorpay_key_id' => 'nullable|string|max:255', 'razorpay_key_secret' => 'nullable|string|max:1000', 'razorpay_webhook_secret' => 'nullable|string|max:1000',
+            // Financial & Subscription settings
+            'subscription_annual_price_paise' => 'nullable|integer|min:0',
+            'subscription_validity_days' => 'nullable|integer|min:1',
+            'welcome_bonus_paise' => 'nullable|integer|min:0',
+            'referral_reward_paise' => 'nullable|integer|min:0',
+            'campaign_max_contacts' => 'nullable|integer|min:10',
+            'min_message_purchase_count' => 'nullable|integer|min:1',
+            'meta_rate_marketing_paise' => 'nullable|integer|min:0',
+            'meta_rate_utility_paise' => 'nullable|integer|min:0',
+            'meta_rate_authentication_paise' => 'nullable|integer|min:0',
         ]);
+        foreach ($data as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $isSystemKey = in_array($key, [
+                    'openai_api_key',
+                    'subscription_annual_price_paise',
+                    'subscription_validity_days',
+                    'welcome_bonus_paise',
+                    'referral_reward_paise',
+                    'campaign_max_contacts',
+                    'min_message_purchase_count',
+                    'meta_rate_marketing_paise',
+                    'meta_rate_utility_paise',
+                    'meta_rate_authentication_paise',
+                ]) || str_starts_with($key, 'razorpay_');
 
-        $appId = trim($validated['app_id']);
-        $configId = trim($validated['config_id']);
-        $verifyToken = trim($validated['verify_token']);
-        $permanentToken = trim($validated['permanent_token'] ?? '');
-
-        // 1. Store reliably in persistent cache / database
-        Cache::forever('meta_app_id', $appId);
-        Cache::forever('meta_config_id', $configId);
-        Cache::forever('meta_verify_token', $verifyToken);
-        if ($permanentToken !== '') {
-            Cache::forever('meta_whatsapp_token', $permanentToken);
-        }
-
-        // 2. Safely attempt to write to .env (ignore permission errors on Linux server)
-        try {
-            $envPath = base_path('.env');
-            if (file_exists($envPath) && is_writable($envPath)) {
-                $envContent = file_get_contents($envPath);
-
-                $replacements = [
-                    'META_APP_ID' => $appId,
-                    'META_CONFIG_ID' => $configId,
-                    'META_VERIFY_TOKEN' => $verifyToken,
-                ];
-                if ($permanentToken !== '') {
-                    $replacements['META_WHATSAPP_TOKEN'] = $permanentToken;
-                }
-
-                foreach ($replacements as $key => $value) {
-                    if (preg_match("/^{$key}=.*/m", $envContent)) {
-                        $envContent = preg_replace("/^{$key}=.*/m", "{$key}={$value}", $envContent);
-                    } else {
-                        $envContent .= "\n{$key}={$value}";
-                    }
-                }
-
-                file_put_contents($envPath, $envContent);
+                \App\Models\PlatformSetting::write($isSystemKey ? $key : 'meta_'.$key, (string) $value);
             }
-        } catch (\Throwable $e) {
-            // Non-critical if .env is read-only
         }
+        \App\Modules\Foundation\Models\AuditLog::record('platform.settings.updated');
+        return back()->with('success', 'Platform settings saved successfully.');
+    }
 
-        // 3. If permanent token provided, dynamically sync details from Meta Graph API for all connected channels!
-        $tokenToUse = $permanentToken ?: Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
+    /**
+     * Run Automated Bug Fixes across all workspaces and channels
+     */
+    public function diagnosticsReport(Request $request, SystemHealthService $healthService)
+    {
+        $this->ensureSuperAdmin($request);
+        return response()->json($healthService->diagnose());
+    }
+
+    public function autoFixDiagnostics(Request $request, SystemHealthService $healthService)
+    {
+        $this->ensureSuperAdmin($request);
+
+        $result = $healthService->autoFix();
+
+        // Dynamically sync details from Meta Graph API for all connected channels if token available
+        $tokenToUse = Cache::get('meta_whatsapp_token') ?: env('META_WHATSAPP_TOKEN', '');
         if ($tokenToUse) {
             $channels = WhatsAppChannel::withoutGlobalScopes()->get();
             foreach ($channels as $ch) {
-                // Update access token on channels if missing
-                if (empty($ch->access_token)) {
-                    $ch->update(['access_token' => $tokenToUse]);
-                }
+                // Always sync the latest access token to all channels
+                $ch->update(['access_token' => $tokenToUse]);
 
                 // If channel phone_number is missing or 'Registered', fetch from Meta Graph API!
                 if (empty($ch->phone_number) || str_contains($ch->phone_number, 'Registered')) {
@@ -653,6 +763,360 @@ class AdminController extends Controller
             }
         }
 
-        return redirect()->route('admin.settings')->with('success', 'Meta Cloud API settings updated and saved successfully.');
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'] ?? 'Auto bug fix completed successfully.',
+                'diagnostics' => $healthService->diagnose(),
+            ]);
+        }
+
+        return back()->with('success', $result['message'] ?? 'Auto bug fix completed successfully.');
+    }
+
+    /**
+     * Subscriptions Management & Client Plan Tracking
+     */
+    public function subscriptions(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $now = now();
+        $thirtyDaysFromNow = now()->addDays(30);
+
+        $organizations = Organization::withCount(['channels', 'users'])
+            ->with(['users:id,name,email'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($org) use ($now, $thirtyDaysFromNow) {
+                $expiry = $org->subscription_expires_at;
+                $daysRemaining = null;
+                $isExpired = false;
+                $isExpiringSoon = false;
+
+                if ($expiry) {
+                    $daysRemaining = (int) $now->diffInDays($expiry, false);
+                    $isExpired = $daysRemaining < 0;
+                    $isExpiringSoon = !$isExpired && $daysRemaining <= 30;
+                }
+
+                $invoices = Schema::hasTable('billing_invoices')
+                    ? BillingInvoice::where('organization_id', $org->id)
+                        ->latest()
+                        ->get()
+                        ->map(fn ($inv) => [
+                            'id' => (string) $inv->id,
+                            'plan' => $inv->plan,
+                            'amount_paise' => (int) $inv->amount_paise,
+                            'amount_formatted' => '₹' . number_format($inv->amount_paise / 100, 2),
+                            'status' => $inv->status,
+                            'provider_payment_id' => $inv->provider_payment_id,
+                            'paid_at' => $inv->paid_at ? $inv->paid_at->format('d M Y, H:i') : null,
+                            'created_at' => $inv->created_at ? $inv->created_at->format('d M Y') : '—',
+                        ])
+                    : collect();
+
+                return [
+                    'id' => (string) $org->id,
+                    'name' => $org->name,
+                    'slug' => $org->slug,
+                    'billing_email' => $org->billing_email,
+                    'subscription_plan' => $org->subscription_plan ?: 'starter',
+                    'subscription_price_paise' => (int) ($org->subscription_price_paise ?: 999900),
+                    'subscription_price_formatted' => '₹' . number_format(((int) ($org->subscription_price_paise ?: 999900)) / 100, 2),
+                    'status' => $org->status ?: 'active',
+                    'subscription_expires_at' => $expiry ? $expiry->format('Y-m-d') : null,
+                    'subscription_expires_at_formatted' => $expiry ? $expiry->format('d M Y') : 'Never (Lifetime)',
+                    'days_remaining' => $daysRemaining,
+                    'is_expired' => $isExpired,
+                    'is_expiring_soon' => $isExpiringSoon,
+                    'channels_count' => (int) $org->channels_count,
+                    'max_channels' => $org->getMaxChannels(),
+                    'owner' => $org->users->first() ? [
+                        'id' => $org->users->first()->id,
+                        'name' => $org->users->first()->name,
+                        'email' => $org->users->first()->email,
+                    ] : null,
+                    'b2b_agent' => $org->b2bAgent ? [
+                        'id' => $org->b2bAgent->id,
+                        'name' => $org->b2bAgent->name,
+                        'email' => $org->b2bAgent->email,
+                    ] : null,
+                    'invoices' => $invoices,
+                    'created_at' => $org->created_at ? $org->created_at->format('d M Y') : '—',
+                ];
+            });
+
+        $totalOrgs = $organizations->count();
+        $activeCount = $organizations->where('status', 'active')->where('is_expired', false)->count();
+        $expiredCount = $organizations->filter(fn ($o) => $o['status'] === 'expired' || $o['is_expired'])->count();
+        $expiringSoonCount = $organizations->where('is_expiring_soon', true)->count();
+
+        $totalRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->sum('amount_paise')
+            : 0;
+
+        $monthlyRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->where('created_at', '>=', now()->startOfMonth())->sum('amount_paise')
+            : 0;
+
+        return Inertia::render('admin/subscriptions', [
+            'organizations' => $organizations,
+            'stats' => [
+                'total_organizations' => $totalOrgs,
+                'active_subscriptions' => $activeCount,
+                'expired_subscriptions' => $expiredCount,
+                'expiring_soon' => $expiringSoonCount,
+                'total_revenue_formatted' => '₹' . number_format($totalRevenuePaise / 100, 2),
+                'monthly_revenue_formatted' => '₹' . number_format($monthlyRevenuePaise / 100, 2),
+            ],
+        ]);
+    }
+
+    /**
+     * Super Admin: Update or Extend Client Subscription
+     */
+    public function updateSubscription(Request $request, string $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'subscription_plan' => 'required|string|max:50',
+            'status' => 'required|string|in:active,expired,suspended',
+            'subscription_expires_at' => 'nullable|date',
+            'subscription_price_rupees' => 'nullable|numeric|min:0',
+            'generate_invoice' => 'nullable|boolean',
+        ]);
+
+        $org = Organization::findOrFail($id);
+
+        $pricePaise = isset($validated['subscription_price_rupees'])
+            ? (int) round($validated['subscription_price_rupees'] * 100)
+            : ($org->subscription_price_paise ?: 999900);
+
+        $org->update([
+            'subscription_plan' => $validated['subscription_plan'],
+            'status' => $validated['status'],
+            'subscription_expires_at' => $validated['subscription_expires_at'] ? \Carbon\Carbon::parse($validated['subscription_expires_at']) : null,
+            'subscription_price_paise' => $pricePaise,
+        ]);
+
+        if (!empty($validated['generate_invoice']) && Schema::hasTable('billing_invoices')) {
+            BillingInvoice::create([
+                'organization_id' => $org->id,
+                'plan' => $validated['subscription_plan'],
+                'amount_paise' => $pricePaise,
+                'currency' => 'INR',
+                'status' => 'paid',
+                'provider_order_id' => 'ADMIN_MANUAL_' . strtoupper(Str::random(8)),
+                'provider_payment_id' => 'PAY_MANUAL_' . strtoupper(Str::random(10)),
+                'paid_at' => now(),
+                'period_ends_at' => $validated['subscription_expires_at'] ? \Carbon\Carbon::parse($validated['subscription_expires_at']) : now()->addYear(),
+            ]);
+        }
+
+        return back()->with('success', "Subscription updated successfully for {$org->name}.");
+    }
+
+    /**
+     * Super Admin: Wallets Management & Manual Credits Control
+     */
+    public function wallets(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $walletService = app(\App\Services\WalletService::class);
+
+        $organizations = Organization::with(['users:id,name,email'])
+            ->orderBy('name', 'asc')
+            ->get()
+            ->map(function ($org) use ($walletService) {
+                $balances = $walletService->getBalances($org);
+                $lastTx = WalletTransaction::where('organization_id', $org->id)->latest()->first();
+
+                return [
+                    'id' => (string) $org->id,
+                    'name' => $org->name,
+                    'slug' => $org->slug,
+                    'owner' => $org->users->first() ? [
+                        'id' => $org->users->first()->id,
+                        'name' => $org->users->first()->name,
+                        'email' => $org->users->first()->email,
+                    ] : null,
+                    'paid_balance_paise' => $balances['paid_balance_paise'],
+                    'promotional_balance_paise' => $balances['promotional_balance_paise'],
+                    'total_balance_paise' => $balances['total_balance_paise'],
+                    'paid_balance_formatted' => $balances['paid_balance_formatted'],
+                    'promotional_balance_formatted' => $balances['promotional_balance_formatted'],
+                    'total_balance_formatted' => $balances['total_balance_formatted'],
+                    'last_transaction_at' => $lastTx ? $lastTx->created_at->format('d M Y, H:i') : 'Never',
+                ];
+            });
+
+        // Global Transaction History (Latest 50 transactions across all organizations)
+        $transactions = WalletTransaction::with('organization:id,name,slug')
+            ->latest()
+            ->take(60)
+            ->get()
+            ->map(fn ($tx) => [
+                'id' => (string) $tx->id,
+                'organization_id' => (string) $tx->organization_id,
+                'organization_name' => $tx->organization?->name ?: 'System / Unknown',
+                'type' => $tx->type,
+                'balance_type' => $tx->balance_type,
+                'amount_paise' => (int) $tx->amount_paise,
+                'amount_formatted' => '₹' . number_format($tx->amount_paise / 100, 2),
+                'description' => $tx->description,
+                'reference_id' => $tx->reference_id,
+                'created_at' => $tx->created_at ? $tx->created_at->format('d M Y, H:i') : '—',
+            ]);
+
+        $totalPaidPaise = (int) Wallet::sum('paid_balance_paise');
+        $totalPromoPaise = (int) Wallet::sum('promotional_balance_paise');
+        $totalRechargePaise = (int) WalletTransaction::where('type', 'recharge')->where('amount_paise', '>', 0)->sum('amount_paise');
+        $totalManualCreditsPaise = (int) WalletTransaction::where('type', 'manual_credit')->where('amount_paise', '>', 0)->sum('amount_paise');
+
+        return Inertia::render('admin/wallets', [
+            'organizations' => $organizations,
+            'transactions' => $transactions,
+            'stats' => [
+                'total_paid_formatted' => '₹' . number_format($totalPaidPaise / 100, 2),
+                'total_promo_formatted' => '₹' . number_format($totalPromoPaise / 100, 2),
+                'total_platform_balance_formatted' => '₹' . number_format(($totalPaidPaise + $totalPromoPaise) / 100, 2),
+                'total_recharges_formatted' => '₹' . number_format($totalRechargePaise / 100, 2),
+                'total_manual_credits_formatted' => '₹' . number_format($totalManualCreditsPaise / 100, 2),
+            ],
+        ]);
+    }
+
+    /**
+     * Direct endpoint to credit any organization's wallet
+     */
+    public function creditWalletDirect(Request $request): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'organization_id' => 'required|uuid|exists:organizations,id',
+            'amount_rupees' => 'required|numeric|min:0.01|max:500000',
+            'balance_type' => 'required|string|in:paid,promotional',
+            'note' => 'nullable|string|max:255',
+            'reference_id' => 'nullable|string|max:100',
+        ]);
+
+        $org = Organization::findOrFail($validated['organization_id']);
+        $amountPaise = (int) round($validated['amount_rupees'] * 100);
+        $note = $validated['note'] ?: "Super Admin Manual Credit of ₹{$validated['amount_rupees']}";
+        $refId = $validated['reference_id'] ?: 'ADMIN-' . strtoupper(Str::random(8));
+
+        app(\App\Services\WalletService::class)->credit(
+            org: $org,
+            amountPaise: $amountPaise,
+            type: 'manual_credit',
+            balanceType: $validated['balance_type'],
+            description: $note,
+            referenceId: $refId
+        );
+
+        return back()->with('success', "Successfully credited ₹{$validated['amount_rupees']} ({$validated['balance_type']}) to {$org->name}.");
+    }
+
+    /**
+     * Super Admin: Deep Analytics & Daily Usage Telemetry
+     */
+    public function analytics(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $totalMessages = Message::count();
+        $totalOutbound = Message::where('direction', 'outbound')->count();
+        $totalInbound = Message::where('direction', 'inbound')->count();
+        $totalDelivered = Message::where('direction', 'outbound')->whereIn('status', ['delivered', 'read'])->count();
+        $totalRead = Message::where('direction', 'outbound')->where('status', 'read')->count();
+        $totalFailed = Message::where('direction', 'outbound')->where('status', 'failed')->count();
+
+        $deliveryRate = $totalOutbound > 0 ? round(($totalDelivered / $totalOutbound) * 100, 1) : 100.0;
+        $readRate = $totalDelivered > 0 ? round(($totalRead / $totalDelivered) * 100, 1) : 0.0;
+        $failureRate = $totalOutbound > 0 ? round(($totalFailed / $totalOutbound) * 100, 1) : 0.0;
+
+        // Daily Message Volume for the last 14 days
+        $days = collect();
+        for ($i = 13; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $dayStart = \Carbon\Carbon::parse($date)->startOfDay();
+            $dayEnd = \Carbon\Carbon::parse($date)->endOfDay();
+
+            $dayOutbound = Message::where('direction', 'outbound')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayInbound = Message::where('direction', 'inbound')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayDelivered = Message::where('direction', 'outbound')->whereIn('status', ['delivered', 'read'])->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayRead = Message::where('direction', 'outbound')->where('status', 'read')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayFailed = Message::where('direction', 'outbound')->where('status', 'failed')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayTotal = $dayOutbound + $dayInbound;
+            $dayRate = $dayOutbound > 0 ? round(($dayDelivered / $dayOutbound) * 100, 1) : 100.0;
+
+            $days->push([
+                'date' => $date,
+                'label' => $i === 0 ? 'Today' : ($i === 1 ? 'Yesterday' : \Carbon\Carbon::parse($date)->format('d M')),
+                'total' => $dayTotal,
+                'outbound' => $dayOutbound,
+                'inbound' => $dayInbound,
+                'delivered' => $dayDelivered,
+                'read' => $dayRead,
+                'failed' => $dayFailed,
+                'delivery_rate' => $dayRate,
+            ]);
+        }
+
+        // Top 10 Organizations by Message Volume
+        $topOrganizations = Organization::withCount([
+            'messages as total_messages',
+            'messages as outbound_messages' => fn ($q) => $q->where('direction', 'outbound'),
+            'messages as delivered_messages' => fn ($q) => $q->where('direction', 'outbound')->whereIn('status', ['delivered', 'read']),
+        ])
+        ->withCount('channels')
+        ->orderBy('total_messages', 'desc')
+        ->take(10)
+        ->get()
+        ->map(function ($org) {
+            $outbound = (int) $org->outbound_messages;
+            $delivered = (int) $org->delivered_messages;
+            $rate = $outbound > 0 ? round(($delivered / $outbound) * 100, 1) : 100.0;
+
+            return [
+                'id' => (string) $org->id,
+                'name' => $org->name,
+                'channels_count' => (int) $org->channels_count,
+                'total_messages' => (int) $org->total_messages,
+                'outbound_messages' => $outbound,
+                'delivered_messages' => $delivered,
+                'delivery_rate' => $rate,
+            ];
+        });
+
+        // Channel Health
+        $channelHealth = [
+            'green' => WhatsAppChannel::where('quality_rating', 'GREEN')->count(),
+            'yellow' => WhatsAppChannel::where('quality_rating', 'YELLOW')->count(),
+            'red' => WhatsAppChannel::where('quality_rating', 'RED')->count(),
+            'connected' => WhatsAppChannel::where('status', 'connected')->count(),
+            'disconnected' => WhatsAppChannel::where('status', '!=', 'connected')->count(),
+        ];
+
+        return Inertia::render('admin/analytics', [
+            'kpis' => [
+                'total_messages' => $totalMessages,
+                'total_outbound' => $totalOutbound,
+                'total_inbound' => $totalInbound,
+                'total_delivered' => $totalDelivered,
+                'total_read' => $totalRead,
+                'total_failed' => $totalFailed,
+                'delivery_rate' => $deliveryRate,
+                'read_rate' => $readRate,
+                'failure_rate' => $failureRate,
+            ],
+            'dailyUsage' => $days,
+            'topOrganizations' => $topOrganizations,
+            'channelHealth' => $channelHealth,
+        ]);
     }
 }

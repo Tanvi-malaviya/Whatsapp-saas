@@ -132,25 +132,19 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
         <>
             <Head title="Chat History & Archive - Sathwara InfoTech" />
 
-            <div className="flex-1 flex flex-col gap-6 p-4 sm:p-6 lg:p-8 min-w-0">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                <Archive className="size-5 text-[#47b672]" />
-                                Chat History &amp; Resolved Conversations
-                            </h2>
-                            <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
-                                {sessions.length} Live Sessions
-                            </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+            <div className="flex-1 flex flex-col gap-5 p-4 sm:p-6 min-w-0">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
+                            {sessions.length} Live Sessions
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
                             Search, review, and export past customer conversations and agent interaction transcripts.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <Button
                             variant="outline"
                             size="sm"

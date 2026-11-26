@@ -26,6 +26,7 @@ import {
     Image as ImageIcon,
     X,
     Send,
+    Download,
     LayoutGrid,
     List,
 } from 'lucide-react';
@@ -39,6 +40,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 type Product = {
     id: string;
+    channel_id?: string | null;
+    channel?: { id: string; name: string; phone_number: string };
     name: string;
     retailer_id: string;
     description: string;
@@ -69,9 +72,15 @@ type Props = {
     products: Product[];
     orders: Order[];
     channels: Array<{ id: string; name: string; phone_number: string; is_default: boolean }>;
+    selected_channel_id?: string;
     catalogMeta: {
         catalog_id: string;
         catalog_name: string;
+        linked_phone?: string;
+        linked_channel_name?: string;
+        linked_channel_id?: string;
+        linked_waba_id?: string;
+        share_catalog_url?: string;
         currency: string;
         is_connected: boolean;
         last_synced_at: string;
@@ -82,10 +91,12 @@ export default function CommerceIndex({
     products = [],
     orders = [],
     channels = [],
+    selected_channel_id = 'all',
     catalogMeta,
 }: Props) {
     const [searchQuery, setSearchQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('ALL');
+    const [channelFilter, setChannelFilter] = useState('ALL');
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
@@ -94,6 +105,13 @@ export default function CommerceIndex({
     const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
     const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const defaultChan = channels.find((c) => c.is_default) || channels[0];
+    const [selectedSenderChannel, setSelectedSenderChannel] = useState<string>(defaultChan?.id || '');
+
+    // Meta Catalog Configuration State
+    const [catalogIdInput, setCatalogIdInput] = useState<string>(catalogMeta.catalog_id || '');
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [isLinkingCatalog, setIsLinkingCatalog] = useState(false);
 
     // Send Catalog & Product to Customer state
     const [isSendCatalogModalOpen, setIsSendCatalogModalOpen] = useState(false);
@@ -114,6 +132,7 @@ export default function CommerceIndex({
         description: '',
         category: 'General',
         image_url: '',
+        channel_id: '',
         is_available: true,
     });
 
@@ -136,6 +155,56 @@ export default function CommerceIndex({
     const handleRemoveImage = () => {
         setImageFile(null);
         setImagePreview(null);
+    };
+
+    const handleSaveCatalogSettings = async () => {
+        if (!catalogIdInput) return;
+        setIsSavingSettings(true);
+        setSyncMessage(null);
+        try {
+            const resp = await fetch('/commerce/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({ catalog_id: catalogIdInput }),
+            });
+            const data = await resp.json();
+            setSyncMessage(data.message || 'Meta Catalog ID saved successfully!');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } catch {
+            setSyncMessage('Failed to save catalog settings.');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
+    const handleLinkCatalogToMeta = async () => {
+        setIsLinkingCatalog(true);
+        setSyncMessage(null);
+        try {
+            const resp = await fetch('/commerce/link-catalog', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as any)?.content || '',
+                },
+                body: JSON.stringify({
+                    catalog_id: catalogIdInput,
+                    channel_id: selectedSenderChannel,
+                }),
+            });
+            const data = await resp.json();
+            setSyncMessage(data.message || 'WhatsApp Commerce settings updated and connected to Meta!');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } catch {
+            setSyncMessage('Failed to link catalog to WhatsApp.');
+            setTimeout(() => setSyncMessage(null), 5000);
+        } finally {
+            setIsLinkingCatalog(false);
+        }
     };
 
     const handleSyncCatalog = async () => {
@@ -173,6 +242,7 @@ export default function CommerceIndex({
                 },
                 body: JSON.stringify({
                     phone: catalogPhone,
+                    channel_id: selectedSenderChannel,
                     body_text: catalogNote,
                 }),
             });
@@ -202,6 +272,7 @@ export default function CommerceIndex({
                 },
                 body: JSON.stringify({
                     product_id: selectedProductForSend.id,
+                    channel_id: selectedSenderChannel,
                     phone: productPhone,
                 }),
             });
@@ -257,6 +328,7 @@ export default function CommerceIndex({
             price: form.price,
             description: form.description,
             category: form.category,
+            channel_id: form.channel_id || null,
             is_available: form.is_available,
         };
 
@@ -282,6 +354,7 @@ export default function CommerceIndex({
                     description: '',
                     category: 'General',
                     image_url: '',
+                    channel_id: '',
                     is_available: true,
                 });
             },
@@ -310,7 +383,11 @@ export default function CommerceIndex({
             p.retailer_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             p.category.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
-        return matchesSearch && matchesCategory;
+        const matchesChannel =
+            channelFilter === 'ALL' ||
+            (channelFilter === 'SHARED' && !p.channel_id) ||
+            p.channel_id === channelFilter;
+        return matchesSearch && matchesCategory && matchesChannel;
     });
 
     const categories = ['ALL', ...Array.from(new Set(products.map((p) => p.category).filter(Boolean)))];
@@ -323,30 +400,40 @@ export default function CommerceIndex({
         <>
             <Head title="WhatsApp Commerce & Meta Catalog | WhatsApp SaaS" />
 
-            <div className="flex flex-col gap-2.5 p-3 md:p-4 max-w-7xl mx-auto w-full font-sans">
-                {/* 1. Ultra-Compact Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2.5">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-                            <ShoppingBag className="size-4" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-none">
-                                    WhatsApp Catalog &amp; Commerce
-                                </h1>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    Meta Connected
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5 hidden sm:block">
-                                Showcase catalog products and accept direct customer cart orders in WhatsApp chat.
-                            </p>
-                        </div>
+            <div className="flex flex-col gap-3 p-3.5 md:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Meta Connected
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                            Showcase catalog products and accept direct customer cart orders in WhatsApp chat.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {catalogMeta.share_catalog_url && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                className="h-8 px-2.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 gap-1.5 font-semibold"
+                            >
+                                <a
+                                    href={catalogMeta.share_catalog_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Open Full WhatsApp Business Catalog"
+                                >
+                                    <Store className="size-3.5 text-emerald-600" />
+                                    <span>Share Full Catalog</span>
+                                    <ExternalLink className="size-2.5 opacity-70" />
+                                </a>
+                            </Button>
+                        )}
+
                         <Button
                             variant="outline"
                             size="sm"
@@ -369,6 +456,16 @@ export default function CommerceIndex({
                             {isSyncing ? 'Syncing...' : 'Sync'}
                         </Button>
 
+                        <a
+                            href="/commerce/export-csv"
+                            download
+                            className="inline-flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted h-8 px-2.5 text-xs gap-1.5 font-medium text-foreground transition-colors"
+                            title="Download Meta Catalog CSV to upload into Meta Commerce Manager"
+                        >
+                            <Download className="size-3 text-muted-foreground" />
+                            Export Meta CSV
+                        </a>
+
                         <Button
                             onClick={() => setIsAddModalOpen(true)}
                             className="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs font-semibold gap-1.5 shadow-2xs"
@@ -378,6 +475,55 @@ export default function CommerceIndex({
                         </Button>
                     </div>
                 </div>
+
+                {/* Channel Scope Selector */}
+                {channels && channels.length > 0 && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 px-3 rounded-xl bg-card border border-border/70 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <Smartphone className="size-3.5 text-emerald-600" />
+                            <span className="text-xs font-bold text-foreground">Catalog WhatsApp Number:</span>
+                            <span className="text-[11px] text-muted-foreground">
+                                {catalogMeta.linked_channel_name} ({catalogMeta.linked_phone || 'All'})
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                            <button
+                                type="button"
+                                onClick={() => router.get('/commerce', { channel_id: 'all' }, { preserveScroll: true, preserveState: true })}
+                                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                                    selected_channel_id === 'all'
+                                        ? 'bg-primary text-primary-foreground shadow-xs'
+                                        : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                }`}
+                            >
+                                All Numbers
+                            </button>
+                            {channels.map((ch) => (
+                                <button
+                                    key={ch.id}
+                                    type="button"
+                                    onClick={() => router.get('/commerce', { channel_id: ch.id }, { preserveScroll: true, preserveState: true })}
+                                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                                        selected_channel_id === ch.id
+                                            ? 'bg-primary text-primary-foreground shadow-xs'
+                                            : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    }`}
+                                >
+                                    <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                    <span>{ch.phone_number || ch.name}</span>
+                                    {ch.is_default && (
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase ${
+                                            selected_channel_id === ch.id ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                            Default
+                                        </span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {syncMessage && (
                     <div className="p-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center justify-between animate-in fade-in duration-200">
@@ -419,10 +565,20 @@ export default function CommerceIndex({
 
                     <div className="px-3.5 py-2 flex items-center justify-between">
                         <div className="min-w-0 pr-1">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Meta Catalog ID</span>
-                            <div className="text-[11px] font-mono font-semibold text-foreground truncate">{catalogMeta.catalog_id}</div>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Linked WhatsApp Channel</span>
+                            <div className="text-[11px] font-semibold text-foreground truncate flex items-center gap-1">
+                                <span>{catalogMeta.linked_phone || catalogMeta.catalog_id}</span>
+                                {catalogMeta.linked_channel_name && (
+                                    <span className="text-[9px] px-1 py-0.2 bg-primary/10 text-primary font-bold rounded">
+                                        {catalogMeta.linked_channel_name}
+                                    </span>
+                                )}
+                            </div>
+                            <span className="text-[9px] font-mono text-muted-foreground block truncate">
+                                WABA: {catalogMeta.linked_waba_id || catalogMeta.catalog_id}
+                            </span>
                         </div>
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Connected" />
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" title="Connected to Meta Cloud API" />
                     </div>
                 </div>
 
@@ -492,6 +648,42 @@ export default function CommerceIndex({
 
                     {/* ================= TAB 1: PRODUCTS ================= */}
                     <TabsContent value="products" className="space-y-3">
+                        {/* Channel / Number Catalog Filter Pills */}
+                        {channels.length > 0 && (
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-border/40">
+                                <span className="text-[10px] text-muted-foreground font-bold tracking-wider uppercase shrink-0">Store Catalog:</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setChannelFilter('ALL')}
+                                    className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all shrink-0 ${
+                                        channelFilter === 'ALL'
+                                            ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                                            : 'bg-muted/60 text-muted-foreground hover:bg-muted border border-border/40'
+                                    }`}
+                                >
+                                    🌐 All Numbers ({products.length})
+                                </button>
+                                {channels.map((ch) => {
+                                    const count = products.filter((p) => p.channel_id === ch.id).length;
+                                    return (
+                                        <button
+                                            key={ch.id}
+                                            type="button"
+                                            onClick={() => setChannelFilter(ch.id)}
+                                            className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all flex items-center gap-1 shrink-0 ${
+                                                channelFilter === ch.id
+                                                    ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                                                    : 'bg-muted/60 text-muted-foreground hover:bg-muted border border-border/40'
+                                            }`}
+                                        >
+                                            <span>📱 {ch.name}</span>
+                                            <span className="text-[9px] opacity-80 font-mono">({count})</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
                         {/* Category Filter Pills */}
                         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
                             {categories.map((cat) => (
@@ -514,7 +706,7 @@ export default function CommerceIndex({
                         {viewMode === 'table' ? (
                             <Card className="border-border/80 bg-card overflow-hidden shadow-2xs">
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-xs">
+                                    <table className="w-full min-w-[640px] text-left text-xs">
                                         <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground uppercase text-[10px] font-semibold">
                                             <tr>
                                                 <th className="px-3.5 py-2">Product</th>
@@ -542,8 +734,17 @@ export default function CommerceIndex({
                                                                     className="size-9 rounded-lg object-cover border border-border/80 shrink-0 bg-muted"
                                                                 />
                                                                 <div className="min-w-0">
-                                                                    <div className="font-semibold text-foreground text-xs truncate max-w-[180px] sm:max-w-xs md:max-w-md">
-                                                                        {p.name}
+                                                                    <div className="font-semibold text-foreground text-xs truncate max-w-[180px] sm:max-w-xs md:max-w-md flex items-center gap-1.5 flex-wrap">
+                                                                        <span>{p.name}</span>
+                                                                        {p.channel ? (
+                                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 shrink-0">
+                                                                                📱 {p.channel.name}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground border border-border/60 shrink-0">
+                                                                                🌐 All Numbers
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                     <span className="text-[10px] font-mono text-muted-foreground">
                                                                         SKU: {p.retailer_id}
@@ -650,9 +851,20 @@ export default function CommerceIndex({
                                                 <span className="text-[9px] font-mono text-muted-foreground uppercase block leading-none">
                                                     SKU: {p.retailer_id}
                                                 </span>
-                                                <h3 className="text-xs font-bold text-foreground line-clamp-1 leading-tight" title={p.name}>
-                                                    {p.name}
-                                                </h3>
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                    <h3 className="text-xs font-bold text-foreground line-clamp-1 leading-tight" title={p.name}>
+                                                        {p.name}
+                                                    </h3>
+                                                    {p.channel ? (
+                                                        <span className="text-[8px] font-semibold px-1 py-0 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                                            📱 {p.channel.name}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[8px] font-medium px-1 py-0 rounded bg-muted text-muted-foreground border border-border/50">
+                                                            🌐 All
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {p.description ? (
                                                     <p className="text-[10px] text-muted-foreground line-clamp-1 leading-snug">
                                                         {p.description}
@@ -736,7 +948,7 @@ export default function CommerceIndex({
                             </CardHeader>
                             <CardContent className="p-0">
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-xs">
+                                    <table className="w-full min-w-[640px] text-left text-xs">
                                         <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground uppercase text-[10px] font-semibold">
                                             <tr>
                                                 <th className="px-3 py-2">Order ID</th>
@@ -859,8 +1071,8 @@ export default function CommerceIndex({
                             </div>
 
                             {/* Right: Realistic WhatsApp Mobile Phone Simulation */}
-                            <div className="md:col-span-6 flex justify-center">
-                                <div className="w-[320px] rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
+                            <div className="md:col-span-6 flex justify-center min-w-0">
+                                <div className="w-full max-w-[320px] rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
                                     {/* Phone Screen Header */}
                                     <div className="rounded-[28px] overflow-hidden bg-[#0b141a] text-white text-xs">
                                         <div className="bg-[#202c33] p-3 flex items-center gap-2.5 border-b border-neutral-700">
@@ -926,24 +1138,51 @@ export default function CommerceIndex({
                     {/* ================= TAB 4: SETTINGS ================= */}
                     <TabsContent value="settings" className="space-y-4">
                         <Card className="border-border/80 bg-card p-6 rounded-xl shadow-xs max-w-2xl space-y-4">
-                            <CardTitle className="text-base font-bold flex items-center gap-2">
-                                <Sliders className="size-4 text-primary" />
-                                Meta Commerce Manager Configuration
+                            <CardTitle className="text-base font-bold flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <Sliders className="size-4 text-primary" />
+                                    Meta Commerce Manager &amp; WhatsApp Catalog
+                                </span>
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    Official WhatsApp Catalog
+                                </span>
                             </CardTitle>
                             <CardDescription className="text-xs">
-                                Configure your Meta Commerce Catalog ID to enable product syncing and WhatsApp native cart submissions.
+                                Configure your Meta Catalog ID to send the official <strong>&quot;🛍️ View Catalog&quot;</strong> in-chat storefront with interactive shopping cart.
                             </CardDescription>
 
                             <div className="space-y-3 pt-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs font-semibold">Meta Catalog ID</Label>
-                                    <Input
-                                        defaultValue={catalogMeta.catalog_id}
-                                        readOnly
-                                        className="h-9 text-xs font-mono bg-muted/40"
-                                    />
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold">Meta Catalog ID</Label>
+                                        <a
+                                            href="https://business.facebook.com/commerce_manager"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-[11px] text-primary hover:underline flex items-center gap-1 font-medium"
+                                        >
+                                            Find in Meta Commerce Manager &rarr;
+                                        </a>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={catalogIdInput}
+                                            onChange={(e) => setCatalogIdInput(e.target.value)}
+                                            placeholder="e.g. 934553439246885 (15-digit Meta Catalog ID)"
+                                            className="h-9 text-xs font-mono bg-background"
+                                        />
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={isSavingSettings}
+                                            onClick={handleSaveCatalogSettings}
+                                            className="h-9 shrink-0 gap-1 text-xs"
+                                        >
+                                            {isSavingSettings ? 'Saving...' : 'Save ID'}
+                                        </Button>
+                                    </div>
                                     <p className="text-[11px] text-muted-foreground">
-                                        Found in Facebook Business Manager &gt; Commerce Manager &gt; Catalogs.
+                                        Enter your Catalog ID from <em>Facebook Business Manager &gt; Commerce Manager &gt; Catalogs</em>.
                                     </p>
                                 </div>
 
@@ -954,22 +1193,90 @@ export default function CommerceIndex({
 
                                 <div className="space-y-1">
                                     <Label className="text-xs font-semibold">Default Channel for Catalog</Label>
-                                    <select className="h-9 px-3 rounded-lg border border-input bg-background text-xs font-medium w-full">
+                                    <select
+                                        value={selectedSenderChannel}
+                                        onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                        className="h-9 px-3 rounded-lg border border-input bg-background text-xs font-medium w-full"
+                                    >
                                         {channels.map((ch) => (
                                             <option key={ch.id} value={ch.id}>
-                                                {ch.name} ({ch.phone_number})
+                                                {ch.name} ({ch.phone_number || 'No Number'})
                                             </option>
                                         ))}
                                     </select>
+                                </div>
+
+                                {/* Automated Hands-Free Scheduled Data Feed URL */}
+                                <div className="space-y-1.5 p-3 rounded-xl border border-primary/20 bg-primary/5">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
+                                            <Sparkles className="size-3.5" />
+                                            Automated Scheduled Feed URL (Hands-Free Auto Sync)
+                                        </Label>
+                                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-medium">Auto-Sync</span>
+                                    </div>
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Paste this URL once in <em>Meta Commerce Manager &gt; Data sources &gt; Add items &gt; Data feed &gt; Scheduled feed</em>. Meta will automatically fetch all products you add to this panel!
+                                    </p>
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <Input
+                                            readOnly
+                                            value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}` : '/commerce/catalog-feed.csv'}
+                                            className="h-8 text-[11px] font-mono bg-background"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                                if (typeof window !== 'undefined') {
+                                                    const url = `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}`;
+                                                    navigator.clipboard.writeText(url);
+                                                    alert('Copied Feed URL to clipboard!');
+                                                }
+                                            }}
+                                            className="h-8 px-2.5 text-xs shrink-0 gap-1"
+                                        >
+                                            <Copy className="size-3" />
+                                            Copy
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Quick Action Buttons for Meta Integration */}
+                                <div className="pt-3 border-t border-border flex flex-col sm:flex-row gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isLinkingCatalog}
+                                        onClick={handleLinkCatalogToMeta}
+                                        className="text-xs h-9 flex-1 gap-1.5 border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                    >
+                                        <Store className="size-3.5" />
+                                        {isLinkingCatalog ? 'Connecting...' : '⚡ 1-Click Enable WhatsApp Storefront'}
+                                    </Button>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isSyncing}
+                                        onClick={handleSyncCatalog}
+                                        className="text-xs h-9 flex-1 gap-1.5"
+                                    >
+                                        <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                                        {isSyncing ? 'Syncing...' : '🔄 Push Products to Meta Catalog'}
+                                    </Button>
                                 </div>
                             </div>
                         </Card>
                     </TabsContent>
                 </Tabs>
 
-                {/* 4. Add Product Modal - Ultra-Compact & Without Scroll */}
+                {/* 4. Add Product Modal - Mobile & Desktop Responsive */}
                 <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                    <DialogContent className="sm:max-w-xl p-4 gap-2.5 overflow-hidden max-h-[90vh]">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl p-4 gap-2.5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-1.5 text-foreground">
                                 <Plus className="size-4 text-primary" />
@@ -981,9 +1288,27 @@ export default function CommerceIndex({
                         </DialogHeader>
 
                         <form onSubmit={handleCreateProduct} className="space-y-2.5 pt-0.5">
-                            <div className="grid grid-cols-2 gap-3 items-start">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                                 {/* Left Column: Details */}
                                 <div className="space-y-2">
+                                    {channels.length > 0 && (
+                                        <div className="space-y-0.5">
+                                            <Label className="text-[11px] font-semibold text-foreground">Catalog Store / Number</Label>
+                                            <select
+                                                value={form.channel_id}
+                                                onChange={(e) => setForm({ ...form, channel_id: e.target.value })}
+                                                className="w-full h-7.5 rounded-lg border border-input bg-background px-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                            >
+                                                <option value="">🌐 All Numbers (Shared Across Workspace)</option>
+                                                {channels.map((ch) => (
+                                                    <option key={ch.id} value={ch.id}>
+                                                        📱 {ch.name} ({ch.phone_number || 'No Number'})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-0.5">
                                         <Label className="text-[11px] font-semibold text-foreground">Product Name *</Label>
                                         <Input
@@ -1177,7 +1502,7 @@ export default function CommerceIndex({
 
                 {/* 5. WhatsApp Product Preview Modal - Compact & Native */}
                 <Dialog open={isPreviewModalOpen} onOpenChange={setIsPreviewModalOpen}>
-                    <DialogContent className="sm:max-w-[320px] p-0 overflow-hidden border-border/80 shadow-2xl rounded-2xl gap-0">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-[320px] p-0 overflow-hidden border-border/80 shadow-2xl rounded-2xl gap-0">
                         {/* WhatsApp Brand Header */}
                         <div className="bg-[#075E54] text-white px-3.5 py-2.5 flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1271,7 +1596,7 @@ export default function CommerceIndex({
                         if (!open && !isDeleting) setDeletingProduct(null);
                     }}
                 >
-                    <DialogContent className="sm:max-w-[360px] p-5">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-[360px] p-5">
                         <DialogHeader className="items-center text-center">
                             <div className="mx-auto flex size-11 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/50 mb-2 text-red-600">
                                 <Trash2 className="size-5" />
@@ -1310,7 +1635,7 @@ export default function CommerceIndex({
 
                 {/* 7. Send Catalog to Customer Modal */}
                 <Dialog open={isSendCatalogModalOpen} onOpenChange={setIsSendCatalogModalOpen}>
-                    <DialogContent className="sm:max-w-md p-5 overflow-hidden">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md p-5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                 <Send className="size-4 text-primary" />
@@ -1322,6 +1647,23 @@ export default function CommerceIndex({
                         </DialogHeader>
 
                         <form onSubmit={handleSendCatalog} className="space-y-3.5 pt-1">
+                            {channels.length > 0 && (
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-semibold text-foreground">Send From WhatsApp Number *</Label>
+                                    <select
+                                        value={selectedSenderChannel}
+                                        onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                        className="w-full h-9 rounded-lg border border-input bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                    >
+                                        {channels.map((ch) => (
+                                            <option key={ch.id} value={ch.id}>
+                                                {ch.name} ({ch.phone_number || 'No Number'}) {ch.is_default ? '— Default (Primary)' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             <div className="space-y-1">
                                 <Label className="text-xs font-semibold text-foreground">Customer Phone Number (with Country Code) *</Label>
                                 <Input
@@ -1381,7 +1723,7 @@ export default function CommerceIndex({
 
                 {/* 8. Send Single Product to Customer Modal */}
                 <Dialog open={isSendProductModalOpen} onOpenChange={setIsSendProductModalOpen}>
-                    <DialogContent className="sm:max-w-md p-5 overflow-hidden">
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-md p-5 overflow-y-auto max-h-[90vh]">
                         <DialogHeader className="pb-2 border-b border-border/60">
                             <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                 <Send className="size-4 text-blue-600" />
@@ -1409,6 +1751,23 @@ export default function CommerceIndex({
                                         <span className="text-[10px] text-muted-foreground font-mono">SKU: {selectedProductForSend.retailer_id}</span>
                                     </div>
                                 </div>
+
+                                {channels.length > 0 && (
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-semibold text-foreground">Send From WhatsApp Number *</Label>
+                                        <select
+                                            value={selectedSenderChannel}
+                                            onChange={(e) => setSelectedSenderChannel(e.target.value)}
+                                            className="w-full h-9 rounded-lg border border-input bg-background px-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                                        >
+                                            {channels.map((ch) => (
+                                                <option key={ch.id} value={ch.id}>
+                                                    {ch.name} ({ch.phone_number || 'No Number'}) {ch.is_default ? '— Default (Primary)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="space-y-1">
                                     <Label className="text-xs font-semibold text-foreground">Customer Phone Number *</Label>

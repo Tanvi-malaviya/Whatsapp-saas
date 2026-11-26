@@ -1,3 +1,5 @@
+import { useMetaSignup } from '@/hooks/use-meta-signup';
+import { api } from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -146,7 +148,7 @@ const COEXISTENCE_STEPS = [
         subtitle: 'Meta automatically registers your Phone Number ID and assigns Cloud API credentials.',
         bullets: [
             'Official Phone Number ID and WABA ID are automatically created by Meta.',
-            'Webhooks are subscribed with 100% end-to-end encryption.',
+            'Incoming messages are routed to this workspace after setup.',
             'Zero manual copy-pasting of API keys or IDs required.',
         ],
         previewType: 'provisioning',
@@ -177,10 +179,10 @@ const COEXISTENCE_STEPS = [
 
 export default function WhatsAppConnectWizard({
     existingChannel,
-    defaultWebhookUrl = 'https://whatsapp.sathwarainfotech.cloud/webhooks/meta',
-    defaultVerifyToken = 'sathwara_secret_token_123',
-    metaAppId = '1079349601748656',
-    metaConfigId = '1835889181059188',
+    defaultWebhookUrl = '',
+    defaultVerifyToken = '',
+    metaAppId = '',
+    metaConfigId = '',
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current || { name: 'Sathwara InfoTech', slug: 'sathwara-infotech' };
@@ -226,69 +228,6 @@ export default function WhatsAppConnectWizard({
         }
     }, [errorMsg]);
 
-    // 1. Dynamically load Meta Facebook JavaScript SDK for Embedded Signup
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            (window as any).fbAsyncInit = function () {
-                (window as any).FB.init({
-                    appId: metaAppId || '1079349601748656',
-                    cookie: true,
-                    xfbml: true,
-                    version: 'v22.0',
-                });
-            };
-
-            if (!document.getElementById('facebook-jssdk')) {
-                const js = document.createElement('script');
-                js.id = 'facebook-jssdk';
-                js.src = 'https://connect.facebook.net/en_US/sdk.js';
-                js.async = true;
-                js.defer = true;
-                document.body.appendChild(js);
-            }
-        }
-    }, [metaAppId]);
-
-    // 2. Listen to Meta Embedded Signup session message events
-    useEffect(() => {
-        const handleMetaMessage = (event: MessageEvent) => {
-            const isMetaOrigin =
-                event.origin.includes('facebook.com') ||
-                event.origin.includes('meta.com') ||
-                (typeof window !== 'undefined' && event.origin === window.location.origin);
-
-            if (!isMetaOrigin) {
-                return;
-            }
-
-            try {
-                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (!data) return;
-                const isFinished =
-                    data.type === 'WA_EMBEDDED_SIGNUP' ||
-                    data.event === 'FINISH' ||
-                    data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
-                    data.phone_number_id ||
-                    data.data?.phone_number_id ||
-                    data.code ||
-                    data.data?.code;
-
-                if (isFinished) {
-                    const phoneId = data.data?.phone_number_id || data.phone_number_id;
-                    const customWaba = data.data?.waba_id || data.waba_id || data.data?.messaging_account_id;
-                    const code = data.data?.code || data.code;
-                    setSuccessNotice('Meta Embedded Signup completed! Connecting channel automatically...');
-                    handleDirectAutoConnect(phoneId, customWaba, code);
-                }
-            } catch (e) {
-                // Ignore parsing errors for other message events
-            }
-        };
-
-        window.addEventListener('message', handleMetaMessage);
-        return () => window.removeEventListener('message', handleMetaMessage);
-    }, [phoneDigits, countryCode, channelName]);
-
     // Automatic connection handler when Meta popup finishes or manual submit
     const handleDirectAutoConnect = async (customPhoneId?: string, customWabaId?: string, code?: string) => {
         setIsSubmitting(true);
@@ -329,32 +268,7 @@ export default function WhatsAppConnectWizard({
         }
     };
 
-    // 3. Trigger Official Meta WhatsApp Onboarding Popup
-    const launchMetaEmbeddedSignup = () => {
-        setErrorMsg(null);
-        setSuccessNotice('Meta Onboarding is open in the popup window. Please complete the steps.');
-        const activeConfigId = configIdInput.trim() || metaConfigId || '1835889181059188';
-        const appId = metaAppId || '1079349601748656';
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://whatsapp.sathwarainfotech.cloud';
-        const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
-
-        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${activeConfigId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
-
-        const w = 650;
-        const h = 750;
-        const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
-        const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
-
-        const popup = window.open(
-            onboardUrl,
-            'MetaWhatsAppOnboarding',
-            `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`
-        );
-
-        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-            window.open(onboardUrl, '_blank');
-        }
-    };
+    const { launch: launchMetaEmbeddedSignup, busy: signupBusy } = useMetaSignup({ appId: metaAppId ?? '', onError: setErrorMsg });
 
     const currentStepData = COEXISTENCE_STEPS.find((s) => s.step === guideStep) || COEXISTENCE_STEPS[0];
 
@@ -429,7 +343,7 @@ export default function WhatsAppConnectWizard({
                     {/* Single Primary 1-Click Launch Button in Project Blue Theme */}
                     <Button
                         onClick={launchMetaEmbeddedSignup}
-                        disabled={isSubmitting}
+                        disabled={signupBusy || isSubmitting}
                         className="h-8 px-3.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-2xs gap-1.5 shrink-0 self-start sm:self-auto transition-transform hover:scale-[1.02]"
                     >
                         <div className="size-3.5 rounded-full bg-white flex items-center justify-center text-primary">

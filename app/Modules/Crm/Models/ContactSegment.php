@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ContactSegment extends Model
 {
-    use HasUuids;
+    use HasUuids, \App\Shared\Traits\BelongsToTenant;
 
     protected $fillable = [
         'organization_id',
@@ -32,7 +32,7 @@ class ContactSegment extends Model
 
     public function getMatchingQuery()
     {
-        $q = Conversation::where('organization_id', $this->organization_id);
+        $q = Contact::where('organization_id', $this->organization_id);
 
         switch ($this->filter_type) {
             case 'opt_in':

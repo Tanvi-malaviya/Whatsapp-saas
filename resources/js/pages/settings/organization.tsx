@@ -1,265 +1,330 @@
-import { useState } from 'react';
-import { Head, usePage } from '@inertiajs/react';
-import {
-    Building2,
-    Save,
-    Users,
-    Shield,
-    Globe,
-    Check,
-    Mail,
-    Plus,
-    UserPlus,
-    Trash2,
-    KeyRound,
-    Clock,
-    DollarSign,
-} from 'lucide-react';
+import { Head, Link, useForm } from '@inertiajs/react';
+import { Building2, Radio, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import InputError from '@/components/input-error';
 
-export default function OrganizationSettings() {
-    const { tenant } = usePage().props as any;
-    const currentOrg = tenant?.current;
+type Organization = {
+    name: string;
+    slug: string;
+    billing_email: string | null;
+    timezone: string;
+    currency: string;
+};
+type Member = {
+    id: number;
+    name: string;
+    email: string;
+    pivot?: { role: string };
+};
+type Channel = {
+    id: string;
+    name: string;
+    phone_number: string;
+    waba_id: string;
+    status: string;
+};
 
-    const [name, setName] = useState(currentOrg?.name || 'Sathwara InfoTech');
-    const [slug, setSlug] = useState(currentOrg?.slug || 'sathwara-infotech');
-    const [email, setEmail] = useState('support@sathwarainfotech.com');
-    const [timezone, setTimezone] = useState('Asia/Kolkata (IST +05:30)');
-    const [currency, setCurrency] = useState('INR (₹)');
-    const [wabaId, setWabaId] = useState('799788166562792');
-    const [appSecret, setAppSecret] = useState('02d9ac2a37b98b8b29a189f835c13027');
-    const [saved, setSaved] = useState(false);
-
-    const [teamMembers, setTeamMembers] = useState([
-        { id: '1', name: 'Bhavesh Sathwara', email: 'bhavesh@sathwarainfotech.com', role: 'Owner', status: 'Active' },
-        { id: '2', name: 'Tanvi Malaviya', email: 'tanvi@sathwarainfotech.com', role: 'Admin', status: 'Active' },
-        { id: '3', name: 'Support Agent', email: 'agent@sathwarainfotech.com', role: 'Agent', status: 'Invited' },
-    ]);
-
-    const handleSave = (e: React.FormEvent) => {
-        e.preventDefault();
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-    };
+export default function OrganizationSettings({
+    organization,
+    members = [],
+    channels = [],
+}: {
+    organization: Organization;
+    members?: Member[];
+    channels?: Channel[];
+}) {
+    const form = useForm({
+        name: organization.name ?? '',
+        slug: organization.slug ?? '',
+        billing_email: organization.billing_email ?? '',
+        timezone: organization.timezone ?? 'Asia/Kolkata',
+        currency: organization.currency ?? 'INR',
+    });
+    const fields = [
+        {
+            key: 'name',
+            label: 'Business name',
+            placeholder: 'Your business name',
+            type: 'text',
+            autoComplete: 'organization',
+        },
+        {
+            key: 'slug',
+            label: 'Workspace slug',
+            placeholder: 'your-business',
+            type: 'text',
+            autoComplete: 'off',
+        },
+        {
+            key: 'billing_email',
+            label: 'Billing email',
+            placeholder: 'billing@company.com',
+            type: 'email',
+            autoComplete: 'email',
+        },
+        {
+            key: 'timezone',
+            label: 'Timezone',
+            placeholder: 'Asia/Kolkata',
+            type: 'text',
+            autoComplete: 'off',
+        },
+    ] as const;
 
     return (
         <>
-            <Head title="Organization Settings - Sathwara InfoTech" />
-
-            <div className="space-y-6">
-                <div>
-                    <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                        <Building2 className="size-5 text-[#47b672]" />
-                        Organization &amp; Workspace Settings
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        Manage your company profile, timezone, team members, and WhatsApp Business API configurations.
-                    </p>
-                </div>
-
-                <form onSubmit={handleSave} className="space-y-6">
-                    {/* General Company Info */}
-                    <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-4">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Globe className="size-4 text-[#47b672]" />
-                                Company Profile
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Basic details displayed across your customer WhatsApp messages and invoices.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium">Business / Organization Name</Label>
-                                    <Input
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        placeholder="e.g. Sathwara InfoTech"
-                                        className="text-xs"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium">Workspace Slug (URL)</Label>
-                                    <div className="flex items-center rounded-md border border-input bg-muted/30 px-3 text-xs text-muted-foreground">
-                                        <span className="font-mono">app.xobito.com/</span>
-                                        <Input
-                                            value={slug}
-                                            onChange={(e) => setSlug(e.target.value)}
-                                            className="border-0 bg-transparent p-0 text-xs shadow-none focus-visible:ring-0"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium flex items-center gap-1">
-                                        <Mail className="size-3 text-muted-foreground" />
-                                        Support Email
-                                    </Label>
-                                    <Input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="text-xs"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium flex items-center gap-1">
-                                        <Clock className="size-3 text-muted-foreground" />
-                                        Default Timezone
-                                    </Label>
-                                    <Input
-                                        value={timezone}
-                                        onChange={(e) => setTimezone(e.target.value)}
-                                        className="text-xs"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium flex items-center gap-1">
-                                        <DollarSign className="size-3 text-muted-foreground" />
-                                        Default Currency
-                                    </Label>
-                                    <Input
-                                        value={currency}
-                                        onChange={(e) => setCurrency(e.target.value)}
-                                        className="text-xs"
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Meta WhatsApp Cloud Credentials */}
-                    <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-4">
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <KeyRound className="size-4 text-emerald-600" />
-                                Meta WhatsApp Business Account (WABA)
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Credentials linked to your Meta Developer App and Business Portfolio.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium">WhatsApp Business Account ID (WABA ID)</Label>
-                                    <Input
-                                        value={wabaId}
-                                        onChange={(e) => setWabaId(e.target.value)}
-                                        className="text-xs font-mono"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-medium">Meta App Secret</Label>
-                                    <Input
-                                        type="password"
-                                        value={appSecret}
-                                        onChange={(e) => setAppSecret(e.target.value)}
-                                        className="text-xs font-mono"
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Save Button */}
-                    <div className="flex items-center justify-between">
-                        {saved ? (
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                <Check className="size-4" />
-                                Organization settings saved successfully!
-                            </span>
-                        ) : <span />}
-
-                        <Button type="submit" size="sm" className="bg-[#47b672] hover:bg-[#3ca062] text-white">
-                            <Save className="size-3.5 mr-1.5" />
-                            Save Organization
-                        </Button>
+            <Head title="Organization settings" />
+            <Card className="min-w-0">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Building2 className="size-5 text-primary" />
+                        <CardTitle>Business profile</CardTitle>
                     </div>
-                </form>
-
-                {/* Team Members Management */}
-                <Card className="border-border shadow-2xs">
-                    <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                        <div>
-                            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                                <Users className="size-4 text-[#47b672]" />
-                                Team Members &amp; Permissions
-                            </CardTitle>
-                            <CardDescription className="text-xs mt-0.5">
-                                Manage agents who have access to WhatsApp Live Chat and broadcasts.
-                            </CardDescription>
-                        </div>
-                        <Button size="sm" variant="outline" className="text-xs h-8 border-border">
-                            <UserPlus className="size-3.5 mr-1.5 text-[#47b672]" />
-                            Invite Member
-                        </Button>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground">
-                                    <tr>
-                                        <th className="py-2.5 px-4">Member</th>
-                                        <th className="py-2.5 px-4">Email</th>
-                                        <th className="py-2.5 px-4">Role</th>
-                                        <th className="py-2.5 px-4">Status</th>
-                                        <th className="py-2.5 px-4 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border/60">
-                                    {teamMembers.map((m) => (
-                                        <tr key={m.id} className="hover:bg-muted/30">
-                                            <td className="py-2.5 px-4 font-semibold text-foreground">
-                                                {m.name}
-                                            </td>
-                                            <td className="py-2.5 px-4 text-muted-foreground font-mono">
-                                                {m.email}
-                                            </td>
-                                            <td className="py-2.5 px-4">
-                                                <Badge variant="outline" className={`text-[10px] ${
-                                                    m.role === 'Owner'
-                                                        ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                                                        : m.role === 'Admin'
-                                                        ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                                                        : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                                }`}>
-                                                    {m.role}
-                                                </Badge>
-                                            </td>
-                                            <td className="py-2.5 px-4">
-                                                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${
-                                                    m.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
-                                                }`}>
-                                                    <span className={`size-1.5 rounded-full ${m.status === 'Active' ? 'bg-emerald-500' : 'bg-muted-foreground'}`}></span>
-                                                    {m.status}
-                                                </span>
-                                            </td>
-                                            <td className="py-2.5 px-4 text-right">
-                                                {m.role !== 'Owner' && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
-                                                        onClick={() => setTeamMembers(teamMembers.filter(item => item.id !== m.id))}
-                                                    >
-                                                        <Trash2 className="size-3.5" />
-                                                    </Button>
-                                                )}
-                                            </td>
-                                        </tr>
+                    <CardDescription>
+                        Update your organization details and workspace
+                        preferences.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <form
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            form.put('/settings/organization', {
+                                preserveScroll: true,
+                            });
+                        }}
+                        className="space-y-6"
+                    >
+                        <div className="grid min-w-0 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                            {fields.map(
+                                ({
+                                    key,
+                                    label,
+                                    placeholder,
+                                    type,
+                                    autoComplete,
+                                }) => (
+                                    <div
+                                        key={key}
+                                        className="min-w-0 space-y-2"
+                                    >
+                                        <Label htmlFor={`organization-${key}`}>
+                                            {label}
+                                        </Label>
+                                        <Input
+                                            id={`organization-${key}`}
+                                            name={key}
+                                            required
+                                            type={type}
+                                            autoComplete={autoComplete}
+                                            maxLength={
+                                                key === 'billing_email'
+                                                    ? 255
+                                                    : key === 'timezone'
+                                                      ? undefined
+                                                      : 100
+                                            }
+                                            value={form.data[key]}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    key,
+                                                    event.target.value,
+                                                )
+                                            }
+                                            placeholder={placeholder}
+                                            className="h-11 text-base md:text-sm"
+                                            aria-invalid={!!form.errors[key]}
+                                            aria-describedby={
+                                                form.errors[key]
+                                                    ? `${key}-error`
+                                                    : undefined
+                                            }
+                                        />
+                                        <InputError
+                                            id={`${key}-error`}
+                                            message={form.errors[key]}
+                                        />
+                                        {key === 'timezone' && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Use an IANA timezone, such as
+                                                Asia/Kolkata or UTC.
+                                            </p>
+                                        )}
+                                    </div>
+                                ),
+                            )}
+                            <div className="min-w-0 space-y-2">
+                                <Label htmlFor="organization-currency">
+                                    Currency
+                                </Label>
+                                <select
+                                    id="organization-currency"
+                                    name="currency"
+                                    value={form.data.currency}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'currency',
+                                            event.target.value,
+                                        )
+                                    }
+                                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-2 focus-visible:outline-ring md:text-sm"
+                                >
+                                    {[
+                                        {
+                                            value: 'INR',
+                                            label: 'INR — Indian rupee',
+                                        },
+                                        {
+                                            value: 'USD',
+                                            label: 'USD — US dollar',
+                                        },
+                                        { value: 'EUR', label: 'EUR — Euro' },
+                                        {
+                                            value: 'GBP',
+                                            label: 'GBP — British pound',
+                                        },
+                                        {
+                                            value: 'AED',
+                                            label: 'AED — UAE dirham',
+                                        },
+                                    ].map(({ value, label }) => (
+                                        <option key={value} value={value}>
+                                            {label}
+                                        </option>
                                     ))}
-                                </tbody>
-                            </table>
+                                </select>
+                                <InputError message={form.errors.currency} />
+                            </div>
                         </div>
+                        <div className="flex flex-wrap items-center gap-3 border-t pt-5">
+                            <Button
+                                type="submit"
+                                disabled={form.processing}
+                                className="h-11 w-full sm:w-auto"
+                            >
+                                {form.processing ? 'Saving…' : 'Save settings'}
+                            </Button>
+                            {form.recentlySuccessful && (
+                                <span
+                                    role="status"
+                                    className="text-sm text-emerald-700 dark:text-emerald-400"
+                                >
+                                    Settings saved successfully.
+                                </span>
+                            )}
+                        </div>
+                    </form>
+                </CardContent>
+            </Card>
+            <div className="grid min-w-0 items-start gap-6 xl:grid-cols-2">
+                <Card className="min-w-0">
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <Radio className="size-5 text-primary" />
+                            <CardTitle>WhatsApp numbers</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Connections available in this workspace.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {channels.length ? (
+                            channels.map((channel) => (
+                                <div
+                                    className="flex min-w-0 flex-col justify-between gap-3 rounded-xl border p-4 sm:flex-row sm:items-start"
+                                    key={channel.id}
+                                >
+                                    <div className="min-w-0 space-y-1">
+                                        <p className="text-sm font-medium">
+                                            {channel.name}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {channel.phone_number}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            WABA {channel.waba_id}
+                                        </p>
+                                        <Badge
+                                            variant="outline"
+                                            className="capitalize"
+                                        >
+                                            {channel.status}
+                                        </Badge>
+                                    </div>
+                                    <Link
+                                        className="inline-flex min-h-10 shrink-0 items-center text-sm font-medium text-primary underline underline-offset-4"
+                                        href={`/channels/${channel.id}`}
+                                    >
+                                        Manage connection
+                                    </Link>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="py-4 text-sm text-muted-foreground">
+                                No numbers connected.
+                            </p>
+                        )}
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-11 w-full sm:w-auto"
+                        >
+                            <Link href="/whatsapp/connect">
+                                Manage WhatsApp numbers
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+                <Card className="min-w-0">
+                    <CardHeader>
+                        <div className="flex items-center gap-2">
+                            <Users className="size-5 text-primary" />
+                            <CardTitle>Team members</CardTitle>
+                        </div>
+                        <CardDescription>
+                            People with access to this workspace.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="divide-y divide-border">
+                            {members.map((member) => (
+                                <div
+                                    key={member.id}
+                                    className="flex min-w-0 flex-wrap items-start justify-between gap-2 py-3"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium">
+                                            {member.name}
+                                        </p>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {member.email}
+                                        </p>
+                                    </div>
+                                    <Badge variant="secondary">
+                                        {member.pivot?.role}
+                                    </Badge>
+                                </div>
+                            ))}
+                        </div>
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-11 w-full sm:w-auto"
+                        >
+                            <Link href="/management/team">
+                                Manage team and permissions
+                            </Link>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>

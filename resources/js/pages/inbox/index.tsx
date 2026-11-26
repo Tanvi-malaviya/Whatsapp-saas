@@ -1,3 +1,5 @@
+import { api } from '@/lib/api';
+import { TemplateFields, renderTemplateText, templateMediaFormat, type TemplateValues } from '@/components/template-fields';
 import { useState, useEffect, useRef } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
@@ -39,6 +41,24 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+
+function templateRequestBody(data: Record<string, unknown>, file: File | null) {
+    const form = new FormData();
+    const append = (key: string, value: unknown) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === 'object') Object.entries(value).forEach(([index, entry]) => append(`${key}[${index}]`, entry));
+        else form.append(key, String(value));
+    };
+    Object.entries(data).forEach(([key, value]) => append(key, value));
+    if (file) form.append('header_file', file);
+    return form;
+}
+
+function sendError(data: any, status: number) {
+    const errors = data?.errors ? Object.values(data.errors).flat().join(' ') : '';
+    return data?.chat_message?.failureReason || errors || (typeof data?.message === 'string' ? data.message : '') || `Message could not be sent (HTTP ${status}).`;
+}
 
 const STAGE_CONFIG: Record<string, { label: string; badge: string; icon: string; desc: string }> = {
     New: { label: 'New Lead', badge: 'bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30', icon: '🎯', desc: 'Fresh inquiry / new contact' },
@@ -68,6 +88,7 @@ type ChatMessage = {
     text: string;
     time: string;
     status?: 'sent' | 'delivered' | 'read' | 'failed' | 'pending';
+    failureReason?: string | null;
     attachment?: {
         name: string;
         size?: string;
@@ -80,8 +101,12 @@ type ChatThread = {
     id: string;
     contactName: string;
     phone: string;
+    channelId?: string;
+    assignedUserId?: number | null;
     channel: string; // e.g. "DukanHisab"
     lastMessage: string;
+    lastMessageStatus?: string | null;
+    lastMessageDirection?: string | null;
     time: string;
     unread: number;
     windowRemaining: string;
@@ -94,9 +119,17 @@ interface TeamInboxProps {
     initialThreads?: any[];
     channels?: any[];
     metaTemplates?: any[];
+    members?: any[];
 }
 
-export default function TeamInbox({ initialThreads = [], channels = [], metaTemplates = [] }: TeamInboxProps) {
+export default function TeamInbox({ initialThreads = [], channels = [], metaTemplates: initialTemplates = [], members = [] }: TeamInboxProps) {
+    const [metaTemplates, setMetaTemplates] = useState(initialTemplates);
+    const [directTemplates, setDirectTemplates] = useState(initialTemplates);
+    const [newValues, setNewValues] = useState<TemplateValues>({ parameters: [] });
+    const [directValues, setDirectValues] = useState<TemplateValues>({ parameters: [] });
+    const [directHeaderFile, setDirectHeaderFile] = useState<File | null>(null);
+    const [newHeaderFile, setNewHeaderFile] = useState<File | null>(null);
+    const [consentConfirmed, setConsentConfirmed] = useState(false);
     const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
 
     const initialMsgMap: Record<string, ChatMessage[]> = {};
@@ -164,7 +197,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     const [newChatPhone, setNewChatPhone] = useState('');
     const [newChatName, setNewChatName] = useState('');
     const [newChatMsgType, setNewChatMsgType] = useState<'template' | 'text'>('template');
-    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || 'sale_invoice_en');
+    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || '');
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
@@ -172,12 +205,20 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     // Direct Template Send state for Active Chat
     const [showDirectTemplateModal, setShowDirectTemplateModal] = useState(false);
     const [selectedDirectTemplate, setSelectedDirectTemplate] = useState<any>(
-        metaTemplates.find((t: any) => t.name === 'dukanhisab_app_launch') || metaTemplates[0] || null
+        metaTemplates[0] || null
     );
-    const [directTemplateCustomName, setDirectTemplateCustomName] = useState('');
     const [isSendingDirectTemplate, setIsSendingDirectTemplate] = useState(false);
     const [directTemplateStatus, setDirectTemplateStatus] = useState<{ success: boolean; message: string } | null>(null);
 
+    useEffect(() => {
+        if (!newChatChannelId) { setMetaTemplates([]); return; }
+        api(`/channels/${newChatChannelId}/templates`).then(data => { setMetaTemplates(data.templates); setNewChatTemplate(data.templates[0]?.name ?? ''); setNewValues({ parameters: [] }); setNewHeaderFile(null); }).catch(error => setNewChatStatus({ success: false, message: error.message }));
+    }, [newChatChannelId]);
+    useEffect(() => {
+        if (!selectedThread?.id) return;
+        api(`/inbox/conversations/${selectedThread.id}/read`, 'POST').catch(() => {});
+        if (selectedThread.channelId) api(`/channels/${selectedThread.channelId}/templates`).then(data => { setDirectTemplates(data.templates); setSelectedDirectTemplate(data.templates[0] ?? null); setDirectValues({ parameters: [] }); setDirectHeaderFile(null); }).catch(() => setDirectTemplates([]));
+    }, [selectedThread?.id]);
     // Prevent outer main window scrollbar on the inbox screen
     useEffect(() => {
         const origHtmlOverflow = document.documentElement.style.overflow;
@@ -250,7 +291,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         if (remoteThread.messages) {
                             setMessages((prevMsgs) => ({
                                 ...prevMsgs,
-                                [remoteThread.id]: remoteThread.messages,
+                                [remoteThread.id]: [...remoteThread.messages, ...(prevMsgs[remoteThread.id] || []).filter(m => m.id.startsWith('temp-'))],
                             }));
                         }
                     });
@@ -385,28 +426,41 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             const res = await fetch('/inbox/new-chat', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
                 },
-                body: JSON.stringify({
+                body: templateRequestBody({
+                    ...newValues,
+                    consent_confirmed: consentConfirmed,
+                    template_language: metaTemplates.find(t => t.name === newChatTemplate)?.language,
                     phone: newChatPhone,
                     name: newChatName,
                     type: newChatMsgType,
                     template_name: newChatTemplate,
                     message: newChatMessage,
                     channel_id: newChatChannelId,
-                }),
+                }, newChatMsgType === 'template' ? newHeaderFile : null),
             });
 
-            const data = await res.json();
-            if (data.success) {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
                 setNewChatStatus({ success: true, message: data.message });
                 setTimeout(() => {
                     setShowNewChatDialog(false);
                     window.location.href = '/inbox';
                 }, 800);
             } else {
-                setNewChatStatus({ success: false, message: data.message || 'Could not start chat' });
+                setNewChatStatus({ success: false, message: sendError(data, res.status) });
+                if (data?.conversation_id && data?.chat_message) {
+                    const synced = await fetch('/inbox/sync', { headers: { Accept: 'application/json' } }).then(response => response.json());
+                    const thread = synced.threads?.find((item: ChatThread) => item.id === data.conversation_id);
+                    if (thread) {
+                        setThreads(synced.threads);
+                        setSelectedThread(thread);
+                        setMessages(prev => ({ ...prev, [thread.id]: thread.messages ?? [data.chat_message] }));
+                        setShowNewChatDialog(false);
+                    }
+                }
             }
         } catch (err: any) {
             setNewChatStatus({ success: false, message: err.message || 'Network error' });
@@ -421,21 +475,11 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         setDirectTemplateStatus(null);
 
         const templateName = selectedDirectTemplate.name;
-        const recipientName = directTemplateCustomName.trim() || selectedThread.contactName || 'Valued Customer';
-        const isVideoHeader = selectedDirectTemplate.headerFormat === 'VIDEO';
-        const isDocHeader = selectedDirectTemplate.headerFormat === 'DOCUMENT';
-        const mediaUrl = selectedDirectTemplate.headerUrl || (
-            isVideoHeader
-                ? 'https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C'
-                : isDocHeader
-                ? 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
-                : undefined
-        );
-
-        const mediaPrefix = mediaUrl ? `[Media: ${mediaUrl}]\n` : '';
-        const bodyContent = selectedDirectTemplate.body 
-            ? selectedDirectTemplate.body.replace('{{1}}', recipientName)
-            : `Official template ${templateName} dispatched to ${recipientName}.`;
+        const recipientName = selectedThread.contactName || 'Valued Customer';
+        const mediaFormat = templateMediaFormat(selectedDirectTemplate);
+        const mediaUrl = directValues.header_url || selectedDirectTemplate.headerUrl;
+        const mediaPrefix = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(mediaFormat) && mediaUrl ? `[Media: ${mediaUrl}]\n` : '';
+        const bodyContent = renderTemplateText(selectedDirectTemplate.body ?? '', directValues.parameters);
         const optimisticContent = `[Broadcast Campaign: ${templateName} Template: ${templateName}]\n${mediaPrefix}${bodyContent}`;
 
         const optimisticMsg: ChatMessage = {
@@ -443,13 +487,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             sender: 'agent',
             text: optimisticContent,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'sent',
+            status: 'pending',
         };
 
         setMessages((prev) => ({
             ...prev,
             [selectedThread.id]: [...(prev[selectedThread.id] || []), optimisticMsg],
         }));
+        setShowDirectTemplateModal(false);
         setTimeout(() => scrollToBottom('smooth'), 40);
 
         setThreads((prev) =>
@@ -461,44 +506,45 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             const res = await fetch('/inbox/reply', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf,
                 },
-                body: JSON.stringify({
+                body: templateRequestBody({
                     conversation_id: selectedThread.id,
                     type: 'template',
+                    ...directValues,
                     template_name: templateName,
-                    template_language: selectedDirectTemplate.language || 'gu',
-                }),
+                    template_language: selectedDirectTemplate.language || 'en_US',
+                }, directHeaderFile),
             });
 
-            const data = await res.json();
-            if (data.success) {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
                 if (data.message) {
                     setMessages((prev) => ({
                         ...prev,
                         [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
                             m.id === optimisticMsg.id
-                                ? { ...m, id: data.message.id, status: data.message.status || 'sent', text: data.message.text || m.text }
+                                ? { ...m, ...data.message, status: data.message.status || 'sent' }
                                 : m
                         ),
                     }));
                 }
                 setDirectTemplateStatus({ success: true, message: `WhatsApp Template "${templateName}" dispatched to ${recipientName}!` });
-                setTimeout(() => {
-                    setShowDirectTemplateModal(false);
-                    setDirectTemplateStatus(null);
-                }, 900);
+                setDirectTemplateStatus(null);
             } else {
                 setMessages((prev) => ({
                     ...prev,
                     [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
-                        m.id === optimisticMsg.id ? { ...m, status: 'failed' } : m
+                        m.id === optimisticMsg.id ? { ...m, ...data?.chat_message, status: 'failed', failureReason: sendError(data, res.status) } : m
                     ),
                 }));
-                setDirectTemplateStatus({ success: false, message: data.message || 'Failed to dispatch template' });
+                setDirectTemplateStatus({ success: false, message: sendError(data, res.status) });
             }
         } catch (err: any) {
+            setMessages(prev => ({ ...prev, [selectedThread.id]: (prev[selectedThread.id] || []).map(m =>
+                m.id === optimisticMsg.id ? { ...m, status: 'failed', failureReason: err.message || 'Network error while sending.' } : m,
+            ) }));
             setDirectTemplateStatus({ success: false, message: err.message || 'Network error' });
         } finally {
             setIsSendingDirectTemplate(false);
@@ -855,7 +901,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             sender: 'agent',
             text: fullMessageContent,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'sent', // Initially single gray tick
+            status: 'pending',
             attachment: currentAttachment || undefined,
         };
 
@@ -887,6 +933,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         method: 'POST',
                         headers: {
                             'X-CSRF-TOKEN': csrf,
+                            'Accept': 'application/json',
                         },
                         body: formData,
                     });
@@ -896,6 +943,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': csrf,
+                            'Accept': 'application/json',
                         },
                         body: JSON.stringify({
                             conversation_id: selectedThread.id,
@@ -903,18 +951,30 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         }),
                     });
                 }
-                const data = await res.json();
-                if (data.success && data.message) {
+                const data = await res.json().catch(() => null);
+                if (res.ok && data?.success && data?.message) {
                     setMessages((prev) => ({
                         ...prev,
                         [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
                             m.id === optimisticMsg.id
-                                ? { ...m, id: data.message.id, status: data.message.status || 'sent' }
+                                ? { ...m, ...data.message, status: data.message.status || 'sent' }
                                 : m
                         ),
                     }));
+                } else {
+                    // Keep the attempted message visible with the actual server failure.
+                    setMessages((prev) => ({
+                        ...prev,
+                        [selectedThread.id]: (prev[selectedThread.id] || []).map(m => m.id === optimisticMsg.id
+                            ? { ...m, ...data?.chat_message, status: 'failed', failureReason: sendError(data, res.status) } : m),
+                    }));
                 }
             } catch (err) {
+                setMessages((prev) => ({
+                    ...prev,
+                    [selectedThread.id]: (prev[selectedThread.id] || []).map(m => m.id === optimisticMsg.id
+                        ? { ...m, status: 'failed', failureReason: err instanceof Error ? err.message : 'Network error while sending.' } : m),
+                }));
                 console.error(err);
             }
         }
@@ -1087,6 +1147,15 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     {thread.channel}
                                                 </span>
                                                 <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
+                                                    {thread.lastMessageDirection === 'outbound' && (
+                                                        thread.lastMessageStatus === 'read' || thread.lastMessageStatus === 'seen' ? (
+                                                            <CheckCheck className="size-3 text-[#53bdeb] stroke-[2.5] shrink-0" />
+                                                        ) : thread.lastMessageStatus === 'delivered' ? (
+                                                            <CheckCheck className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        ) : (
+                                                            <Check className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        )
+                                                    )}
                                                     {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
                                                         <>
                                                             <FileText className="size-3 text-red-500 shrink-0 inline" />
@@ -1123,7 +1192,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                     <div className="p-2.5 border-t border-border/80 flex items-center justify-between bg-card text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5 truncate">
                             <span className="size-2 rounded-full bg-emerald-500"></span>
-                            <span className="truncate">Active WhatsApp Connected</span>
+                            <span className="truncate">{channels.some(c => c.status === 'connected') ? 'WhatsApp connected' : 'No number connected'}</span>
                         </div>
                         <Button
                             size="sm"
@@ -1496,29 +1565,45 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                                 return msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>;
                                             })()}
+                                            {msg.status === 'failed' && (
+                                                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-destructive bg-destructive/10 px-2 py-1 rounded-md border border-destructive/20 font-medium">
+                                                    <span className="leading-tight">Failed to send</span>
+                                                </div>
+                                            )}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
-                                                {msg.sender === 'agent' && (
+                                                {msg.sender !== 'contact' && (
                                                     <span
                                                         className="inline-flex items-center ml-0.5"
                                                         title={
-                                                            msg.status === 'read'
-                                                                ? 'Read'
+                                                            msg.status === 'read' || (msg.status as string) === 'seen'
+                                                                ? 'Read (Seen)'
                                                                 : msg.status === 'delivered'
                                                                     ? 'Delivered'
                                                                     : msg.status === 'failed'
-                                                                        ? 'Failed to send'
-                                                                        : 'Sent'
+                                                                        ? undefined
+                                                                        : msg.status === 'pending' || (msg.status as string) === 'queued' ? 'Sending…' : 'Sent'
                                                         }
                                                     >
-                                                        {msg.status === 'read' ? (
-                                                            <CheckCheck className="size-3.5 text-[#53bdeb]" />
+                                                        {msg.status === 'read' || (msg.status as string) === 'seen' ? (
+                                                            <CheckCheck className="size-3.5 text-[#53bdeb] stroke-[2.5]" />
                                                         ) : msg.status === 'delivered' ? (
-                                                            <CheckCheck className="size-3.5 text-muted-foreground/70" />
+                                                            <CheckCheck className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         ) : msg.status === 'failed' ? (
-                                                            <AlertCircle className="size-3.5 text-red-500" />
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button type="button" className="cursor-help rounded-sm text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive" aria-label={`Failed to send: ${msg.failureReason || 'Meta did not provide an error reason.'}`}>
+                                                                        <AlertCircle className="size-4" />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="top" className="max-w-[min(20rem,80vw)] whitespace-pre-wrap break-words">
+                                                                    {msg.failureReason || 'Meta did not provide an error reason.'}
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        ) : msg.status === 'pending' || (msg.status as string) === 'queued' ? (
+                                                            <span className="inline-flex items-center gap-1"><Clock className="size-3.5 animate-pulse" />Sending…</span>
                                                         ) : (
-                                                            <Check className="size-3.5 text-muted-foreground/70" />
+                                                            <Check className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         )}
                                                     </span>
                                                 )}
@@ -1673,7 +1758,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         <button
                                             type="button"
                                             onClick={() => {
-                                                setDirectTemplateCustomName(selectedThread?.contactName || '');
+
                                                 setShowDirectTemplateModal(true);
                                                 setShowAttachmentMenu(false);
                                             }}
@@ -1726,6 +1811,28 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </div>
                                 )}
 
+                                {/* 24h Window Closed Warning Banner */}
+                                {selectedThread.windowRemaining === 'Closed' && (
+                                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
+                                        <span className="flex items-center gap-1.5 font-medium">
+                                            <AlertCircle className="size-3.5 text-amber-600 shrink-0" />
+                                            24h customer window is closed. Custom text messages cannot be sent. Re-open chat with an approved Meta Template.
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => {
+
+                                                setShowDirectTemplateModal(true);
+                                            }}
+                                            className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-2.5 shrink-0 font-semibold"
+                                        >
+                                            <Sparkles className="size-3" />
+                                            Send Template
+                                        </Button>
+                                    </div>
+                                )}
+
                                 {/* Main Input Row */}
                                 <div className="flex items-center gap-2">
                                     <Button
@@ -1768,7 +1875,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-                                            setDirectTemplateCustomName(selectedThread?.contactName || '');
+
                                             setShowDirectTemplateModal(true);
                                             setShowAttachmentMenu(false);
                                             setShowEmojiPicker(false);
@@ -1872,6 +1979,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         )}
 
                         <form onSubmit={handleStartNewChat} className="space-y-3.5">
+<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> This contact consented to receive messages.</label>
                             {channels.length > 1 && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold">Send From WhatsApp Number *</label>
@@ -1929,7 +2037,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             }`}
                                     >
                                         <div className="font-semibold text-foreground">⚡ Approved Template</div>
-                                        <p className="text-[10px] text-muted-foreground mt-0.5">Delivers anytime to any number</p>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">For contacts who consented to receive messages</p>
                                     </button>
 
                                     <button
@@ -1953,27 +2061,25 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </label>
                                     <select
                                         value={newChatTemplate}
-                                        onChange={(e) => setNewChatTemplate(e.target.value)}
+                                        onChange={(e) => { setNewChatTemplate(e.target.value); setNewValues({ parameters: [] }); setNewHeaderFile(null); }}
                                         className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                     >
                                         {metaTemplates.length > 0 ? (
                                             metaTemplates.map((tpl: any) => (
                                                 <option key={tpl.name + tpl.language} value={tpl.name}>
-                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) - {tpl.status || 'APPROVED'}
+                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
                                                 </option>
                                             ))
                                         ) : (
                                             <>
-                                                <option value="sale_invoice_en">sale_invoice_en (Sale Invoice Notification)</option>
-                                                <option value="dukanhisab_app_launch">dukanhisab_app_launch (App Launch)</option>
-                                                <option value="purchase_record_en">purchase_record_en (Purchase Record)</option>
-                                                <option value="supplier_payment_en">supplier_payment_en (Supplier Payment)</option>
+                                                <option value="">No approved templates available</option>
                                             </>
                                         )}
                                     </select>
                                     <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
                                         Pre-approved templates land directly on the user's phone to start the conversation.
                                     </p>
+                                    <TemplateFields template={metaTemplates.find(t => t.name === newChatTemplate) ?? null} value={newValues} onChange={setNewValues} mediaFile={newHeaderFile} onMediaFileChange={setNewHeaderFile} showContent />
                                 </div>
                             ) : (
                                 <div className="space-y-1">
@@ -2162,7 +2268,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </div>
                                 </div>
 
-                                {/* Customer Tag / Label */}
+                                <label className="block text-xs">Assigned agent<select className="block w-full rounded border bg-background p-2" value={selectedThread?.assignedUserId ?? ''} onChange={async e => { if (!selectedThread) return; try { const userId = e.target.value ? Number(e.target.value) : null; await api(`/inbox/conversations/${selectedThread.id}/assign`, 'POST', { assigned_user_id: userId, resume_bot: userId === null }); setSelectedThread({ ...selectedThread, assignedUserId: userId }); setSaveNotice('Assignment saved.'); } catch (error) { setSaveNotice((error as Error).message); } }}><option value="">Unassigned / resume automation</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>{/* Customer Tag / Label */}
                                 <div className="space-y-1.5">
                                     <label className="text-xs font-semibold text-foreground">Customer Label / Tag</label>
                                     <select
@@ -2207,7 +2313,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
             {/* Direct Send WhatsApp Template Modal */}
             {showDirectTemplateModal && selectedThread && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in-50">
-                    <div className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
+                    <form onSubmit={(event) => { event.preventDefault(); void handleSendDirectTemplate(); }} className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden">
                         {/* Header */}
                         <div className="flex items-center justify-between border-b border-border/80 px-5 py-3.5 bg-card shrink-0">
                             <div className="flex items-center gap-2.5">
@@ -2267,39 +2373,38 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Left Column: Selection & Configuration */}
+                            <div className="space-y-4">
+                                {/* Template Selection & Configuration */}
                                 <div className="space-y-3.5">
                                     {/* Template Selection */}
                                     <div className="space-y-1.5">
                                         <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                                             <span>Select Template</span>
                                             <span className="text-[10px] text-muted-foreground font-normal">
-                                                {metaTemplates.length} available
+                                                {directTemplates.length} available
                                             </span>
                                         </label>
                                         <select
                                             value={(selectedDirectTemplate?.name || '') + '__' + (selectedDirectTemplate?.language || '')}
                                             onChange={(e) => {
                                                 const [tplName, tplLang] = e.target.value.split('__');
-                                                const match = metaTemplates.find((t: any) => t.name === tplName && (t.language || '') === tplLang);
-                                                if (match) setSelectedDirectTemplate(match);
+                                                const match = directTemplates.find((t: any) => t.name === tplName && (t.language || '') === tplLang);
+                                                if (match) {
+                                                    setSelectedDirectTemplate(match);
+                                                    setDirectValues({ parameters: [] }); setDirectHeaderFile(null);
+                                                    setDirectTemplateStatus(null);
+                                                }
                                             }}
                                             className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
                                         >
-                                            {metaTemplates.length > 0 ? (
-                                                metaTemplates.map((tpl: any) => (
+                                            {directTemplates.length > 0 ? (
+                                                directTemplates.map((tpl: any) => (
                                                     <option key={tpl.name + '__' + tpl.language} value={tpl.name + '__' + tpl.language}>
-                                                        {tpl.name} ({tpl.language?.toUpperCase() || 'GU'}) - {tpl.category || 'MARKETING'}
+                                                        {tpl.name} ({tpl.language?.toUpperCase() || 'GU'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
                                                     </option>
                                                 ))
                                             ) : (
-                                                <>
-                                                    <option value="dukanhisab_app_launch__gu">dukanhisab_app_launch (App Launch Video - GU)</option>
-                                                    <option value="sale_invoice_en__en_US">sale_invoice_en (Sale Invoice - EN)</option>
-                                                    <option value="supplier_payment_hi__hi">supplier_payment_hi (Supplier Payment - HI)</option>
-                                                    <option value="due_reminder_hi__hi">due_reminder_hi (Due Reminder - HI)</option>
-                                                </>
+                                                <option value="">No approved templates available</option>
                                             )}
                                         </select>
                                     </div>
@@ -2326,29 +2431,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         </div>
                                     )}
 
-                                    {/* Personalized Variable (Contact Name) */}
-                                    {selectedDirectTemplate?.body?.includes('{{1}}') ? (
-                                        <div className="space-y-1.5">
-                                            <label className="text-xs font-semibold text-foreground">
-                                                Recipient Name Variable {'{{1}}'}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={directTemplateCustomName}
-                                                onChange={(e) => setDirectTemplateCustomName(e.target.value)}
-                                                placeholder={selectedThread.contactName || 'Customer Name'}
-                                                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-[#47b672]/30 focus:border-[#47b672]"
-                                            />
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Replaces {'{{1}}'} in greeting text (e.g. "નમસ્તે {directTemplateCustomName || selectedThread.contactName}").
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
-                                            <span className="text-emerald-600 font-bold">✓</span>
-                                            <span>This template has fixed Meta-approved text with 0 dynamic variables.</span>
-                                        </div>
-                                    )}
+                                    <TemplateFields template={selectedDirectTemplate} value={directValues} onChange={setDirectValues} mediaFile={directHeaderFile} onMediaFileChange={setDirectHeaderFile} showContent />
 
                                     {/* Recipient Details */}
                                     <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 text-xs space-y-1">
@@ -2367,64 +2450,6 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     </div>
                                 </div>
 
-                                {/* Right Column: WhatsApp Live Message Preview */}
-                                <div className="space-y-1.5">
-                                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                        <span>Live WhatsApp Preview</span>
-                                        <span className="text-[10px] text-muted-foreground font-normal">(as seen on phone)</span>
-                                    </label>
-                                    <div className="rounded-2xl border border-[#47b672]/30 bg-[#e7f8ee] dark:bg-[#0b2416] p-3 text-xs shadow-inner space-y-2">
-                                        {/* Media Header Preview */}
-                                        {selectedDirectTemplate?.headerFormat === 'VIDEO' ? (
-                                            <div className="rounded-xl overflow-hidden border border-emerald-500/30 bg-black/80">
-                                                <video
-                                                    src={selectedDirectTemplate.headerUrl || "https://scontent.whatsapp.net/v/t61.29466-34/861420731_1135805725493070_8195379101910817431_n.mp4?ccb=1-7&_nc_sid=8b1bef&_nc_ohc=LITLgyYzWeEQ7kNvwHswKjK&_nc_oc=Ado6rCu2_7HB01pE1X69FVXpB5pcIrgkalj2PtPnJIsl0WWGQlEIi7a7rOCPlmp_upNRcdeWjGxDJHqJJKJd58wt&_nc_zt=28&_nc_ht=scontent.whatsapp.net&edm=AH51TzQEAAAA&_nc_gid=kDO078dsVyKTE9ewNT-Bcw&_nc_tpa=Q5bMBQL9vkinWT5IO5byDk_pcZOs1A8aVN_j9yEXgDc6ghJsKRjVKFBKUPwxCmbfiYbM9wMEB2DqXN99fA&oh=01_Q5Aa5wFTcGC0MZXLOwFyAlfJ1gUK2BGgUxKzkVfxyohM-21vKg&oe=6B0B9F7C"}
-                                                    controls
-                                                    className="w-full max-h-40 object-cover"
-                                                />
-                                            </div>
-                                        ) : selectedDirectTemplate?.headerFormat === 'DOCUMENT' ? (
-                                            <div className="rounded-xl p-2.5 bg-card/80 border border-border flex items-center gap-2">
-                                                <FileText className="size-6 text-red-500 shrink-0" />
-                                                <div className="truncate text-xs">
-                                                    <p className="font-bold text-foreground">Document.pdf</p>
-                                                    <p className="text-[10px] text-muted-foreground">PDF Attachment</p>
-                                                </div>
-                                            </div>
-                                        ) : null}
-
-                                        {/* Body text */}
-                                        <div className="text-foreground leading-relaxed whitespace-pre-line text-xs font-sans bg-card/70 dark:bg-card/40 p-2.5 rounded-xl border border-border/50">
-                                            {selectedDirectTemplate?.body ? (
-                                                selectedDirectTemplate.body.replace(
-                                                    '{{1}}',
-                                                    directTemplateCustomName || selectedThread.contactName || 'Customer'
-                                                )
-                                            ) : selectedDirectTemplate?.name?.includes('launch') ? (
-                                                `નમસ્તે ${directTemplateCustomName || selectedThread.contactName}!\n\nદુકાનહિસાબ એપ લોન્ચ થઈ ગઈ છે! તમારા વ્યવસાયના હિસાબ-કિતાબ, ઉધાર-જમા, ગ્રાહક લેવડદેવડ અને ઇનવોઇસ હવે બનાવો સરળ.\n\nહમણાં જ એપ ડાઉનલોડ કરો:\nhttps://play.google.com/store/apps/details?id=com.app.dukanhisab\n\nવેબસાઇટ: https://dukanhisab.in\nસંપર્ક કરો: +91 63527 09531\n\nDukanHisab - તમારા વ્યવસાયને બનાવો સરળ!`
-                                            ) : (
-                                                `Hello ${directTemplateCustomName || selectedThread.contactName},\n\nOfficial WhatsApp message from DukanHisab.`
-                                            )}
-                                        </div>
-
-                                        {/* Button Preview */}
-                                        {selectedDirectTemplate?.buttons?.length > 0 && (
-                                            <div className="pt-1 border-t border-emerald-500/20 space-y-1">
-                                                {selectedDirectTemplate.buttons.map((btnText: string, i: number) => (
-                                                    <div key={i} className="w-full py-1.5 px-3 rounded-lg bg-[#25d366] text-white text-xs font-bold text-center shadow-xs flex items-center justify-center gap-1.5">
-                                                        <Download className="size-3.5" />
-                                                        <span>{btnText}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
-                                            <span>Template: {selectedDirectTemplate?.name}</span>
-                                            <span>Just now ✓</span>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
@@ -2440,17 +2465,16 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 Cancel
                             </Button>
                             <Button
-                                type="button"
+                                type="submit"
                                 size="sm"
-                                disabled={isSendingDirectTemplate}
-                                onClick={handleSendDirectTemplate}
+                                disabled={isSendingDirectTemplate || !selectedDirectTemplate || directTemplates.length === 0}
                                 className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-5 h-8 shadow-xs"
                             >
                                 <Sparkles className="size-3.5" />
                                 {isSendingDirectTemplate ? 'Dispatching to WhatsApp...' : '🚀 Send Template Directly'}
                             </Button>
                         </div>
-                    </div>
+                    </form>
                 </div>
             )}
         </>

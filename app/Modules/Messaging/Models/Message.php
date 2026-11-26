@@ -16,6 +16,7 @@ class Message extends Model
     protected $fillable = [
         'conversation_id',
         'organization_id',
+        'metadata',
         'direction',
         'sender_type',
         'sender_id',
@@ -27,6 +28,7 @@ class Message extends Model
     ];
 
     protected $casts = [
+        'metadata' => 'array',
         'meta_cost_paise' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',

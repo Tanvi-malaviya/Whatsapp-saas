@@ -14,6 +14,7 @@ import {
     Moon,
     Zap,
     CheckCheck,
+    Building2,
 } from 'lucide-react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
@@ -32,6 +33,13 @@ type Props = {
 
 export default function Register({ passwordRules }: Props) {
     const { resolvedAppearance, updateAppearance } = useAppearance();
+
+    const [referralCode, setReferralCode] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('ref') || '';
+        }
+        return '';
+    });
 
     // Dynamic interactive progress counter
     const [progress, setProgress] = useState(9840);
@@ -137,6 +145,30 @@ export default function Register({ passwordRules }: Props) {
                                         <InputError message={errors.name} />
                                     </div>
 
+                                    {/* Workspace Name */}
+                                    <div className="space-y-1">
+                                        <Label
+                                            htmlFor="workspace_name"
+                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between"
+                                        >
+                                            <span className="flex items-center gap-1.5">
+                                                <Building2 className="size-3 text-emerald-600 dark:text-emerald-400" />
+                                                Workspace / Company Name
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground font-normal">Business Name</span>
+                                        </Label>
+                                        <Input
+                                            id="workspace_name"
+                                            type="text"
+                                            name="workspace_name"
+                                            tabIndex={2}
+                                            autoComplete="organization"
+                                            placeholder="e.g. Sathwara Global, Acme Store"
+                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                        />
+                                        <InputError message={errors.workspace_name} />
+                                    </div>
+
                                     {/* Email */}
                                     <div className="space-y-1">
                                         <Label
@@ -151,7 +183,7 @@ export default function Register({ passwordRules }: Props) {
                                             type="email"
                                             name="email"
                                             required
-                                            tabIndex={2}
+                                            tabIndex={3}
                                             autoComplete="email"
                                             placeholder="you@company.com"
                                             className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
@@ -172,7 +204,7 @@ export default function Register({ passwordRules }: Props) {
                                             id="password"
                                             name="password"
                                             required
-                                            tabIndex={3}
+                                            tabIndex={4}
                                             autoComplete="new-password"
                                             placeholder="••••••••••••"
                                             passwordrules={passwordRules}
@@ -194,13 +226,37 @@ export default function Register({ passwordRules }: Props) {
                                             id="password_confirmation"
                                             name="password_confirmation"
                                             required
-                                            tabIndex={4}
+                                            tabIndex={5}
                                             autoComplete="new-password"
                                             placeholder="Repeat password"
                                             passwordrules={passwordRules}
                                             className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
                                         />
                                         <InputError message={errors.password_confirmation} />
+                                    </div>
+
+                                    {/* Referral Code (Optional) */}
+                                    <div className="space-y-1">
+                                        <Label
+                                            htmlFor="referral_code"
+                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between"
+                                        >
+                                            <span className="flex items-center gap-1.5">
+                                                <Sparkles className="size-3 text-amber-500" />
+                                                Referral Code
+                                            </span>
+                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">Optional</span>
+                                        </Label>
+                                        <Input
+                                            id="referral_code"
+                                            type="text"
+                                            name="referral_code"
+                                            tabIndex={6}
+                                            value={referralCode}
+                                            onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                            placeholder="e.g. REF12345678"
+                                            className="h-9 rounded-lg border-border bg-card/80 text-xs font-mono uppercase focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                        />
                                     </div>
 
                                     {/* Create Workspace Button (WhatsApp Signature Green Theme) */}
@@ -244,7 +300,7 @@ export default function Register({ passwordRules }: Props) {
                     <div className="pt-4 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                             <ShieldCheck className="size-3.5 text-emerald-500" />
-                            <span>Meta Verified Cloud Partner</span>
+                            <span>Official WhatsApp Cloud API</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <Link href={privacy()} className="hover:text-foreground transition-colors">
@@ -281,10 +337,10 @@ export default function Register({ passwordRules }: Props) {
                     <div className="relative z-10 my-auto py-6 space-y-4 max-w-xl">
                         <div className="space-y-1.5">
                             <h2 className="text-2xl xl:text-3xl font-extrabold tracking-tight text-white leading-tight">
-                                Automate WhatsApp. Drive 98% open rates.
+                                Automate WhatsApp Communications.
                             </h2>
                             <p className="text-xs xl:text-sm text-emerald-100/70">
-                                Send 10,000+ broadcasts in seconds, deploy 24/7 AI response bots, and manage multi-agent chats in one unified workspace.
+                                Send broadcasts with verified templates, deploy 24/7 automated menus, and manage multi-agent chats in one unified workspace.
                             </p>
                         </div>
 
@@ -390,16 +446,15 @@ export default function Register({ passwordRules }: Props) {
                         </div>
                     </div>
 
-                    {/* Bottom Social Proof Bar */}
+                    {/* Bottom Proof Bar */}
                     <div className="relative z-10 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-emerald-200/70">
                         <div className="flex items-center gap-1.5">
-                            <span className="text-amber-400">★★★★★</span>
-                            <span className="text-white/80 font-medium">4.9/5 from 1,200+ brands</span>
+                            <span className="text-emerald-400 font-medium">Official Cloud API Infrastructure</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="text-emerald-400 font-medium">Zero Bans</span>
+                            <span className="text-emerald-400 font-medium">Meta Verified</span>
                             <span>•</span>
-                            <span>99.9% Uptime</span>
+                            <span>High Availability</span>
                         </div>
                     </div>
                 </div>

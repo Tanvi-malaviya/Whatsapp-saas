@@ -15,15 +15,13 @@ type PageProps = {
     auth: Auth;
 };
 
-export default function Profile(
-    {
-        mustVerifyEmail,
-        status,
-    }: {
-        mustVerifyEmail: boolean;
-        status?: string;
-    },
-) {
+export default function Profile({
+    mustVerifyEmail,
+    status,
+}: {
+    mustVerifyEmail: boolean;
+    status?: string;
+}) {
     const { auth } = usePage<PageProps>().props;
 
     return (
@@ -32,7 +30,7 @@ export default function Profile(
 
             <h1 className="sr-only">Profile settings</h1>
 
-            <div className="space-y-6">
+            <div className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
                 <Heading
                     variant="small"
                     title="Profile"
@@ -44,16 +42,16 @@ export default function Profile(
                     options={{
                         preserveScroll: true,
                     }}
-                    className="space-y-6"
+                    className="grid min-w-0 gap-5 md:grid-cols-2"
                 >
-                    {({ processing, errors }) => (
+                    {({ processing, errors, recentlySuccessful }) => (
                         <>
                             <div className="grid gap-2">
                                 <Label htmlFor="name">Name</Label>
 
                                 <Input
                                     id="name"
-                                    className="mt-1 block w-full"
+                                    className="mt-1 block h-11 w-full text-base md:text-sm"
                                     defaultValue={auth.user.name}
                                     name="name"
                                     required
@@ -73,7 +71,7 @@ export default function Profile(
                                 <Input
                                     id="email"
                                     type="email"
-                                    className="mt-1 block w-full"
+                                    className="mt-1 block h-11 w-full text-base md:text-sm"
                                     defaultValue={auth.user.email}
                                     name="email"
                                     required
@@ -89,8 +87,8 @@ export default function Profile(
 
                             {mustVerifyEmail &&
                                 auth.user.email_verified_at === null && (
-                                    <div>
-                                        <p className="-mt-4 text-sm text-muted-foreground">
+                                    <div className="md:col-span-2">
+                                        <p className="text-sm text-muted-foreground">
                                             Your email address is unverified.{' '}
                                             <Link
                                                 href={send()}
@@ -112,13 +110,22 @@ export default function Profile(
                                     </div>
                                 )}
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-4 md:col-span-2">
                                 <Button
+                                    className="h-11 w-full sm:w-auto"
                                     disabled={processing}
                                     data-test="update-profile-button"
                                 >
-                                    Save
+                                    {processing ? 'Saving…' : 'Save profile'}
                                 </Button>
+                                {recentlySuccessful && (
+                                    <span
+                                        role="status"
+                                        className="text-sm text-emerald-700 dark:text-emerald-400"
+                                    >
+                                        Profile saved.
+                                    </span>
+                                )}
                             </div>
                         </>
                     )}

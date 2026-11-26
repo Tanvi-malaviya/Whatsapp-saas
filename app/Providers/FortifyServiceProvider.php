@@ -29,6 +29,36 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Fortify::authenticateUsing(function (Request $request) {
+            $user = \App\Models\User::where('email', $request->input('email'))->first();
+            if (! $user || ! \Illuminate\Support\Facades\Hash::check($request->input('password', ''), $user->password)) { return null; }
+            $panel = $request->is('admin/login') ? 'admin' : ($request->is('agent/login') ? 'agent' : 'user');
+            $allowed = match ($panel) {
+                'admin' => $user->isSuperAdmin(),
+                'agent' => $user->isB2BAgent() || $user->isSuperAdmin(),
+                default => ! $user->isB2BAgent() || $user->isSuperAdmin(), // Allow Super Admin to also authenticate from regular login
+            };
+            if (! $allowed) { return null; }
+            $request->session()->forget('support_workspace_id');
+            return $user;
+        });
+        $this->app->singleton(\Laravel\Fortify\Contracts\LoginResponse::class, function () {
+            return new class implements \Laravel\Fortify\Contracts\LoginResponse {
+                public function toResponse($request) {
+                    return redirect(\App\Services\PanelNavigation::intended($request->user(), $request->session()->pull('url.intended')));
+                }
+            };
+        });
+        $this->app->singleton(\Laravel\Fortify\Contracts\TwoFactorLoginResponse::class, function () {
+            return new class implements \Laravel\Fortify\Contracts\TwoFactorLoginResponse {
+                public function toResponse($request) { return redirect(\App\Services\PanelNavigation::intended($request->user(), $request->session()->pull('url.intended'))); }
+            };
+        });
+        $this->app->singleton(\Laravel\Fortify\Contracts\LogoutResponse::class, function () {
+            return new class implements \Laravel\Fortify\Contracts\LogoutResponse {
+                public function toResponse($request) { return redirect('/login'); }
+            };
+        });
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();

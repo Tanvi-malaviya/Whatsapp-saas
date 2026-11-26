@@ -1,13 +1,13 @@
+import { useMetaSignup } from '@/hooks/use-meta-signup';
+import { api } from '@/lib/api';
 import { useState, useEffect, useRef } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Smartphone,
     CheckCircle2,
-    ArrowLeft,
     ShieldCheck,
     AlertCircle,
     Building2,
-    Key,
     ExternalLink,
     Zap,
     Plus,
@@ -16,15 +16,14 @@ import {
     Trash2,
     RefreshCw,
     QrCode,
-    Sliders,
     Radio,
     Sparkles,
     ChevronRight,
+    Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 type Channel = {
     id: string;
@@ -47,6 +46,8 @@ type Props = {
     channels?: Channel[];
     defaultWebhookUrl?: string;
     defaultVerifyToken?: string;
+    metaAppId?: string;
+    graphVersion?: string;
     maxChannels?: number;
     channelsCount?: number;
     canAddMore?: boolean;
@@ -54,8 +55,10 @@ type Props = {
 
 export default function WhatsAppConnect({
     channels = [],
-    defaultWebhookUrl = 'https://dukanhisab.in/api/v1/whatsapp/webhook',
-    defaultVerifyToken = '3tPseIuEUrfCcUlCaZkeZp5a3y3bC7FXLUoLTPiMxQcrJnk6VlP3N8Tln5jOr16b',
+    defaultWebhookUrl = '',
+    defaultVerifyToken = '',
+    metaAppId = '',
+    graphVersion = 'v22.0',
     maxChannels = 1,
     channelsCount = 0,
     canAddMore = true,
@@ -63,264 +66,36 @@ export default function WhatsAppConnect({
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
-    const [isTesting, setIsTesting] = useState<string | null>(null);
-    const [testResult, setTestResult] = useState<{ id: string; success: boolean; message: string } | null>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null);
     const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
-    const emptyForm = {
-        id: '',
-        name: '',
-        phone_number: '',
-        phone_number_id: '',
-        waba_id: '',
-        access_token: '',
-        app_id: '',
-        app_secret: '',
-    };
+    const { launch: launchDirectMetaWizard, busy: isConnecting } = useMetaSignup({ appId: metaAppId, graphVersion, onError: setSyncNotice });
 
-    // Form inputs for connecting ANY WhatsApp number (blank by default)
-    const [form, setForm] = useState(emptyForm);
-    const [isEditing, setIsEditing] = useState(false);
-
-    const popupRef = useRef<Window | null>(null);
-
-    // Initialize official Facebook JavaScript SDK for Embedded Signup
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            (window as any).fbAsyncInit = function () {
-                (window as any).FB.init({
-                    appId: '1079349601748656',
-                    cookie: true,
-                    xfbml: true,
-                    version: 'v22.0',
-                });
-            };
-
-            if (!document.getElementById('facebook-jssdk')) {
-                const js = document.createElement('script');
-                js.id = 'facebook-jssdk';
-                js.src = 'https://connect.facebook.net/en_US/sdk.js';
-                js.async = true;
-                js.defer = true;
-                document.body.appendChild(js);
-            }
-        }
-    }, []);
-
-    // If opened in a popup from Meta Embedded Signup redirect, notify opener
-    useEffect(() => {
-        if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
-            const params = new URLSearchParams(window.location.search);
-            const phoneId = params.get('phone_number_id');
-            const wabaId = params.get('waba_id');
-            const code = params.get('code');
-            if (phoneId || wabaId || code) {
-                try {
-                    window.opener.postMessage(
-                        JSON.stringify({
-                            type: 'WA_EMBEDDED_SIGNUP',
-                            event: 'FINISH',
-                            data: { phone_number_id: phoneId, waba_id: wabaId, code: code },
-                        }),
-                        '*'
-                    );
-                } catch (e) {}
-                window.close();
-            }
-        }
-    }, []);
-
-    const processAutoConnect = async (payload: { code?: string; phone_number_id?: string; waba_id?: string }) => {
-        setIsSyncing(true);
-        setSyncNotice('Connecting WhatsApp from Meta Embedded Signup...');
-
-        try {
-            const res = await fetch('/channels/quick-connect', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            const json = await res.json();
-            if (json.success) {
-                setSyncNotice(json.message || 'WhatsApp connected successfully!');
-                router.reload();
-            } else {
-                setSyncNotice(json.message || 'Could not auto-connect');
-            }
-        } catch (e: any) {
-            setSyncNotice('Auto-connect error: ' + e.message);
-        } finally {
-            setIsSyncing(false);
-        }
-    };
-
-    // Listen to Meta Embedded Signup finish events in parent window
-    useEffect(() => {
-        const handleMetaEmbeddedSignupMsg = async (event: MessageEvent) => {
-            let data = event.data;
-            if (typeof data === 'string') {
-                try {
-                    data = JSON.parse(data);
-                } catch (e) {
-                    return;
-                }
-            }
-
-            if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') {
-                return;
-            }
-
-            const isFinished =
-                data.event === 'FINISH' ||
-                data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
-                data.phone_number_id ||
-                data.data?.phone_number_id ||
-                data.code ||
-                data.data?.code;
-
-            if (!isFinished) {
-                return;
-            }
-
-            // Close popup window if open
-            if (popupRef.current && !popupRef.current.closed) {
-                try {
-                    popupRef.current.close();
-                } catch (e) {}
-            }
-
-            const payload = data.data || data;
-            const code = payload.code;
-            const phoneId = payload.phone_number_id;
-            const wabaId = payload.waba_id || payload.messaging_account_id || (payload.messaging_account_ids ? payload.messaging_account_ids[0] : null);
-
-            processAutoConnect({
-                code,
-                phone_number_id: phoneId,
-                waba_id: wabaId,
-            });
-        };
-
-        window.addEventListener('message', handleMetaEmbeddedSignupMsg);
-        return () => window.removeEventListener('message', handleMetaEmbeddedSignupMsg);
-    }, []);
-
-    const launchDirectMetaWizard = () => {
-        if (!canAddMore) {
-            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
-            return;
-        }
-
-        const appId = '1079349601748656';
-        const configId = '1835889181059188';
-
-        // Prefer official Facebook JS SDK FB.login for rock-solid popup handling
-        if (typeof window !== 'undefined' && (window as any).FB) {
-            try {
-                (window as any).FB.login(
-                    function (response: any) {
-                        if (response.authResponse && response.authResponse.code) {
-                            processAutoConnect({ code: response.authResponse.code });
-                        }
-                    },
-                    {
-                        config_id: configId,
-                        response_type: 'code',
-                        override_default_response_type: true,
-                        auth_type: 'rerequest',
-                        extras: {
-                            featureType: 'whatsapp_business_app_onboarding',
-                            sessionInfoVersion: '3',
-                        },
-                    }
-                );
-                return;
-            } catch (e) {}
-        }
-
-        // Fallback to direct popup window URL
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://whatsapp.sathwarainfotech.cloud';
-        const redirectUri = encodeURIComponent(`${origin}/whatsapp/connect`);
-
-        const onboardUrl = `https://business.facebook.com/messaging/whatsapp/onboard/?app_id=${appId}&config_id=${configId}&extras=%7B%22version%22%3A%22v4%22%2C%22sessionInfoVersion%22%3A%223%22%2C%22featureType%22%3A%22whatsapp_business_app_onboarding%22%7D&redirect_uri=${redirectUri}`;
-
-        const w = 650;
-        const h = 750;
-        const left = typeof window !== 'undefined' ? window.screen.width / 2 - w / 2 : 100;
-        const top = typeof window !== 'undefined' ? window.screen.height / 2 - h / 2 : 100;
-
-        popupRef.current = window.open(
-            onboardUrl,
-            'MetaWhatsAppOnboarding',
-            `width=${w},height=${h},top=${top},left=${left},scrollbars=yes,status=no,resizable=yes`
-        );
-    };
-
-    const handleAddNewChannel = () => {
-        if (!canAddMore) {
-            alert(`Your workspace has reached the limit of ${maxChannels} WhatsApp number(s). To connect more numbers, please upgrade your plan in the Admin Panel.`);
-            return;
-        }
-
-        setIsEditing(false);
-        const existing = channels[0];
-        setForm({
-            id: '',
-            name: '',
-            phone_number: '',
-            phone_number_id: '',
-            waba_id: '',
-            access_token: existing?.access_token || '',
-            app_id: existing?.app_id || '1079349601748656',
-            app_secret: existing?.app_secret || '',
-        });
-        setIsModalOpen(true);
-    };
-
-    const handleEditChannel = (ch: Channel) => {
-        setIsEditing(true);
-        setForm({
-            id: ch.id,
-            name: ch.name || '',
-            phone_number: ch.phone_number || '',
-            phone_number_id: ch.phone_number_id || '',
-            waba_id: ch.waba_id || '',
-            access_token: ch.access_token || '',
-            app_id: ch.app_id || '',
-            app_secret: ch.app_secret || '',
-        });
-        setIsModalOpen(true);
-    };
-
-    const handleSyncMeta = async () => {
-        setIsSyncing(true);
+    // Synchronize an active channel directly from Meta
+    const handleSyncActiveChannel = async (channelId: string) => {
+        setSyncingChannelId(channelId);
         setSyncNotice(null);
         try {
             const res = await fetch('/channels/sync-meta', {
                 method: 'POST',
                 headers: {
+                    Accept: 'application/json',
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
                 },
             });
             const data = await res.json();
             if (data.success) {
-                setSyncNotice(data.message || 'Synced successfully!');
-                router.reload({ only: ['channels'] });
+                setSyncNotice(data.message || 'Synced successfully from Meta!');
+                router.reload({ only: ['channels', 'channelsCount', 'canAddMore', 'whatsapp'] });
             } else {
                 setSyncNotice(data.message || 'Could not sync from Meta.');
             }
         } catch (e: any) {
             setSyncNotice('Sync error: ' + e.message);
         } finally {
-            setIsSyncing(false);
+            setSyncingChannelId(null);
             setTimeout(() => setSyncNotice(null), 5000);
         }
     };
@@ -331,55 +106,11 @@ export default function WhatsAppConnect({
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    const handleFormSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        router.post('/channels', form, {
-            preserveScroll: true,
-            onSuccess: () => {
-                setIsModalOpen(false);
-                setIsEditing(false);
-                router.reload();
-            },
-            onError: (errors) => {
-                const msg = Object.values(errors).join(', ') || 'Failed to save WhatsApp number';
-                alert('Save error: ' + msg);
-            },
-        });
-    };
-
     const handleDelete = (id: string, name: string) => {
-        if (confirm(`Are you sure you want to disconnect WhatsApp number "${name}"?`)) {
+        if (confirm(`Are you sure you want to disconnect WhatsApp number "${name}"? Message history will be safely preserved.`)) {
             router.delete(`/channels/${id}`, {
                 preserveScroll: true,
             });
-        }
-    };
-
-    const handleTestPing = async (id: string) => {
-        setIsTesting(id);
-        setTestResult(null);
-        try {
-            const res = await fetch(`/channels/${id}/test`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
-                },
-            });
-            const data = await res.json();
-            setTestResult({
-                id,
-                success: data.success,
-                message: data.message || (data.success ? 'Meta Cloud API verified!' : 'Verification failed'),
-            });
-        } catch (err: any) {
-            setTestResult({
-                id,
-                success: false,
-                message: err.message || 'Could not verify',
-            });
-        } finally {
-            setIsTesting(null);
         }
     };
 
@@ -387,114 +118,75 @@ export default function WhatsAppConnect({
         <>
             <Head title="WhatsApp Channels & Phone Number Management" />
 
-            <div className="flex flex-1 flex-col gap-3.5 p-3 sm:p-4 md:p-5 max-w-5xl mx-auto w-full font-sans">
-                {/* Header Row: Compact unified bar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-3">
-                    <div className="flex items-center gap-2.5">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            asChild
-                            className="size-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                        >
-                            <Link href="/dashboard" title="Back to Dashboard">
-                                <ArrowLeft className="size-4" />
-                            </Link>
-                        </Button>
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-2xs">
-                            <Smartphone className="size-4" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-                                    Connected WhatsApp Channels
-                                </h1>
-                                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                                    <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                                    Meta Cloud v22.0
+            <div className="flex flex-1 flex-col gap-4 p-3.5 sm:p-5 max-w-5xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+                {/* Compact Action Toolbar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Meta Cloud API
+                            </span>
+                            {maxChannels <= 0 ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
+                                    <Sparkles className="size-2.5" /> Unlimited Numbers Plan
                                 </span>
-                                {maxChannels <= 0 ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-600 dark:text-purple-400">
-                                        <Sparkles className="size-2.5" /> Unlimited Numbers Plan
-                                    </span>
-                                ) : (
-                                    <span
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
-                                            canAddMore
-                                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                                : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold'
-                                        }`}
-                                    >
-                                        Quota: {channelsCount}/{maxChannels} Used {maxChannels === 1 ? '(Single Number Plan)' : '(Multi-Number Plan)'}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Manage registered phone numbers, webhook events, and Cloud API tokens.
-                            </p>
+                            ) : (
+                                <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                                        canAddMore
+                                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300 font-bold'
+                                    }`}
+                                >
+                                    Allowance: {channelsCount}/{maxChannels} Used {maxChannels === 1 ? '(Single Number)' : `(Max ${maxChannels})`}
+                                </span>
+                            )}
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                            Connect numbers directly with Meta to manage live messaging, broadcasts, and automated bot flows.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isSyncing}
-                            onClick={handleSyncMeta}
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1.5 shadow-2xs text-foreground hover:bg-muted"
-                            title="Fetch registered WhatsApp numbers directly from Meta Cloud API"
-                        >
-                            <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin text-primary' : 'text-muted-foreground'}`} />
-                            <span>{isSyncing ? 'Syncing...' : 'Sync from Meta'}</span>
-                        </Button>
-
+                    {/* Primary Action: Connect via Meta Only (No Manual Entry) */}
+                    <div className="flex items-center gap-2 shrink-0">
                         <Button
                             type="button"
                             size="sm"
-                            onClick={handleAddNewChannel}
-                            className="h-8 px-3 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg gap-1.5 shadow-2xs"
-                        >
-                            <Plus className="size-3.5" />
-                            Connect New Number
-                        </Button>
-
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
+                            disabled={isConnecting || !canAddMore}
                             onClick={launchDirectMetaWizard}
-                            className="h-8 px-2.5 text-xs font-semibold rounded-lg gap-1 border border-border/80 shadow-2xs hover:bg-muted"
-                            title="1-Click Connect WhatsApp Number via Official Meta Wizard"
+                            className="h-9 px-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold rounded-xl gap-2 shadow-md shadow-emerald-500/20 cursor-pointer"
                         >
-                            <Sparkles className="size-3.5 text-primary" />
-                            <span>Meta Wizard</span>
+                            <Plus className="size-4" />
+                            <span>{isConnecting ? 'Opening Meta...' : 'Connect Number via Meta'}</span>
                         </Button>
                     </div>
                 </div>
 
                 {/* Quota limit warning alert if limit reached */}
                 {!canAddMore && (
-                    <div className="flex items-center gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs shadow-2xs">
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-800 dark:text-amber-300 text-xs shadow-2xs">
                         <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
                         <span>
-                            <strong>WhatsApp Number Limit Reached:</strong> Your current workspace plan allows a maximum of <strong>{maxChannels}</strong> WhatsApp number{maxChannels > 1 ? 's' : ''}. To connect additional numbers, please contact support to upgrade your plan.
+                            <strong>Number Quota Reached:</strong> Your current subscription allows a maximum of <strong>{maxChannels}</strong> WhatsApp number{maxChannels > 1 ? 's' : ''}. Contact your administrator to increase your number allowance.
                         </span>
                     </div>
                 )}
 
                 {syncNotice && (
-                    <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-xs text-primary font-medium flex items-center justify-between">
+                    <div className="rounded-xl bg-primary/10 border border-primary/20 px-3.5 py-2 text-xs text-primary font-medium flex items-center justify-between">
                         <span>{syncNotice}</span>
-                        <button onClick={() => setSyncNotice(null)} className="text-primary hover:text-primary/70 text-xs">Dismiss</button>
+                        <button onClick={() => setSyncNotice(null)} className="text-primary hover:text-primary/70 text-xs font-semibold cursor-pointer">
+                            Dismiss
+                        </button>
                     </div>
                 )}
 
                 {/* Connected Channels List */}
-                <div className="space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
                         <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                            <span>Active Channels ({channels.length})</span>
+                            <span>Connected Numbers ({channels.length})</span>
                             {currentOrg && (
                                 <Badge variant="outline" className="text-[10px] text-foreground font-normal border-border bg-muted/40 py-0">
                                     Workspace: <strong className="ml-1 text-primary font-bold">{currentOrg.name}</strong>
@@ -504,155 +196,152 @@ export default function WhatsAppConnect({
                     </div>
 
                     {channels.length === 0 ? (
-                        <Card className="border-border/80 bg-card p-6 text-center shadow-2xs rounded-xl">
-                            <div className="flex size-11 mx-auto items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 mb-2.5">
-                                <Smartphone className="size-5" />
+                        <Card className="border-border/80 bg-card p-8 text-center shadow-2xs rounded-2xl">
+                            <div className="flex size-14 mx-auto items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 mb-3 shadow-sm">
+                                <Smartphone className="size-7" />
                             </div>
-                            <h3 className="text-sm font-bold text-foreground">
-                                No WhatsApp Channels Connected
+                            <h3 className="text-sm sm:text-base font-bold text-foreground">
+                                No WhatsApp Numbers Connected
                             </h3>
-                            <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-3.5">
-                                Link your first WhatsApp Business number to {currentOrg?.name || 'this workspace'} to enable automated replies and bulk broadcasts.
+                            <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1.5 mb-4 leading-relaxed">
+                                Link your official WhatsApp Business number directly through Facebook &amp; Meta. No need to look up Phone IDs, WABA IDs, or access tokens manually.
                             </p>
                             <Button
-                                asChild
                                 size="sm"
-                                className="h-8 px-3.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg gap-1.5 shadow-2xs"
+                                disabled={isConnecting || !canAddMore}
+                                onClick={launchDirectMetaWizard}
+                                className="h-9 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold rounded-xl gap-2 shadow-md shadow-emerald-500/20 cursor-pointer"
                             >
-                                <Link href="/whatsapp/connect/setup">
-                                    <Plus className="size-3.5" />
-                                    Connect WhatsApp Number
-                                </Link>
+                                <Plus className="size-4" />
+                                <span>Connect with Meta Now</span>
                             </Button>
                         </Card>
                     ) : (
-                        channels.map((ch) => (
-                            <Card
-                                key={ch.id}
-                                onClick={() => router.visit(`/channels/${ch.id}`)}
-                                className="border-border/80 bg-card overflow-hidden shadow-2xs hover:border-primary/50 hover:shadow-xs transition-all cursor-pointer group rounded-xl"
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 gap-3">
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 font-bold group-hover:scale-105 transition-transform mt-0.5 sm:mt-0">
-                                            <Smartphone className="size-4" />
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            <div className="flex flex-wrap items-center gap-1.5">
-                                                <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
-                                                    {ch.name}
-                                                    <ChevronRight className="size-3.5 text-muted-foreground/60 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                                                </h3>
-                                                {ch.is_default && (
-                                                    <Badge className="bg-primary text-primary-foreground text-[10px] font-semibold py-0 px-1.5">
-                                                        DEFAULT
-                                                    </Badge>
-                                                )}
-                                                <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 py-0 px-1.5 font-medium">
-                                                    QUALITY: {ch.quality_rating}
-                                                </Badge>
-                                                <span className="text-[11px] text-muted-foreground">
-                                                    Tier: {ch.messaging_limit}
-                                                </span>
+                        <div className="grid grid-cols-1 gap-3">
+                            {channels.map((ch) => (
+                                <Card
+                                    key={ch.id}
+                                    className="border-border/80 bg-card overflow-hidden shadow-2xs hover:border-primary/40 hover:shadow-xs transition-all rounded-2xl"
+                                >
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 gap-4 min-w-0">
+                                        <div className="flex items-start gap-3.5 min-w-0">
+                                            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-bold mt-0.5">
+                                                <Smartphone className="size-5" />
                                             </div>
-                                            <p className="text-[11px] font-mono text-muted-foreground">
-                                                Phone: {ch.phone_number ? (
-                                                    <strong className="text-foreground text-emerald-600 dark:text-emerald-400 font-semibold">{ch.phone_number}</strong>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleEditChannel(ch);
-                                                        }}
-                                                        className="inline-flex items-center text-amber-600 dark:text-amber-400 font-semibold underline hover:text-amber-700 ml-0.5 cursor-pointer"
+                                            <div className="space-y-1 min-w-0 flex-1">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                    <h3 className="text-sm font-bold text-foreground truncate">
+                                                        {ch.name}
+                                                    </h3>
+                                                    {ch.is_default && (
+                                                        <Badge className="bg-primary text-primary-foreground text-[10px] font-semibold py-0 px-2">
+                                                            DEFAULT
+                                                        </Badge>
+                                                    )}
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`text-[10px] py-0 px-2 font-semibold ${
+                                                            ch.quality_rating === 'GREEN'
+                                                                ? 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+                                                                : ch.quality_rating === 'YELLOW'
+                                                                ? 'border-amber-500/30 text-amber-600 bg-amber-500/10'
+                                                                : 'border-destructive/30 text-destructive bg-destructive/10'
+                                                        }`}
                                                     >
-                                                        Not Set (Click to enter number)
-                                                    </button>
-                                                )} • Phone ID: <span className="font-semibold text-foreground">{ch.phone_number_id}</span> • WABA ID: <span className="font-semibold text-foreground">{ch.waba_id}</span>
-                                            </p>
-                                        </div>
-                                    </div>
+                                                        QUALITY: {ch.quality_rating || 'GREEN'}
+                                                    </Badge>
+                                                    <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/80 py-0 px-1.5">
+                                                        {ch.messaging_limit || 'TIER_1K'}
+                                                    </Badge>
+                                                </div>
 
-                                    <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-auto">
-                                        {!ch.is_default && (
+                                                <p className="text-xs font-mono text-muted-foreground flex flex-wrap items-center gap-2">
+                                                    <span>
+                                                        Number:{' '}
+                                                        <strong className="text-foreground text-emerald-600 dark:text-emerald-400 font-semibold">
+                                                            {ch.phone_number || 'Registered'}
+                                                        </strong>
+                                                    </span>
+                                                    <span>•</span>
+                                                    <span>Phone ID: <span className="font-semibold text-foreground">{ch.phone_number_id}</span></span>
+                                                    <span>•</span>
+                                                    <span>WABA ID: <span className="font-semibold text-foreground">{ch.waba_id}</span></span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Actions Per Active Channel: Sync from Meta, Details & Test, Make Default, Disconnect */}
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full md:w-auto pt-2.5 md:pt-0 border-t md:border-t-0 border-border/60">
+                                            {/* Sync from Meta inside Active Channel */}
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={syncingChannelId === ch.id}
+                                                onClick={() => handleSyncActiveChannel(ch.id)}
+                                                className="h-8 text-xs px-2.5 rounded-lg border-border/80 gap-1.5 text-foreground hover:bg-muted cursor-pointer"
+                                                title="Sync quality rating, limits, and verified name from Meta"
+                                            >
+                                                <RefreshCw className={`size-3 ${syncingChannelId === ch.id ? 'animate-spin text-primary' : 'text-muted-foreground'}`} />
+                                                <span>{syncingChannelId === ch.id ? 'Syncing...' : 'Sync from Meta'}</span>
+                                            </Button>
+
+                                            {/* Channel Details & Scan Test */}
+                                            <Button
+                                                asChild
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 text-xs px-2.5 rounded-lg border-border/80 gap-1.5 text-foreground hover:bg-muted"
+                                            >
+                                                <Link href={`/channels/${ch.id}`}>
+                                                    <QrCode className="size-3 text-emerald-600" />
+                                                    <span>Details &amp; Test Chat</span>
+                                                </Link>
+                                            </Button>
+
+                                            {!ch.is_default && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        router.post(`/channels/${ch.id}/set-default`, {}, { preserveScroll: true });
+                                                    }}
+                                                    className="h-8 text-xs px-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                                                    title="Set as primary WhatsApp sender"
+                                                >
+                                                    Set Default
+                                                </Button>
+                                            )}
+
                                             <Button
                                                 variant="ghost"
-                                                size="sm"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    router.post(`/channels/${ch.id}/set-default`, {}, { preserveScroll: true });
-                                                }}
-                                                className="h-7 text-xs px-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-                                                title="Set this as your primary default WhatsApp sending number"
+                                                size="icon"
+                                                onClick={() => handleDelete(ch.id, ch.name)}
+                                                className="size-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                title="Disconnect channel"
                                             >
-                                                Make Default
+                                                <Trash2 className="size-3.5" />
                                             </Button>
-                                        )}
-
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEditChannel(ch);
-                                            }}
-                                            className="h-7 text-xs px-2.5 rounded-lg border-border gap-1 text-foreground hover:bg-muted"
-                                        >
-                                            <Sliders className="size-3 text-primary" />
-                                            Edit Credentials
-                                        </Button>
-
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleTestPing(ch.id);
-                                            }}
-                                            disabled={isTesting === ch.id}
-                                            className="h-7 text-xs px-2.5 rounded-lg border-border gap-1"
-                                        >
-                                            <RefreshCw className={`size-3 ${isTesting === ch.id ? 'animate-spin' : ''}`} />
-                                            {isTesting === ch.id ? 'Testing...' : 'Test Connection'}
-                                        </Button>
-
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDelete(ch.id, ch.name);
-                                            }}
-                                            className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 rounded-lg"
-                                        >
-                                            <Trash2 className="size-3.5" />
-                                        </Button>
+                                        </div>
                                     </div>
-                                </div>
-
-                                {testResult && testResult.id === ch.id && (
-                                    <div className={`px-4 py-1.5 text-xs border-t ${testResult.success ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-500/20' : 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-500/20'}`}>
-                                        {testResult.message}
-                                    </div>
-                                )}
-                            </Card>
-                        ))
+                                </Card>
+                            ))}
+                        </div>
                     )}
                 </div>
 
                 {/* Webhook Configuration for Meta Developers Portal */}
-                <Card className="border-border/80 bg-card rounded-xl shadow-2xs overflow-hidden">
-                    <CardHeader className="py-2.5 px-3.5 sm:px-4 border-b border-border/60 bg-muted/20">
+                <Card className="border-border/80 bg-card rounded-2xl shadow-2xs overflow-hidden mt-2">
+                    <CardHeader className="py-3 px-4 border-b border-border/60 bg-muted/20">
                         <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2 text-foreground">
                             <Radio className="size-3.5 text-primary" />
                             Meta WhatsApp Webhook Configuration
                         </CardTitle>
                         <CardDescription className="text-xs">
-                            In Meta for Developers App &gt; WhatsApp &gt; Configuration, set this Webhook URL and Verify Token so incoming chats reach your workspace.
+                            In Meta for Developers App &gt; WhatsApp &gt; Configuration, set this Webhook URL and Verify Token so incoming customer chats reach your workspace.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-2.5 p-3.5 sm:p-4">
+                    <CardContent className="space-y-3 p-4">
                         <div className="grid gap-3 sm:grid-cols-2">
                             <div className="space-y-1">
                                 <label className="text-xs font-semibold text-foreground">
@@ -668,7 +357,7 @@ export default function WhatsAppConnect({
                                         size="sm"
                                         variant="outline"
                                         onClick={() => copyToClipboard(defaultWebhookUrl, 'webhookUrl')}
-                                        className="h-8 shrink-0 text-xs px-2.5 rounded-lg border-border gap-1 hover:bg-muted"
+                                        className="h-8 shrink-0 text-xs px-2.5 rounded-lg border-border gap-1 hover:bg-muted cursor-pointer"
                                     >
                                         {copiedField === 'webhookUrl' ? <Check className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
                                         Copy
@@ -683,14 +372,14 @@ export default function WhatsAppConnect({
                                 <div className="flex gap-1.5">
                                     <input
                                         readOnly
-                                        value={defaultVerifyToken}
+                                        value={defaultVerifyToken || 'Managed in Platform Settings'}
                                         className="w-full rounded-lg border border-input bg-muted/40 px-2.5 py-1 text-xs text-foreground font-mono"
                                     />
                                     <Button
                                         size="sm"
                                         variant="outline"
                                         onClick={() => copyToClipboard(defaultVerifyToken, 'verifyToken')}
-                                        className="h-8 shrink-0 text-xs px-2.5 rounded-lg border-border gap-1 hover:bg-muted"
+                                        className="h-8 shrink-0 text-xs px-2.5 rounded-lg border-border gap-1 hover:bg-muted cursor-pointer"
                                     >
                                         {copiedField === 'verifyToken' ? <Check className="size-3.5 text-primary" /> : <Copy className="size-3.5" />}
                                         Copy
@@ -699,7 +388,7 @@ export default function WhatsAppConnect({
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 rounded-lg bg-primary/5 border border-primary/20 p-2.5 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 rounded-xl bg-primary/5 border border-primary/20 p-2.5 text-xs text-muted-foreground">
                             <ShieldCheck className="size-4 text-primary shrink-0" />
                             <span>
                                 Subscribe to <strong>messages</strong>, <strong>message_template_status_update</strong>, and <strong>phone_number_quality_update</strong> in Meta Webhook fields.
@@ -707,145 +396,6 @@ export default function WhatsAppConnect({
                         </div>
                     </CardContent>
                 </Card>
-
-                {/* Edit Credentials Modal Dialog */}
-                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogContent className="sm:max-w-lg">
-                        <DialogHeader>
-                            <DialogTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
-                                <Smartphone className="size-4 text-primary" />
-                                {isEditing ? `Edit Credentials: ${form.name}` : 'Connect WhatsApp Business Number'}
-                            </DialogTitle>
-                            <DialogDescription className="text-xs">
-                                {isEditing ? 'Update your Meta Permanent Access Token, Phone Number ID or WABA ID.' : 'Connect your official WhatsApp Business number via Meta Cloud API credentials.'}
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <form onSubmit={handleFormSubmit} className="space-y-3 py-1">
-                            <div className="grid gap-2.5 sm:grid-cols-2">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        Channel / Shop Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={form.name}
-                                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                        placeholder="e.g. DukanHisab or Support"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                        <span>WhatsApp Phone Number *</span>
-                                        <span className="text-[10px] text-muted-foreground font-normal">(e.g. 9313148565)</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={form.phone_number}
-                                        onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-                                        placeholder="e.g. 9313148565 or +91 93131 48565"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                    <p className="text-[10px] text-muted-foreground">
-                                        Enter 10-digit mobile number or full international format (+91...).
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="grid gap-2.5 sm:grid-cols-2">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        Meta Phone Number ID
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.phone_number_id}
-                                        onChange={(e) => setForm({ ...form, phone_number_id: e.target.value })}
-                                        placeholder="15-digit ID (e.g. 1431069246745536)"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        WhatsApp Business Account (WABA) ID
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.waba_id}
-                                        onChange={(e) => setForm({ ...form, waba_id: e.target.value })}
-                                        placeholder="15-digit WABA ID"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                                    <span>Permanent Access Token</span>
-                                    <span className="text-[10px] text-muted-foreground font-normal">(Optional if already connected)</span>
-                                </label>
-                                <textarea
-                                    rows={2}
-                                    value={form.access_token}
-                                    onChange={(e) => setForm({ ...form, access_token: e.target.value })}
-                                    placeholder="EAAO1pPN... (Leave blank to keep existing token)"
-                                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                />
-                            </div>
-
-                            <div className="grid gap-2.5 sm:grid-cols-2">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        App Secret (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.app_secret}
-                                        onChange={(e) => setForm({ ...form, app_secret: e.target.value })}
-                                        placeholder="02d9ac..."
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-semibold text-foreground">
-                                        App ID (Optional)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.app_id}
-                                        onChange={(e) => setForm({ ...form, app_id: e.target.value })}
-                                        placeholder="Meta App ID"
-                                        className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-border">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="h-7 text-xs rounded-lg"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-lg shadow-2xs"
-                                >
-                                    Save &amp; Connect Number
-                                </Button>
-                            </div>
-                        </form>
-                    </DialogContent>
-                </Dialog>
             </div>
         </>
     );

@@ -319,29 +319,19 @@ export default function PipelinePage({
             <Head title="CRM Lead Pipeline | Sathwara InfoTech" />
 
             <div className="flex flex-1 flex-col gap-4 p-4 sm:p-6 max-w-[1600px] mx-auto w-full font-sans">
-                {/* Header Banner */}
-                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-md">
-                                <Kanban className="size-6" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
-                                        CRM Lead Pipeline
-                                    </h1>
-                                    <Badge variant="outline" className="text-xs font-bold border-primary/40 text-primary">
-                                        Kanban V2
-                                    </Badge>
-                                </div>
-                                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                    Drag &amp; drop WhatsApp inquiries through your sales funnel with deal values (₹) and follow-up schedules.
-                                </p>
-                            </div>
+                {/* Compact Action Toolbar */}
+                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-card p-4 sm:p-5 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <Badge variant="outline" className="text-xs font-bold border-primary/40 text-primary">
+                                Kanban V2
+                            </Badge>
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                                Drag &amp; drop WhatsApp inquiries through your sales funnel with deal values (₹) and follow-up schedules.
+                            </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
                             <Button
                                 onClick={() => setIsAddOpen(true)}
                                 className="h-9 px-4 text-xs font-semibold gap-1.5 shadow-sm"
@@ -504,7 +494,11 @@ export default function PipelinePage({
                                                         key={lead.id}
                                                         draggable
                                                         onDragStart={(e) => handleDragStart(e, lead.id)}
-                                                        className="group relative rounded-xl border border-border bg-card p-3 shadow-2xs hover:shadow-md hover:border-primary/50 cursor-grab active:cursor-grabbing transition-all duration-200 select-none"
+                                                        onClick={() => {
+                                                            setEditLead(lead);
+                                                            setIsEditOpen(true);
+                                                        }}
+                                                        className="group relative rounded-xl border border-border bg-card p-3 shadow-2xs hover:shadow-md hover:border-primary/50 cursor-pointer active:cursor-grabbing transition-all duration-200 select-none"
                                                     >
                                                         {/* Top Row: Name, Phone & Menu */}
                                                         <div className="flex items-start justify-between gap-2">
@@ -523,58 +517,60 @@ export default function PipelinePage({
                                                                 </div>
                                                             </div>
 
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="size-6 text-muted-foreground hover:text-foreground"
-                                                                    >
-                                                                        <MoreVertical className="size-3.5" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end" className="text-xs w-44">
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => {
-                                                                            setEditLead(lead);
-                                                                            setIsEditOpen(true);
-                                                                        }}
-                                                                    >
-                                                                        Edit Deal Value &amp; Schedule
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem asChild>
-                                                                        <Link
-                                                                            href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
-                                                                            className="flex items-center gap-2"
+                                                            <div onClick={(e) => e.stopPropagation()}>
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="size-6 text-muted-foreground hover:text-foreground"
                                                                         >
-                                                                            <MessageSquare className="size-3.5" />
-                                                                            Open in Shared Inbox
-                                                                        </Link>
-                                                                    </DropdownMenuItem>
-                                                                    <div className="my-1 border-t border-border" />
-                                                                    <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
-                                                                        Move to Stage:
-                                                                    </div>
-                                                                    {stages.map((st) => (
+                                                                            <MoreVertical className="size-3.5" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="end" className="text-xs w-44">
                                                                         <DropdownMenuItem
-                                                                            key={st}
-                                                                            disabled={st === lead.stage}
-                                                                            onClick={() => handleQuickMove(lead.id, st)}
-                                                                            className="text-xs"
+                                                                            onClick={() => {
+                                                                                setEditLead(lead);
+                                                                                setIsEditOpen(true);
+                                                                            }}
                                                                         >
-                                                                            Move to {st}
+                                                                            Edit Deal Value &amp; Schedule
                                                                         </DropdownMenuItem>
-                                                                    ))}
-                                                                    <div className="my-1 border-t border-border" />
-                                                                    <DropdownMenuItem
-                                                                        onClick={() => handleDeleteLead(lead.id)}
-                                                                        className="text-rose-600 focus:text-rose-600"
-                                                                    >
-                                                                        <Trash2 className="size-3.5 mr-1" />
-                                                                        Delete Lead
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
+                                                                        <DropdownMenuItem asChild>
+                                                                            <Link
+                                                                                href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
+                                                                                className="flex items-center gap-2"
+                                                                            >
+                                                                                <MessageSquare className="size-3.5" />
+                                                                                Open in Shared Inbox
+                                                                            </Link>
+                                                                        </DropdownMenuItem>
+                                                                        <div className="my-1 border-t border-border" />
+                                                                        <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+                                                                            Move to Stage:
+                                                                        </div>
+                                                                        {stages.map((st) => (
+                                                                            <DropdownMenuItem
+                                                                                key={st}
+                                                                                disabled={st === lead.stage}
+                                                                                onClick={() => handleQuickMove(lead.id, st)}
+                                                                                className="text-xs"
+                                                                            >
+                                                                                Move to {st}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                        <div className="my-1 border-t border-border" />
+                                                                        <DropdownMenuItem
+                                                                            onClick={() => handleDeleteLead(lead.id)}
+                                                                            className="text-rose-600 focus:text-rose-600"
+                                                                        >
+                                                                            <Trash2 className="size-3.5 mr-1" />
+                                                                            Delete Lead
+                                                                        </DropdownMenuItem>
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </div>
                                                         </div>
 
                                                         {/* Deal Value & Source */}
@@ -598,6 +594,7 @@ export default function PipelinePage({
 
                                                             <Link
                                                                 href={`/inbox?phone=${encodeURIComponent(lead.contact_phone)}`}
+                                                                onClick={(e) => e.stopPropagation()}
                                                                 className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
                                                             >
                                                                 Chat
@@ -807,18 +804,32 @@ export default function PipelinePage({
                                     />
                                 </div>
 
-                                <DialogFooter className="pt-3">
+                                <DialogFooter className="pt-3 flex flex-row items-center justify-between gap-2">
                                     <Button
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => setIsEditOpen(false)}
+                                        asChild
+                                        className="gap-1.5 text-xs text-primary"
                                     >
-                                        Cancel
+                                        <Link href={`/inbox?phone=${encodeURIComponent(editLead.contact_phone)}`}>
+                                            <MessageSquare className="size-3.5" />
+                                            Open WhatsApp Chat
+                                        </Link>
                                     </Button>
-                                    <Button type="submit" size="sm" className="gap-1.5">
-                                        Update Deal
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIsEditOpen(false)}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button type="submit" size="sm" className="gap-1.5 bg-[#47b672] hover:bg-[#3ba060] text-white">
+                                            Update Deal
+                                        </Button>
+                                    </div>
                                 </DialogFooter>
                             </form>
                         )}

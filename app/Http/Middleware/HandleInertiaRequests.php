@@ -41,31 +41,58 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'isSuperAdmin' => $request->user()?->isSuperAdmin() ?? false,
+                'isB2BAgent' => $request->user()?->isB2BAgent() ?? false,
             ],
             'tenant' => function () use ($request) {
                 $user = $request->user();
                 $currentOrg = $user?->currentOrganization
-                    ?? \App\Shared\TenantContext::get()
-                    ?? \App\Modules\Foundation\Models\Organization::first();
+                    ?? \App\Shared\TenantContext::get();
                 return [
-                    'current' => $currentOrg,
+                    'current' => $currentOrg ? [
+                        'id' => $currentOrg->id,
+                        'name' => $currentOrg->name,
+                        'slug' => $currentOrg->slug,
+                        'status' => $currentOrg->status,
+                        'subscription_plan' => $currentOrg->subscription_plan,
+                        'subscription_expires_at' => $currentOrg->subscription_expires_at?->toIso8601String(),
+                        'days_until_expiry' => $currentOrg->daysUntilExpiry(),
+                        'is_active' => $currentOrg->isSubscriptionActive(),
+                    ] : null,
                     'organizations' => $user?->organizations ?? ($currentOrg ? [$currentOrg] : []),
-                    'role' => $user && $currentOrg ? $user->roleIn($currentOrg) : 'Owner',
+                    'role' => $user && $currentOrg ? $user->roleIn($currentOrg) : null,
                 ];
+            },
+            'wallet' => function () use ($request) {
+                $org = $request->user()?->currentOrganization ?? \App\Shared\TenantContext::get();
+                if (! $org) {
+                    return null;
+                }
+                return app(\App\Services\WalletService::class)->getBalances($org);
             },
             'whatsapp' => function () use ($request) {
                 $orgId = $request->user()?->current_organization_id
-                    ?? \App\Shared\TenantContext::id()
-                    ?? \App\Modules\Foundation\Models\Organization::first()?->id;
+                    ?? \App\Shared\TenantContext::id();
 
-                $channel = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
+                $channels = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $orgId)
                     ->where('status', 'connected')
-                    ->first();
+                    ->orderBy('is_default', 'desc')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+
+                $defaultChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
 
                 return [
-                    'isConnected' => (bool) $channel,
-                    'phoneNumber' => $channel?->phone_number,
-                    'name' => $channel?->name,
+                    'isConnected' => $channels->isNotEmpty(),
+                    'count' => $channels->count(),
+                    'phoneNumber' => $defaultChannel?->phone_number,
+                    'name' => $defaultChannel?->name,
+                    'channels' => $channels->map(fn($c) => [
+                        'id' => $c->id,
+                        'name' => $c->name,
+                        'phoneNumber' => $c->phone_number,
+                        'isDefault' => (bool) $c->is_default,
+                        'quality' => $c->quality_rating ?? 'GREEN',
+                    ])->values()->all(),
                 ];
             },
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

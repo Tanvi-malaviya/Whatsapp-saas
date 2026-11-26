@@ -21,6 +21,10 @@ class Organization extends Model
         'timezone',
         'currency',
         'subscription_plan',
+        'subscription_expires_at',
+        'subscription_price_paise',
+        'welcome_bonus_claimed',
+        'b2b_agent_id',
         'max_channels',
         'metadata',
         'status',
@@ -28,15 +32,41 @@ class Organization extends Model
 
     protected $casts = [
         'max_channels' => 'integer',
+        'subscription_expires_at' => 'datetime',
+        'subscription_price_paise' => 'integer',
+        'welcome_bonus_claimed' => 'boolean',
         'metadata' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
 
+    public function wallet(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\Wallet::class);
+    }
+
+    public function getOrCreateWallet(): \App\Models\Wallet
+    {
+        return $this->wallet()->firstOrCreate([], [
+            'paid_balance_paise' => 0,
+            'promotional_balance_paise' => 0,
+        ]);
+    }
+
+    public function b2bAgent(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'b2b_agent_id');
+    }
+
     public function channels(): HasMany
     {
         return $this->hasMany(\App\Modules\MetaConnection\Models\WhatsAppChannel::class, 'organization_id');
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(\App\Modules\Messaging\Models\Message::class, 'organization_id');
     }
 
     public function getMaxChannels(): int
@@ -45,7 +75,7 @@ class Organization extends Model
             return (int) $this->attributes['max_channels'];
         }
 
-        return $this->metadata['max_channels'] ?? 1;
+        return $this->metadata['max_channels'] ?? 20;
     }
 
     public function canAddMoreChannels(): bool
@@ -55,7 +85,7 @@ class Organization extends Model
             return true; // 0 or negative represents Unlimited
         }
 
-        $current = \App\Modules\MetaConnection\Models\WhatsAppChannel::where('organization_id', $this->id)->count();
+        $current = \App\Modules\MetaConnection\Models\WhatsAppChannel::withoutGlobalScopes()->where('organization_id', $this->id)->whereNull('deleted_at')->count();
         return $current < $limit;
     }
 
@@ -79,6 +109,28 @@ class Organization extends Model
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    public function isSubscriptionActive(): bool
+    {
+        if ($this->status !== 'active') {
+            return false;
+        }
+
+        if ($this->subscription_expires_at) {
+            return $this->subscription_expires_at->isFuture();
+        }
+
+        return true;
+    }
+
+    public function daysUntilExpiry(): ?int
+    {
+        if (! $this->subscription_expires_at) {
+            return null;
+        }
+
+        return (int) now()->diffInDays($this->subscription_expires_at, false);
     }
 
     public function isSuspended(): bool

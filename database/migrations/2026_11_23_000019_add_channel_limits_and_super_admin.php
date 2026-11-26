@@ -21,19 +21,6 @@ return new class extends Migration
             }
         });
 
-        // Seed default high limit for primary owner/organization
-        try {
-            DB::table('organizations')
-                ->where('slug', 'sathwara-infotech')
-                ->orWhere('name', 'like', '%Sathwara%')
-                ->update(['max_channels' => 20]);
-
-            DB::table('users')
-                ->where('email', 'like', '%sathwara%')
-                ->orWhere('email', 'like', '%malaviya%')
-                ->orWhere('id', 1)
-                ->update(['is_super_admin' => true]);
-        } catch (\Throwable $e) {}
     }
 
     public function down(): void
