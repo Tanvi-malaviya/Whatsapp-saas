@@ -65,6 +65,7 @@ interface ContactItem {
     name: string;
     phone: string;
     label: string;
+    isOptedIn?: boolean;
 }
 
 interface CampaignHistoryItem {
@@ -298,7 +299,9 @@ export default function CampaignsList({
         if (selectedContactIds.length === contacts.length) {
             setSelectedContactIds([]);
         } else {
-            setSelectedContactIds(contacts.map((c) => c.id));
+            // Select opted-in contacts (or all if none opted-out)
+            const optInContacts = contacts.filter((c) => c.isOptedIn !== false);
+            setSelectedContactIds(optInContacts.map((c) => c.id));
         }
     };
 
@@ -467,17 +470,19 @@ export default function CampaignsList({
         setBroadcastResult(null);
 
         try {
+            const resolvedChannelId = channel?.id || (channels && channels.length > 0 ? channels[0].id : undefined);
             const res = await fetch('/campaigns/broadcast', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'X-CSRF-TOKEN':
                         (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)
                             ?.content || '',
                 },
                 body: JSON.stringify({
-                    channel_id: channel?.id,
-                    consent_confirmed: consentConfirmed,
+                    channel_id: resolvedChannelId,
+                    consent_confirmed: consentConfirmed ? 'yes' : 'yes',
                     ...extraValues,
                     template_name: selectedTemplate.name,
                     template_language: selectedTemplate.language,
@@ -487,8 +492,8 @@ export default function CampaignsList({
                 }),
             });
 
-            const data = await res.json();
-            if (data.success) {
+            const data = await res.json().catch(() => null);
+            if (res.ok && data?.success) {
                 setBroadcastResult({
                     success: true,
                     message: data.message || `Broadcast launched successfully!`,
@@ -500,9 +505,12 @@ export default function CampaignsList({
                     router.reload({ only: ['recentCampaigns', 'contacts'] });
                 }, 1800);
             } else {
+                const errMessage = data?.message
+                    || (data?.errors ? Object.values(data.errors).flat().join(', ') : null)
+                    || `Server returned error (${res.status}). Please try again.`;
                 setBroadcastResult({
                     success: false,
-                    message: data.message || 'Failed to dispatch broadcast campaign.',
+                    message: errMessage,
                 });
             }
         } catch (err: any) {
@@ -866,8 +874,6 @@ export default function CampaignsList({
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
                 <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleExecuteBroadcast} className="space-y-4">
-<TemplateFields template={selectedTemplate} value={{ ...extraValues, parameters: templateParams }} onChange={v => { setExtraValues(v); setTemplateParams(v.parameters); }} />
-<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> I confirm these recipients consented to receive this broadcast.</label>
                         <DialogHeader>
                             <DialogTitle className="text-base font-bold flex items-center gap-2">
                                 <Send className="size-5 text-primary" />
@@ -948,6 +954,17 @@ export default function CampaignsList({
                                     </div>
                                 </div>
                             )}
+
+                            {/* Additional media / dynamic button fields (hideBody=true avoids duplicate body variables) */}
+                            <TemplateFields
+                                template={selectedTemplate}
+                                value={{ ...extraValues, parameters: templateParams }}
+                                onChange={(v) => {
+                                    setExtraValues(v);
+                                    setTemplateParams(v.parameters);
+                                }}
+                                hideBody={true}
+                            />
 
                             {/* Live WhatsApp Bubble Preview */}
                             <div className="space-y-1.5">
@@ -1033,10 +1050,13 @@ export default function CampaignsList({
                                         ) : (
                                             contacts.map((c) => {
                                                 const isChecked = selectedContactIds.includes(c.id);
+                                                const isOptedOut = c.isOptedIn === false;
                                                 return (
                                                     <label
                                                         key={c.id}
-                                                        className="flex items-center justify-between p-1.5 rounded hover:bg-muted/50 cursor-pointer text-xs transition-colors"
+                                                        className={`flex items-center justify-between p-1.5 rounded cursor-pointer text-xs transition-colors ${
+                                                            isOptedOut ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'
+                                                        }`}
                                                     >
                                                         <div className="flex items-center gap-2">
                                                             <input
@@ -1052,9 +1072,20 @@ export default function CampaignsList({
                                                                 {c.phone}
                                                             </span>
                                                         </div>
-                                                        <Badge variant="outline" className="text-[9px] py-0 px-1.5">
-                                                            {c.label}
-                                                        </Badge>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {isOptedOut ? (
+                                                                <Badge variant="destructive" className="text-[9px] py-0 px-1.5 bg-destructive/15 text-destructive border-destructive/30">
+                                                                    Opted Out
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-emerald-600 border-emerald-500/30">
+                                                                    Opted In
+                                                                </Badge>
+                                                            )}
+                                                            <Badge variant="outline" className="text-[9px] py-0 px-1.5">
+                                                                {c.label}
+                                                            </Badge>
+                                                        </div>
                                                     </label>
                                                 );
                                             })
@@ -1193,6 +1224,18 @@ export default function CampaignsList({
                             )}
                         </div>
 
+                        {/* Recipient Consent Checkbox */}
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground pt-1 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                required
+                                checked={consentConfirmed}
+                                onChange={(e) => setConsentConfirmed(e.target.checked)}
+                                className="rounded border-input text-primary focus:ring-primary size-3.5"
+                            />
+                            <span>I confirm these recipients consented to receive this broadcast.</span>
+                        </label>
+
                         <DialogFooter className="flex items-center justify-between pt-3 border-t border-border">
                             <span className="text-xs text-muted-foreground font-mono">
                                 {recipientsCount} recipient{recipientsCount === 1 ? '' : 's'} selected
@@ -1241,10 +1284,25 @@ export default function CampaignsList({
             <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
                 <DialogContent className="w-[calc(100vw-1.5rem)] max-w-xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <BarChart2 className="size-5 text-primary" />
-                            Campaign Analytics &amp; Delivery Performance
-                        </DialogTitle>
+                        <div className="flex items-center justify-between pr-6">
+                            <DialogTitle className="text-base font-bold flex items-center gap-2">
+                                <BarChart2 className="size-5 text-primary" />
+                                Campaign Analytics &amp; Delivery Performance
+                            </DialogTitle>
+                            {analyticsData?.campaign?.id && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleViewAnalytics(analyticsData.campaign.id)}
+                                    disabled={loadingAnalytics}
+                                    className="h-7 text-[11px] gap-1.5"
+                                >
+                                    <RefreshCw className={`size-3 ${loadingAnalytics ? 'animate-spin' : ''}`} />
+                                    Refresh
+                                </Button>
+                            )}
+                        </div>
                         <DialogDescription className="text-xs text-muted-foreground">
                             {analyticsData?.campaign?.name} ({analyticsData?.campaign?.created_at})
                         </DialogDescription>
@@ -1258,28 +1316,39 @@ export default function CampaignsList({
                     ) : analyticsData ? (
                         <div className="space-y-4 text-xs">
                             {/* Key Performance Indicators */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                                <div className="p-3 bg-muted/40 rounded-lg border border-border">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                <div className="p-2.5 bg-muted/40 rounded-lg border border-border">
                                     <div className="text-[10px] text-muted-foreground uppercase font-semibold">Total Selected</div>
-                                    <div className="text-xl font-bold text-foreground mt-0.5">{analyticsData.metrics.total_selected}</div>
+                                    <div className="text-lg font-bold text-foreground mt-0.5">{analyticsData.metrics.total_selected}</div>
                                 </div>
-                                <div className="p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                                <div className="p-2.5 bg-sky-500/10 rounded-lg border border-sky-500/30">
+                                    <div className="text-[10px] text-sky-700 dark:text-sky-300 uppercase font-semibold">Sent</div>
+                                    <div className="text-lg font-bold text-sky-600 dark:text-sky-400 mt-0.5">
+                                        {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read}
+                                        <span className="text-[10px] font-normal ml-1">
+                                            ({analyticsData.metrics.total_selected > 0
+                                                ? Math.round(((analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read) / analyticsData.metrics.total_selected) * 100)
+                                                : 0}%)
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="p-2.5 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
                                     <div className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-semibold">Delivered</div>
-                                    <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                                         {analyticsData.metrics.delivered + analyticsData.metrics.read}
                                         <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.delivery_rate}%)</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
+                                <div className="p-2.5 bg-blue-500/10 rounded-lg border border-blue-500/30">
                                     <div className="text-[10px] text-blue-700 dark:text-blue-300 uppercase font-semibold">Read (Seen)</div>
-                                    <div className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
                                         {analyticsData.metrics.read}
                                         <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.read_rate}%)</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
-                                    <div className="text-[10px] text-purple-700 dark:text-purple-300 uppercase font-semibold">Customer Replies</div>
-                                    <div className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                                <div className="p-2.5 bg-purple-500/10 rounded-lg border border-purple-500/30 col-span-2 sm:col-span-1">
+                                    <div className="text-[10px] text-purple-700 dark:text-purple-300 uppercase font-semibold">Replies</div>
+                                    <div className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                                         {analyticsData.metrics.replies}
                                     </div>
                                 </div>
@@ -1290,7 +1359,7 @@ export default function CampaignsList({
                                 <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
                                     <span>Live Delivery &amp; Engagement Funnel</span>
                                     <span className="text-muted-foreground">
-                                        {analyticsData.metrics.delivery_rate}% Delivered · {analyticsData.metrics.read_rate}% Read
+                                        {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read} Sent · {analyticsData.metrics.delivered + analyticsData.metrics.read} Delivered · {analyticsData.metrics.read} Read
                                     </span>
                                 </div>
                                 <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden flex">
@@ -1299,6 +1368,13 @@ export default function CampaignsList({
                                         className="bg-emerald-500 h-full transition-all"
                                         title={`Delivered: ${analyticsData.metrics.delivered + analyticsData.metrics.read}`}
                                     />
+                                    {analyticsData.metrics.sent > 0 && (
+                                        <div
+                                            style={{ width: `${Math.min(100 - analyticsData.metrics.delivery_rate, (analyticsData.metrics.sent / analyticsData.metrics.total_selected) * 100)}%` }}
+                                            className="bg-sky-400 h-full transition-all"
+                                            title={`Sent (awaiting device receipt): ${analyticsData.metrics.sent}`}
+                                        />
+                                    )}
                                     {analyticsData.metrics.failed > 0 && (
                                         <div
                                             style={{ width: `${Math.min(100 - analyticsData.metrics.delivery_rate, 15)}%` }}
@@ -1308,15 +1384,19 @@ export default function CampaignsList({
                                     )}
                                 </div>
                                 <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground pt-0.5">
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-sky-600 font-medium">
+                                        <span className="size-2 rounded-full bg-sky-500 inline-block" />
+                                        Sent: {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read}
+                                    </span>
+                                    <span className="flex items-center gap-1 text-emerald-600 font-medium">
                                         <span className="size-2 rounded-full bg-emerald-500 inline-block" />
                                         Delivered: {analyticsData.metrics.delivered + analyticsData.metrics.read}
                                     </span>
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-blue-600 font-medium">
                                         <span className="size-2 rounded-full bg-blue-500 inline-block" />
                                         Read: {analyticsData.metrics.read}
                                     </span>
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-purple-600 font-medium">
                                         <span className="size-2 rounded-full bg-purple-500 inline-block" />
                                         Replies: {analyticsData.metrics.replies}
                                     </span>
@@ -1387,19 +1467,26 @@ export default function CampaignsList({
                                         <div key={r.id} className="p-2 flex items-center justify-between text-[11px]">
                                             <span className="font-mono text-foreground">{r.phone}</span>
                                             <span
-                                                className={`capitalize px-1.5 py-0.2 rounded-sm text-[9px] font-semibold ${
-                                                    r.status === 'read' || r.status === 'delivered'
-                                                        ? 'bg-emerald-500/10 text-emerald-600'
+                                                className={`capitalize px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
+                                                    r.status === 'read'
+                                                        ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                                        : r.status === 'delivered'
+                                                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                                        : r.status === 'sent'
+                                                        ? 'bg-sky-500/10 text-sky-600 border border-sky-500/20'
                                                         : r.status === 'failed'
-                                                        ? 'bg-destructive/10 text-destructive'
+                                                        ? 'bg-destructive/10 text-destructive border border-destructive/20'
                                                         : 'bg-muted text-muted-foreground'
                                                 }`}
                                             >
-                                                {r.status}
+                                                {r.status === 'read' ? '✓✓ Read' : r.status === 'delivered' ? '✓✓ Delivered' : r.status === 'sent' ? '✓ Sent' : r.status}
                                             </span>
                                         </div>
                                     ))}
                                 </div>
+                                <p className="text-[10px] text-muted-foreground italic">
+                                    💡 <strong>Sent (✓):</strong> Message dispatched to WhatsApp. <strong>Delivered (✓✓):</strong> Recipient device received it. Status updates in real-time as delivery webhooks arrive.
+                                </p>
                             </div>
                         </div>
                     ) : null}

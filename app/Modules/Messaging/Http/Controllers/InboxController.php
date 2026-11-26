@@ -27,8 +27,26 @@ class InboxController extends Controller
         return Organization::find($orgId);
     }
 
+    private function drainPendingWebhooks($org): void
+    {
+        $pending = \App\Modules\Messaging\Models\WebhookInbox::where('organization_id', $org->id)
+            ->where('status', 'pending')
+            ->take(50)
+            ->get();
+        if ($pending->isNotEmpty()) {
+            $webhookController = app(\App\Modules\MetaConnection\Http\Controllers\MetaWebhookController::class);
+            foreach ($pending as $wh) {
+                try {
+                    $webhookController->process($wh->id);
+                } catch (\Throwable $t) {}
+            }
+        }
+    }
+
     protected function getRealThreads($org): array
     {
+        $this->drainPendingWebhooks($org);
+
         $conversations = Conversation::where('organization_id', $org->id)
             ->with(['messages' => fn($q) => $q->orderBy('created_at', 'asc')])
             ->orderBy('last_message_at', 'desc')
@@ -47,6 +65,8 @@ class InboxController extends Controller
                 'phone' => $c->contact_phone,
                 'channel' => $channelObj ? $channelObj->name : 'WhatsApp',
                 'lastMessage' => $lastMsg ? $lastMsg->content : 'No messages',
+                'lastMessageStatus' => $lastMsg ? $lastMsg->status : null,
+                'lastMessageDirection' => $lastMsg ? $lastMsg->direction : null,
                 'time' => $c->last_message_at ? $c->last_message_at->timezone('Asia/Kolkata')->diffForHumans() : 'Just now',
                 'unread' => $c->unread_count,
                 'channelId' => $channelObj?->id,

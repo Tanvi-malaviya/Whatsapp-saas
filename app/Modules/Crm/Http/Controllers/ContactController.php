@@ -9,6 +9,7 @@ use App\Shared\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class ContactController extends Controller
@@ -30,10 +31,33 @@ class ContactController extends Controller
     }
     public function update(Request $request, string $id)
     {
-        $contact = Contact::findOrFail($id); $data = $this->data($request);
-        abort_unless($contact->contact_phone === $data['contact_phone'] || ! $contact->conversations()->exists(), 422, 'A contact with message history cannot change phone number. Create another contact instead.');
-        abort_if(Contact::where('contact_phone', $data['contact_phone'])->whereKeyNot($id)->exists(), 422, 'This phone number already belongs to another contact.');
-        $contact->update($data); return back()->with('success', 'Contact updated. Message histories retained.');
+        $contact = Contact::findOrFail($id);
+        $data = $this->data($request);
+
+        $existsOther = Contact::where('organization_id', TenantContext::id())
+            ->where('contact_phone', $data['contact_phone'])
+            ->whereKeyNot($id)
+            ->exists();
+
+        if ($existsOther) {
+            throw ValidationException::withMessages([
+                'phone' => 'This phone number already belongs to another contact.',
+            ]);
+        }
+
+        // If phone number changed, keep conversation history in sync with the new number
+        if ($contact->contact_phone !== $data['contact_phone']) {
+            \App\Modules\Messaging\Models\Conversation::withoutGlobalScopes()
+                ->where('organization_id', TenantContext::id())
+                ->where(function ($q) use ($contact) {
+                    $q->where('contact_id', $contact->id)
+                      ->orWhere('contact_phone', $contact->contact_phone);
+                })
+                ->update(['contact_phone' => $data['contact_phone']]);
+        }
+
+        $contact->update($data);
+        return back()->with('success', 'Contact updated successfully.');
     }
     public function destroy(string $id)
     {

@@ -87,6 +87,8 @@ type ChatThread = {
     assignedUserId?: number | null;
     channel: string; // e.g. "DukanHisab"
     lastMessage: string;
+    lastMessageStatus?: string | null;
+    lastMessageDirection?: string | null;
     time: string;
     unread: number;
     windowRemaining: string;
@@ -870,6 +872,13 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         setShowAttachmentMenu(false);
         setShowQuickReplies(false);
 
+        if (selectedThread.windowRemaining === 'Closed') {
+            alert('The 24-hour WhatsApp customer window is closed for this contact. Meta policy requires an approved template message to re-open the chat. Please click "Send Template" to message this customer.');
+            setDirectTemplateCustomName(selectedThread.contactName || '');
+            setShowDirectTemplateModal(true);
+            return;
+        }
+
         const fullMessageContent = currentAttachment
             ? (textToSend ? `[${currentAttachment.name}] ${textToSend}` : `📎 ${currentAttachment.name}`)
             : textToSend;
@@ -927,8 +936,8 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                         }),
                     });
                 }
-                const data = await res.json();
-                if (data.success && data.message) {
+                const data = await res.json().catch(() => null);
+                if (res.ok && data?.success && data?.message) {
                     setMessages((prev) => ({
                         ...prev,
                         [selectedThread.id]: (prev[selectedThread.id] || []).map((m) =>
@@ -937,8 +946,20 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 : m
                         ),
                     }));
+                } else {
+                    // Remove optimistic message if backend rejected
+                    setMessages((prev) => ({
+                        ...prev,
+                        [selectedThread.id]: (prev[selectedThread.id] || []).filter((m) => m.id !== optimisticMsg.id),
+                    }));
+                    const errMsg = data?.message || (res.status === 422 ? '24h Customer window is closed. Click "Send Template" to re-open the conversation.' : 'Failed to send message via WhatsApp.');
+                    alert(errMsg);
                 }
             } catch (err) {
+                setMessages((prev) => ({
+                    ...prev,
+                    [selectedThread.id]: (prev[selectedThread.id] || []).filter((m) => m.id !== optimisticMsg.id),
+                }));
                 console.error(err);
             }
         }
@@ -1111,6 +1132,15 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     {thread.channel}
                                                 </span>
                                                 <span className="text-xs text-muted-foreground truncate flex-1 flex items-center gap-1">
+                                                    {thread.lastMessageDirection === 'outbound' && (
+                                                        thread.lastMessageStatus === 'read' || thread.lastMessageStatus === 'seen' ? (
+                                                            <CheckCheck className="size-3 text-[#53bdeb] stroke-[2.5] shrink-0" />
+                                                        ) : thread.lastMessageStatus === 'delivered' ? (
+                                                            <CheckCheck className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        ) : (
+                                                            <Check className="size-3 text-muted-foreground/75 stroke-[2] shrink-0" />
+                                                        )
+                                                    )}
                                                     {thread.lastMessage.startsWith('📎') || thread.lastMessage.toLowerCase().endsWith('.pdf') ? (
                                                         <>
                                                             <FileText className="size-3 text-red-500 shrink-0 inline" />
@@ -1528,12 +1558,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             )}
                                             <div className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground mt-1">
                                                 <span>{msg.time}</span>
-                                                {msg.sender === 'agent' && (
+                                                {msg.sender !== 'contact' && (
                                                     <span
                                                         className="inline-flex items-center ml-0.5"
                                                         title={
-                                                            msg.status === 'read'
-                                                                ? 'Read'
+                                                            msg.status === 'read' || (msg.status as string) === 'seen'
+                                                                ? 'Read (Seen)'
                                                                 : msg.status === 'delivered'
                                                                     ? 'Delivered'
                                                                     : msg.status === 'failed'
@@ -1541,14 +1571,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                                         : 'Sent'
                                                         }
                                                     >
-                                                        {msg.status === 'read' ? (
-                                                            <CheckCheck className="size-3.5 text-[#53bdeb]" />
+                                                        {msg.status === 'read' || (msg.status as string) === 'seen' ? (
+                                                            <CheckCheck className="size-3.5 text-[#53bdeb] stroke-[2.5]" />
                                                         ) : msg.status === 'delivered' ? (
-                                                            <CheckCheck className="size-3.5 text-muted-foreground/70" />
+                                                            <CheckCheck className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         ) : msg.status === 'failed' ? (
                                                             <AlertCircle className="size-3.5 text-destructive" />
                                                         ) : (
-                                                            <Check className="size-3.5 text-muted-foreground/70" />
+                                                            <Check className="size-3.5 text-muted-foreground/75 stroke-[2]" />
                                                         )}
                                                     </span>
                                                 )}
@@ -1753,6 +1783,28 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                 ))}
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {/* 24h Window Closed Warning Banner */}
+                                {selectedThread.windowRemaining === 'Closed' && (
+                                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
+                                        <span className="flex items-center gap-1.5 font-medium">
+                                            <AlertCircle className="size-3.5 text-amber-600 shrink-0" />
+                                            24h customer window is closed. Custom text messages cannot be sent. Re-open chat with an approved Meta Template.
+                                        </span>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            onClick={() => {
+                                                setDirectTemplateCustomName(selectedThread?.contactName || '');
+                                                setShowDirectTemplateModal(true);
+                                            }}
+                                            className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-2.5 shrink-0 font-semibold"
+                                        >
+                                            <Sparkles className="size-3" />
+                                            Send Template
+                                        </Button>
                                     </div>
                                 )}
 
