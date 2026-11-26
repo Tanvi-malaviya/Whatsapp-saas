@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { TemplateFields, type TemplateValues } from '@/components/template-fields';
+import { TemplateFields, templateVariables, templateHasVariables, templateMediaFormat, templateMediaTypes, type MessageTemplate, type TemplateValues } from '@/components/template-fields';
 import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
@@ -47,7 +47,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 
-interface TemplateItem {
+interface TemplateItem extends MessageTemplate {
     id: string;
     name: string;
     category: string;
@@ -146,6 +146,7 @@ export default function CampaignsList({
     const [uploadSummary, setUploadSummary] = useState<{ filename: string; valid: number; skipped: number } | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [templateParams, setTemplateParams] = useState<string[]>([]);
+    const [mediaFile, setMediaFile] = useState<File | null>(null);
     const [extraValues, setExtraValues] = useState<TemplateValues>({ parameters: [] });
     const [consentConfirmed, setConsentConfirmed] = useState(false);
     const [isSending, setIsSending] = useState(false);
@@ -229,6 +230,8 @@ export default function CampaignsList({
     const openBroadcastModal = (template?: TemplateItem) => {
         const target = template || templates[0] || null;
         setSelectedTemplate(target);
+        setExtraValues({ parameters: [] });
+        setMediaFile(null);
         if (target) {
             setCampaignName(
                 activeSegmentName
@@ -236,9 +239,9 @@ export default function CampaignsList({
                     : `${target.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Broadcast`
             );
             // Count variables in body
-            const matches = target.body.match(/\{\{(\d+)\}\}/g) || [];
+            const matches = templateVariables(target.body);
             const count = matches.length;
-            const initialParams = Array.from({ length: count }, (_, i) => '');
+            const initialParams = Array<string>(count).fill('');
             setTemplateParams(initialParams);
         } else {
             setCampaignName(activeSegmentName ? `${activeSegmentName} Broadcast` : 'WhatsApp Broadcast Campaign');
@@ -263,30 +266,24 @@ export default function CampaignsList({
             return;
         }
         const tpl = selectedTemplate || templates[0];
-        handleSelectTemplateInModal(tpl.name);
         openBroadcastModal(tpl);
     };
 
-    const handleSelectTemplateInModal = (templateName: string) => {
-        const found = templates.find((t) => t.name === templateName);
+    const handleSelectTemplateInModal = (templateId: string) => {
+        const found = templates.find((t) => t.id === templateId);
         if (found) {
             setSelectedTemplate(found);
+            setExtraValues({ parameters: [] });
+            setMediaFile(null);
+            setBroadcastResult(null);
             setCampaignName(
                 `${found.name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} Broadcast`
             );
-            const matches = found.body.match(/\{\{(\d+)\}\}/g) || [];
+            const matches = templateVariables(found.body);
             const count = matches.length;
-            const initialParams = Array.from({ length: count }, (_, i) => '');
+            const initialParams = Array<string>(count).fill('');
             setTemplateParams(initialParams);
         }
-    };
-
-    const handleParamChange = (index: number, value: string) => {
-        setTemplateParams((prev) => {
-            const next = [...prev];
-            next[index] = value;
-            return next;
-        });
     };
 
     const handleToggleContact = (id: string) => {
@@ -446,9 +443,9 @@ export default function CampaignsList({
     const generatePreviewBody = () => {
         if (!selectedTemplate) return '';
         let text = selectedTemplate.body;
-        templateParams.forEach((param, idx) => {
-            const placeholder = new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g');
-            text = text.replace(placeholder, param || `[Param ${idx + 1}]`);
+        templateVariables(text).forEach((token, position) => {
+            const index = /^\d+$/.test(token) ? Number(token) - 1 : position;
+            text = text.replace(new RegExp(`\\{\\{\\s*${token}\\s*\\}\\}`, 'g'), () => templateParams[index] || `[${token}]`);
         });
         return text;
     };
@@ -471,25 +468,29 @@ export default function CampaignsList({
 
         try {
             const resolvedChannelId = channel?.id || (channels && channels.length > 0 ? channels[0].id : undefined);
+            const campaignData = {
+                channel_id: resolvedChannelId,
+                consent_confirmed: consentConfirmed ? 'yes' : 'no',
+                ...extraValues,
+                template_name: selectedTemplate.name,
+                template_language: selectedTemplate.language,
+                campaign_name: campaignName.trim(),
+                recipients,
+                parameters: templateParams,
+            };
+            const formData = new FormData();
+            // Keep large recipient lists in one field to avoid PHP's input-variable limit.
+            formData.append('campaign_data', JSON.stringify(campaignData));
+            if (mediaFile) formData.append('header_file', mediaFile);
             const res = await fetch('/campaigns/broadcast', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN':
                         (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)
                             ?.content || '',
                 },
-                body: JSON.stringify({
-                    channel_id: resolvedChannelId,
-                    consent_confirmed: consentConfirmed ? 'yes' : 'yes',
-                    ...extraValues,
-                    template_name: selectedTemplate.name,
-                    template_language: selectedTemplate.language,
-                    campaign_name: campaignName.trim(),
-                    recipients: recipients,
-                    parameters: templateParams,
-                }),
+                body: formData,
             });
 
             const data = await res.json().catch(() => null);
@@ -913,49 +914,18 @@ export default function CampaignsList({
                             <div className="space-y-1">
                                 <Label className="text-xs font-semibold">Select Meta Template</Label>
                                 <select
-                                    value={selectedTemplate?.name || ''}
+                                    value={selectedTemplate?.id || ''}
                                     onChange={(e) => handleSelectTemplateInModal(e.target.value)}
                                     className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium"
                                 >
                                     {templates.map((t) => (
-                                        <option key={t.id} value={t.name}>
-                                            {t.name} ({t.language}) - {t.category}
+                                        <option key={t.id} value={t.id}>
+                                            {t.name} ({t.language}) - {t.category} · {templateMediaTypes[templateMediaFormat(t)] ? `${templateMediaFormat(t).toLowerCase()} attachment` : 'Text only'}{templateHasVariables(t) ? ' · Dynamic values' : ''}
                                         </option>
                                     ))}
                                 </select>
                             </div>
 
-                            {/* Dynamic Variable Customization */}
-                            {templateParams.length > 0 && (
-                                <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                                            <Sparkles className="size-3.5 text-primary" />
-                                            Template Variable Values
-                                        </span>
-                                        <span className="text-[10px] text-muted-foreground">
-                                            Fill values for placeholders
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                                        {templateParams.map((paramVal, idx) => (
-                                            <div key={idx} className="space-y-1">
-                                                <Label className="text-[11px] text-muted-foreground font-mono">
-                                                    Variable &#123;&#123;{idx + 1}&#125;&#125;
-                                                </Label>
-                                                <Input
-                                                    value={paramVal}
-                                                    onChange={(e) => handleParamChange(idx, e.target.value)}
-                                                    placeholder={`Value for {{${idx + 1}}}`}
-                                                    className="text-xs h-8 bg-background"
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Additional media / dynamic button fields (hideBody=true avoids duplicate body variables) */}
                             <TemplateFields
                                 template={selectedTemplate}
                                 value={{ ...extraValues, parameters: templateParams }}
@@ -963,8 +933,10 @@ export default function CampaignsList({
                                     setExtraValues(v);
                                     setTemplateParams(v.parameters);
                                 }}
-                                hideBody={true}
+                                mediaFile={mediaFile}
+                                onMediaFileChange={setMediaFile}
                             />
+                            {selectedTemplate && !templateMediaTypes[templateMediaFormat(selectedTemplate)] && <p className="text-xs text-muted-foreground">This template has no media header. Select an image, video, or document template to attach media.</p>}
 
                             {/* Live WhatsApp Bubble Preview */}
                             <div className="space-y-1.5">
