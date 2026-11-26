@@ -84,17 +84,25 @@ export default function Subscription({
     return (
         <>
             <Head title="Subscription" />
-            <div className="w-full min-w-0 space-y-6 p-4 [overflow-wrap:anywhere] sm:p-6 lg:p-8">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-border/60 pb-3.5">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-[11px] font-semibold tracking-wider text-primary uppercase bg-primary/10 px-2 py-0.5 rounded-full">
+            <div className="w-full min-w-0 max-w-5xl mx-auto space-y-3 p-3 sm:p-4 [overflow-wrap:anywhere]">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold tracking-wider text-primary uppercase bg-primary/10 px-2 py-0.5 rounded-full">
                             Your business plan
                         </span>
-                        <p className="text-xs sm:text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground hidden sm:inline">
                             Manage your plan, renewal, billing details, and subscription invoices.
                         </p>
                     </div>
+                    <Link
+                        href="/wallet"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                    >
+                        Open Wallet
+                        <ExternalLink className="size-3" />
+                    </Link>
                 </div>
+
                 <BillingNotice notice={notice} />
                 {!checkoutReady && (
                     <BillingNotice
@@ -105,68 +113,67 @@ export default function Subscription({
                         }}
                     />
                 )}
-                <Card className="min-w-0 overflow-hidden border-primary/20">
-                    <CardHeader className="bg-primary/5">
-                        <div className="flex flex-col justify-between gap-5 sm:flex-row">
+
+                <Card className="min-w-0 overflow-hidden border-primary/20 shadow-2xs">
+                    <CardHeader className="bg-primary/5 p-3.5 pb-2.5">
+                        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                             <div className="min-w-0">
-                                <div className="mb-3 flex flex-wrap items-center gap-2">
-                                    <CreditCard className="size-5 text-primary" />
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <CreditCard className="size-4 text-primary" />
+                                    <CardTitle className="text-base font-bold">
+                                        {plans[currentPlan]?.name ?? currentPlan}
+                                    </CardTitle>
                                     <Badge
                                         variant="outline"
-                                        className="capitalize"
+                                        className="capitalize text-[10px] h-4.5 px-1.5"
                                     >
                                         {subscriptionStatus}
                                     </Badge>
                                 </div>
-                                <CardTitle className="text-xl">
-                                    {plans[currentPlan]?.name ?? currentPlan}
-                                </CardTitle>
-                                <CardDescription className="mt-2">
-                                    {subscriptionExpiresAt
-                                        ? `Expires ${new Date(subscriptionExpiresAt).toLocaleDateString()}`
-                                        : 'No subscription expiry date recorded.'}
-                                </CardDescription>
-                                {daysUntilExpiry !== null && (
-                                    <p
-                                        className={`mt-2 text-sm font-medium ${daysUntilExpiry <= 0 ? 'text-destructive' : 'text-muted-foreground'}`}
-                                    >
-                                        {daysUntilExpiry > 0
-                                            ? `${daysUntilExpiry} days remaining`
-                                            : daysUntilExpiry === 0
-                                              ? 'Expires today'
-                                              : `Expired ${Math.abs(daysUntilExpiry)} days ago`}
-                                    </p>
-                                )}
+                                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                                    <span>
+                                        {subscriptionExpiresAt
+                                            ? `Expires ${new Date(subscriptionExpiresAt).toLocaleDateString()}`
+                                            : 'No subscription expiry date'}
+                                    </span>
+                                    {daysUntilExpiry !== null && (
+                                        <>
+                                            <span>•</span>
+                                            <span className={daysUntilExpiry <= 0 ? 'text-destructive font-semibold' : ''}>
+                                                {daysUntilExpiry > 0
+                                                    ? `${daysUntilExpiry} days remaining`
+                                                    : daysUntilExpiry === 0
+                                                      ? 'Expires today'
+                                                      : `Expired ${Math.abs(daysUntilExpiry)} days ago`}
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                             <div className="sm:text-right">
-                                <p className="text-xs text-muted-foreground">
-                                    {annual?.name ?? 'Annual plan'}
-                                </p>
-                                <p className="mt-2 text-3xl font-bold tabular-nums">
-                                    {price != null
-                                        ? money(price)
-                                        : 'Contact sales'}
-                                </p>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    {validity} days validity
-                                </p>
+                                <div className="flex items-baseline gap-1 sm:justify-end">
+                                    <span className="text-xl font-bold tabular-nums">
+                                        {price != null ? money(price) : 'Contact sales'}
+                                    </span>
+                                    <span className="text-[11px] text-muted-foreground">/ {validity} days</span>
+                                </div>
                             </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="space-y-6 pt-6">
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <CardContent className="p-3.5 pt-2.5 space-y-2.5">
+                        <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
                             {annual?.features?.map((feature) => (
                                 <div
                                     key={feature}
-                                    className="flex items-start gap-2 text-sm"
+                                    className="flex items-center gap-1.5 text-xs text-muted-foreground"
                                 >
-                                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                                    <span>{feature}</span>
+                                    <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" />
+                                    <span className="truncate">{feature}</span>
                                 </div>
                             ))}
                         </div>
-                        <div className="flex flex-col items-start justify-between gap-4 border-t pt-5 lg:flex-row lg:items-center">
-                            <p className="text-sm leading-6 text-muted-foreground">
+                        <div className="flex flex-col items-start justify-between gap-2 border-t border-border/60 pt-2 sm:flex-row sm:items-center">
+                            <p className="text-[11px] text-muted-foreground">
                                 Messaging credits are managed separately in your{' '}
                                 <Link
                                     href="/wallet"
@@ -177,22 +184,19 @@ export default function Subscription({
                                 .
                             </p>
                             <Button
-                                disabled={
-                                    busy || !checkoutReady || price == null
-                                }
-                                onClick={() =>
-                                    void checkout({ plan: 'annual' })
-                                }
-                                className="h-11 w-full shrink-0 sm:w-auto"
+                                disabled={busy || !checkoutReady || price == null}
+                                onClick={() => void checkout({ plan: 'annual' })}
+                                size="sm"
+                                className="h-7 text-xs font-semibold px-3 w-full shrink-0 sm:w-auto"
                             >
-                                {busy
-                                    ? 'Processing…'
-                                    : `${subscriptionStatus === 'active' ? 'Renew' : 'Activate'} annual plan`}
+                                {busy ? 'Processing…' : `${subscriptionStatus === 'active' ? 'Renew' : 'Activate'} annual plan`}
                             </Button>
                         </div>
                     </CardContent>
                 </Card>
-                <div className="grid gap-4 sm:grid-cols-3">
+
+                {/* Sleek, 1-Row Compact Metrics Strip */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {[
                         {
                             title: 'Messages this month',
@@ -204,33 +208,35 @@ export default function Subscription({
                         },
                         { title: 'Team members', value: usage.seats ?? 0 },
                     ].map((item) => (
-                        <Card key={item.title} className="min-w-0">
-                            <CardContent className="pt-6">
-                                <p className="text-sm text-muted-foreground">
-                                    {item.title}
-                                </p>
-                                <p className="mt-3 text-2xl font-semibold tabular-nums">
-                                    {item.value}
-                                </p>
-                            </CardContent>
-                        </Card>
+                        <div
+                            key={item.title}
+                            className="flex items-center justify-between rounded-lg border border-border/70 bg-card px-3.5 py-2 shadow-2xs"
+                        >
+                            <span className="text-xs font-medium text-muted-foreground">
+                                {item.title}
+                            </span>
+                            <span className="text-base font-bold tabular-nums text-foreground">
+                                {item.value}
+                            </span>
+                        </div>
                     ))}
                 </div>
-                <div className="grid min-w-0 items-start gap-6 xl:grid-cols-2">
-                    <Card className="min-w-0">
-                        <CardHeader>
-                            <CardTitle>Billing profile</CardTitle>
-                            <CardDescription>
-                                These details are used for your business billing
-                                records.
+
+                {/* Billing Profile & Invoices Grid */}
+                <div className="grid min-w-0 items-start gap-3 md:grid-cols-2">
+                    <Card className="min-w-0 shadow-2xs">
+                        <CardHeader className="p-3.5 pb-1">
+                            <CardTitle className="text-sm font-semibold">Billing profile</CardTitle>
+                            <CardDescription className="text-[11px]">
+                                These details are used for your business billing records.
                             </CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <form onSubmit={saveProfile} className="space-y-5">
+                        <CardContent className="p-3.5 pt-1">
+                            <form onSubmit={saveProfile} className="space-y-2.5">
                                 <BillingNotice notice={profileNotice} />
-                                <div className="grid min-w-0 gap-5 md:grid-cols-2">
-                                    <div className="min-w-0 space-y-2">
-                                        <Label htmlFor="billing-email">
+                                <div className="grid min-w-0 gap-2.5 md:grid-cols-2">
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="billing-email" className="text-xs">
                                             Billing email
                                         </Label>
                                         <Input
@@ -243,15 +249,14 @@ export default function Subscription({
                                             onChange={(event) =>
                                                 setDetails({
                                                     ...details,
-                                                    billing_email:
-                                                        event.target.value,
+                                                    billing_email: event.target.value,
                                                 })
                                             }
-                                            className="h-11 text-base md:text-sm"
+                                            className="h-7 text-xs"
                                         />
                                     </div>
-                                    <div className="min-w-0 space-y-2">
-                                        <Label htmlFor="gstin">
+                                    <div className="min-w-0 space-y-1">
+                                        <Label htmlFor="gstin" className="text-xs">
                                             GSTIN (optional)
                                         </Label>
                                         <Input
@@ -265,17 +270,17 @@ export default function Subscription({
                                                 })
                                             }
                                             placeholder="24AAAAA0000A1Z5"
-                                            className="h-11 font-mono text-base md:text-sm"
+                                            className="h-7 font-mono text-xs uppercase"
                                         />
                                     </div>
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label htmlFor="billing-address">
+                                    <div className="space-y-1 md:col-span-2">
+                                        <Label htmlFor="billing-address" className="text-xs">
                                             Billing address
                                         </Label>
                                         <textarea
                                             id="billing-address"
                                             autoComplete="street-address"
-                                            rows={3}
+                                            rows={2}
                                             maxLength={1000}
                                             value={details.address}
                                             onChange={(event) =>
@@ -285,34 +290,27 @@ export default function Subscription({
                                                 })
                                             }
                                             placeholder="Address, city, state, and postal code"
-                                            className="w-full min-w-0 rounded-md border border-input bg-background p-3 text-base focus-visible:outline-2 focus-visible:outline-ring md:text-sm"
+                                            className="w-full min-w-0 rounded-md border border-input bg-background p-1.5 text-xs focus-visible:outline-2 focus-visible:outline-ring"
                                         />
                                     </div>
                                 </div>
                                 <Button
                                     type="submit"
                                     disabled={saving}
-                                    className="h-11 w-full sm:w-auto"
+                                    size="sm"
+                                    className="h-7 text-xs px-3 w-full sm:w-auto"
                                 >
-                                    {saving
-                                        ? 'Saving…'
-                                        : 'Save billing profile'}
+                                    {saving ? 'Saving…' : 'Save billing profile'}
                                 </Button>
                             </form>
                         </CardContent>
                     </Card>
+
                     <InvoiceList
                         invoices={invoices}
                         title="Subscription invoices"
                     />
                 </div>
-                <Link
-                    href="/wallet"
-                    className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary hover:underline"
-                >
-                    Open messaging wallet
-                    <ExternalLink className="size-4" />
-                </Link>
             </div>
         </>
     );

@@ -773,4 +773,350 @@ class AdminController extends Controller
 
         return back()->with('success', $result['message'] ?? 'Auto bug fix completed successfully.');
     }
+
+    /**
+     * Subscriptions Management & Client Plan Tracking
+     */
+    public function subscriptions(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $now = now();
+        $thirtyDaysFromNow = now()->addDays(30);
+
+        $organizations = Organization::withCount(['channels', 'users'])
+            ->with(['users:id,name,email'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($org) use ($now, $thirtyDaysFromNow) {
+                $expiry = $org->subscription_expires_at;
+                $daysRemaining = null;
+                $isExpired = false;
+                $isExpiringSoon = false;
+
+                if ($expiry) {
+                    $daysRemaining = (int) $now->diffInDays($expiry, false);
+                    $isExpired = $daysRemaining < 0;
+                    $isExpiringSoon = !$isExpired && $daysRemaining <= 30;
+                }
+
+                $invoices = Schema::hasTable('billing_invoices')
+                    ? BillingInvoice::where('organization_id', $org->id)
+                        ->latest()
+                        ->get()
+                        ->map(fn ($inv) => [
+                            'id' => (string) $inv->id,
+                            'plan' => $inv->plan,
+                            'amount_paise' => (int) $inv->amount_paise,
+                            'amount_formatted' => '₹' . number_format($inv->amount_paise / 100, 2),
+                            'status' => $inv->status,
+                            'provider_payment_id' => $inv->provider_payment_id,
+                            'paid_at' => $inv->paid_at ? $inv->paid_at->format('d M Y, H:i') : null,
+                            'created_at' => $inv->created_at ? $inv->created_at->format('d M Y') : '—',
+                        ])
+                    : collect();
+
+                return [
+                    'id' => (string) $org->id,
+                    'name' => $org->name,
+                    'slug' => $org->slug,
+                    'billing_email' => $org->billing_email,
+                    'subscription_plan' => $org->subscription_plan ?: 'starter',
+                    'subscription_price_paise' => (int) ($org->subscription_price_paise ?: 999900),
+                    'subscription_price_formatted' => '₹' . number_format(((int) ($org->subscription_price_paise ?: 999900)) / 100, 2),
+                    'status' => $org->status ?: 'active',
+                    'subscription_expires_at' => $expiry ? $expiry->format('Y-m-d') : null,
+                    'subscription_expires_at_formatted' => $expiry ? $expiry->format('d M Y') : 'Never (Lifetime)',
+                    'days_remaining' => $daysRemaining,
+                    'is_expired' => $isExpired,
+                    'is_expiring_soon' => $isExpiringSoon,
+                    'channels_count' => (int) $org->channels_count,
+                    'max_channels' => $org->getMaxChannels(),
+                    'owner' => $org->users->first() ? [
+                        'id' => $org->users->first()->id,
+                        'name' => $org->users->first()->name,
+                        'email' => $org->users->first()->email,
+                    ] : null,
+                    'b2b_agent' => $org->b2bAgent ? [
+                        'id' => $org->b2bAgent->id,
+                        'name' => $org->b2bAgent->name,
+                        'email' => $org->b2bAgent->email,
+                    ] : null,
+                    'invoices' => $invoices,
+                    'created_at' => $org->created_at ? $org->created_at->format('d M Y') : '—',
+                ];
+            });
+
+        $totalOrgs = $organizations->count();
+        $activeCount = $organizations->where('status', 'active')->where('is_expired', false)->count();
+        $expiredCount = $organizations->filter(fn ($o) => $o['status'] === 'expired' || $o['is_expired'])->count();
+        $expiringSoonCount = $organizations->where('is_expiring_soon', true)->count();
+
+        $totalRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->sum('amount_paise')
+            : 0;
+
+        $monthlyRevenuePaise = Schema::hasTable('billing_invoices')
+            ? (int) BillingInvoice::where('status', 'paid')->where('created_at', '>=', now()->startOfMonth())->sum('amount_paise')
+            : 0;
+
+        return Inertia::render('admin/subscriptions', [
+            'organizations' => $organizations,
+            'stats' => [
+                'total_organizations' => $totalOrgs,
+                'active_subscriptions' => $activeCount,
+                'expired_subscriptions' => $expiredCount,
+                'expiring_soon' => $expiringSoonCount,
+                'total_revenue_formatted' => '₹' . number_format($totalRevenuePaise / 100, 2),
+                'monthly_revenue_formatted' => '₹' . number_format($monthlyRevenuePaise / 100, 2),
+            ],
+        ]);
+    }
+
+    /**
+     * Super Admin: Update or Extend Client Subscription
+     */
+    public function updateSubscription(Request $request, string $id): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'subscription_plan' => 'required|string|max:50',
+            'status' => 'required|string|in:active,expired,suspended',
+            'subscription_expires_at' => 'nullable|date',
+            'subscription_price_rupees' => 'nullable|numeric|min:0',
+            'generate_invoice' => 'nullable|boolean',
+        ]);
+
+        $org = Organization::findOrFail($id);
+
+        $pricePaise = isset($validated['subscription_price_rupees'])
+            ? (int) round($validated['subscription_price_rupees'] * 100)
+            : ($org->subscription_price_paise ?: 999900);
+
+        $org->update([
+            'subscription_plan' => $validated['subscription_plan'],
+            'status' => $validated['status'],
+            'subscription_expires_at' => $validated['subscription_expires_at'] ? \Carbon\Carbon::parse($validated['subscription_expires_at']) : null,
+            'subscription_price_paise' => $pricePaise,
+        ]);
+
+        if (!empty($validated['generate_invoice']) && Schema::hasTable('billing_invoices')) {
+            BillingInvoice::create([
+                'organization_id' => $org->id,
+                'plan' => $validated['subscription_plan'],
+                'amount_paise' => $pricePaise,
+                'currency' => 'INR',
+                'status' => 'paid',
+                'provider_order_id' => 'ADMIN_MANUAL_' . strtoupper(Str::random(8)),
+                'provider_payment_id' => 'PAY_MANUAL_' . strtoupper(Str::random(10)),
+                'paid_at' => now(),
+                'period_ends_at' => $validated['subscription_expires_at'] ? \Carbon\Carbon::parse($validated['subscription_expires_at']) : now()->addYear(),
+            ]);
+        }
+
+        return back()->with('success', "Subscription updated successfully for {$org->name}.");
+    }
+
+    /**
+     * Super Admin: Wallets Management & Manual Credits Control
+     */
+    public function wallets(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $walletService = app(\App\Services\WalletService::class);
+
+        $organizations = Organization::with(['users:id,name,email'])
+            ->orderBy('name', 'asc')
+            ->get()
+            ->map(function ($org) use ($walletService) {
+                $balances = $walletService->getBalances($org);
+                $lastTx = WalletTransaction::where('organization_id', $org->id)->latest()->first();
+
+                return [
+                    'id' => (string) $org->id,
+                    'name' => $org->name,
+                    'slug' => $org->slug,
+                    'owner' => $org->users->first() ? [
+                        'id' => $org->users->first()->id,
+                        'name' => $org->users->first()->name,
+                        'email' => $org->users->first()->email,
+                    ] : null,
+                    'paid_balance_paise' => $balances['paid_balance_paise'],
+                    'promotional_balance_paise' => $balances['promotional_balance_paise'],
+                    'total_balance_paise' => $balances['total_balance_paise'],
+                    'paid_balance_formatted' => $balances['paid_balance_formatted'],
+                    'promotional_balance_formatted' => $balances['promotional_balance_formatted'],
+                    'total_balance_formatted' => $balances['total_balance_formatted'],
+                    'last_transaction_at' => $lastTx ? $lastTx->created_at->format('d M Y, H:i') : 'Never',
+                ];
+            });
+
+        // Global Transaction History (Latest 50 transactions across all organizations)
+        $transactions = WalletTransaction::with('organization:id,name,slug')
+            ->latest()
+            ->take(60)
+            ->get()
+            ->map(fn ($tx) => [
+                'id' => (string) $tx->id,
+                'organization_id' => (string) $tx->organization_id,
+                'organization_name' => $tx->organization?->name ?: 'System / Unknown',
+                'type' => $tx->type,
+                'balance_type' => $tx->balance_type,
+                'amount_paise' => (int) $tx->amount_paise,
+                'amount_formatted' => '₹' . number_format($tx->amount_paise / 100, 2),
+                'description' => $tx->description,
+                'reference_id' => $tx->reference_id,
+                'created_at' => $tx->created_at ? $tx->created_at->format('d M Y, H:i') : '—',
+            ]);
+
+        $totalPaidPaise = (int) Wallet::sum('paid_balance_paise');
+        $totalPromoPaise = (int) Wallet::sum('promotional_balance_paise');
+        $totalRechargePaise = (int) WalletTransaction::where('type', 'recharge')->where('amount_paise', '>', 0)->sum('amount_paise');
+        $totalManualCreditsPaise = (int) WalletTransaction::where('type', 'manual_credit')->where('amount_paise', '>', 0)->sum('amount_paise');
+
+        return Inertia::render('admin/wallets', [
+            'organizations' => $organizations,
+            'transactions' => $transactions,
+            'stats' => [
+                'total_paid_formatted' => '₹' . number_format($totalPaidPaise / 100, 2),
+                'total_promo_formatted' => '₹' . number_format($totalPromoPaise / 100, 2),
+                'total_platform_balance_formatted' => '₹' . number_format(($totalPaidPaise + $totalPromoPaise) / 100, 2),
+                'total_recharges_formatted' => '₹' . number_format($totalRechargePaise / 100, 2),
+                'total_manual_credits_formatted' => '₹' . number_format($totalManualCreditsPaise / 100, 2),
+            ],
+        ]);
+    }
+
+    /**
+     * Direct endpoint to credit any organization's wallet
+     */
+    public function creditWalletDirect(Request $request): RedirectResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'organization_id' => 'required|uuid|exists:organizations,id',
+            'amount_rupees' => 'required|numeric|min:0.01|max:500000',
+            'balance_type' => 'required|string|in:paid,promotional',
+            'note' => 'nullable|string|max:255',
+            'reference_id' => 'nullable|string|max:100',
+        ]);
+
+        $org = Organization::findOrFail($validated['organization_id']);
+        $amountPaise = (int) round($validated['amount_rupees'] * 100);
+        $note = $validated['note'] ?: "Super Admin Manual Credit of ₹{$validated['amount_rupees']}";
+        $refId = $validated['reference_id'] ?: 'ADMIN-' . strtoupper(Str::random(8));
+
+        app(\App\Services\WalletService::class)->credit(
+            org: $org,
+            amountPaise: $amountPaise,
+            type: 'manual_credit',
+            balanceType: $validated['balance_type'],
+            description: $note,
+            referenceId: $refId
+        );
+
+        return back()->with('success', "Successfully credited ₹{$validated['amount_rupees']} ({$validated['balance_type']}) to {$org->name}.");
+    }
+
+    /**
+     * Super Admin: Deep Analytics & Daily Usage Telemetry
+     */
+    public function analytics(Request $request): Response
+    {
+        $this->ensureSuperAdmin($request);
+
+        $totalMessages = Message::count();
+        $totalOutbound = Message::where('direction', 'outbound')->count();
+        $totalInbound = Message::where('direction', 'inbound')->count();
+        $totalDelivered = Message::where('direction', 'outbound')->whereIn('status', ['delivered', 'read'])->count();
+        $totalRead = Message::where('direction', 'outbound')->where('status', 'read')->count();
+        $totalFailed = Message::where('direction', 'outbound')->where('status', 'failed')->count();
+
+        $deliveryRate = $totalOutbound > 0 ? round(($totalDelivered / $totalOutbound) * 100, 1) : 100.0;
+        $readRate = $totalDelivered > 0 ? round(($totalRead / $totalDelivered) * 100, 1) : 0.0;
+        $failureRate = $totalOutbound > 0 ? round(($totalFailed / $totalOutbound) * 100, 1) : 0.0;
+
+        // Daily Message Volume for the last 14 days
+        $days = collect();
+        for ($i = 13; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $dayStart = \Carbon\Carbon::parse($date)->startOfDay();
+            $dayEnd = \Carbon\Carbon::parse($date)->endOfDay();
+
+            $dayOutbound = Message::where('direction', 'outbound')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayInbound = Message::where('direction', 'inbound')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayDelivered = Message::where('direction', 'outbound')->whereIn('status', ['delivered', 'read'])->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayRead = Message::where('direction', 'outbound')->where('status', 'read')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayFailed = Message::where('direction', 'outbound')->where('status', 'failed')->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $dayTotal = $dayOutbound + $dayInbound;
+            $dayRate = $dayOutbound > 0 ? round(($dayDelivered / $dayOutbound) * 100, 1) : 100.0;
+
+            $days->push([
+                'date' => $date,
+                'label' => $i === 0 ? 'Today' : ($i === 1 ? 'Yesterday' : \Carbon\Carbon::parse($date)->format('d M')),
+                'total' => $dayTotal,
+                'outbound' => $dayOutbound,
+                'inbound' => $dayInbound,
+                'delivered' => $dayDelivered,
+                'read' => $dayRead,
+                'failed' => $dayFailed,
+                'delivery_rate' => $dayRate,
+            ]);
+        }
+
+        // Top 10 Organizations by Message Volume
+        $topOrganizations = Organization::withCount([
+            'messages as total_messages',
+            'messages as outbound_messages' => fn ($q) => $q->where('direction', 'outbound'),
+            'messages as delivered_messages' => fn ($q) => $q->where('direction', 'outbound')->whereIn('status', ['delivered', 'read']),
+        ])
+        ->withCount('channels')
+        ->orderBy('total_messages', 'desc')
+        ->take(10)
+        ->get()
+        ->map(function ($org) {
+            $outbound = (int) $org->outbound_messages;
+            $delivered = (int) $org->delivered_messages;
+            $rate = $outbound > 0 ? round(($delivered / $outbound) * 100, 1) : 100.0;
+
+            return [
+                'id' => (string) $org->id,
+                'name' => $org->name,
+                'channels_count' => (int) $org->channels_count,
+                'total_messages' => (int) $org->total_messages,
+                'outbound_messages' => $outbound,
+                'delivered_messages' => $delivered,
+                'delivery_rate' => $rate,
+            ];
+        });
+
+        // Channel Health
+        $channelHealth = [
+            'green' => WhatsAppChannel::where('quality_rating', 'GREEN')->count(),
+            'yellow' => WhatsAppChannel::where('quality_rating', 'YELLOW')->count(),
+            'red' => WhatsAppChannel::where('quality_rating', 'RED')->count(),
+            'connected' => WhatsAppChannel::where('status', 'connected')->count(),
+            'disconnected' => WhatsAppChannel::where('status', '!=', 'connected')->count(),
+        ];
+
+        return Inertia::render('admin/analytics', [
+            'kpis' => [
+                'total_messages' => $totalMessages,
+                'total_outbound' => $totalOutbound,
+                'total_inbound' => $totalInbound,
+                'total_delivered' => $totalDelivered,
+                'total_read' => $totalRead,
+                'total_failed' => $totalFailed,
+                'delivery_rate' => $deliveryRate,
+                'read_rate' => $readRate,
+                'failure_rate' => $failureRate,
+            ],
+            'dailyUsage' => $days,
+            'topOrganizations' => $topOrganizations,
+            'channelHealth' => $channelHealth,
+        ]);
+    }
 }

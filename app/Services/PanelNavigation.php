@@ -19,6 +19,10 @@ class PanelNavigation
 
     public static function intended(User $user, mixed $url): string
     {
+        if (request()->is('agent/login') && ($user->isB2BAgent() || $user->isSuperAdmin())) {
+            return '/agent/dashboard';
+        }
+
         $home = self::home($user);
         if (! is_string($url) || $url === '' || str_starts_with($url, '//')) {
             return $home;

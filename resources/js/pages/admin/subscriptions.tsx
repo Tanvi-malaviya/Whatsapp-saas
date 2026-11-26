@@ -1,0 +1,670 @@
+import { useState, useMemo } from 'react';
+import { Head, router } from '@inertiajs/react';
+import {
+    CreditCard,
+    Search,
+    Calendar,
+    CheckCircle2,
+    Clock,
+    AlertTriangle,
+    XCircle,
+    Receipt,
+    RefreshCw,
+    SlidersHorizontal,
+    Plus,
+    Building2,
+    User as UserIcon,
+    ArrowUpRight,
+    Sparkles,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+
+type InvoiceItem = {
+    id: string;
+    plan: string;
+    amount_paise: number;
+    amount_formatted: string;
+    status: string;
+    provider_payment_id: string | null;
+    paid_at: string | null;
+    created_at: string;
+};
+
+type OrganizationSubscription = {
+    id: string;
+    name: string;
+    slug: string;
+    billing_email: string | null;
+    subscription_plan: string;
+    subscription_price_paise: number;
+    subscription_price_formatted: string;
+    status: string;
+    subscription_expires_at: string | null;
+    subscription_expires_at_formatted: string;
+    days_remaining: number | null;
+    is_expired: boolean;
+    is_expiring_soon: boolean;
+    channels_count: number;
+    max_channels: number;
+    owner: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
+    b2b_agent: {
+        id: number;
+        name: string;
+        email: string;
+    } | null;
+    invoices: InvoiceItem[];
+    created_at: string;
+};
+
+type Props = {
+    organizations: OrganizationSubscription[];
+    stats: {
+        total_organizations: number;
+        active_subscriptions: number;
+        expired_subscriptions: number;
+        expiring_soon: number;
+        total_revenue_formatted: string;
+        monthly_revenue_formatted: string;
+    };
+};
+
+export default function AdminSubscriptions({ organizations = [], stats }: Props) {
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expiring_soon' | 'expired'>('all');
+    const [planFilter, setPlanFilter] = useState<string>('all');
+
+    // Edit / Renew Modal State
+    const [editOrg, setEditOrg] = useState<OrganizationSubscription | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [plan, setPlan] = useState('annual');
+    const [status, setStatus] = useState('active');
+    const [expiryDate, setExpiryDate] = useState('');
+    const [priceRupees, setPriceRupees] = useState('9999');
+    const [generateInvoice, setGenerateInvoice] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Invoices View Modal State
+    const [viewInvoicesOrg, setViewInvoicesOrg] = useState<OrganizationSubscription | null>(null);
+    const [isInvoicesModalOpen, setIsInvoicesModalOpen] = useState(false);
+
+    const openEditModal = (org: OrganizationSubscription) => {
+        setEditOrg(org);
+        setPlan(org.subscription_plan || 'annual');
+        setStatus(org.status || 'active');
+        setExpiryDate(org.subscription_expires_at || '');
+        setPriceRupees(((org.subscription_price_paise || 999900) / 100).toString());
+        setGenerateInvoice(false);
+        setIsEditModalOpen(true);
+    };
+
+    const handleQuickDays = (daysToAdd: number) => {
+        const base = new Date();
+        base.setDate(base.getDate() + daysToAdd);
+        setExpiryDate(base.toISOString().split('T')[0]);
+    };
+
+    const handleSaveSubscription = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editOrg) return;
+        setIsSubmitting(true);
+
+        router.post(
+            `/admin/subscriptions/${editOrg.id}/update`,
+            {
+                subscription_plan: plan,
+                status: status,
+                subscription_expires_at: expiryDate || null,
+                subscription_price_rupees: parseFloat(priceRupees || '0'),
+                generate_invoice: generateInvoice,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setIsEditModalOpen(false);
+                    setEditOrg(null);
+                },
+                onFinish: () => setIsSubmitting(false),
+            }
+        );
+    };
+
+    const openInvoicesModal = (org: OrganizationSubscription) => {
+        setViewInvoicesOrg(org);
+        setIsInvoicesModalOpen(true);
+    };
+
+    const filteredOrganizations = useMemo(() => {
+        return organizations.filter((org) => {
+            const matchesSearch =
+                org.name.toLowerCase().includes(search.toLowerCase()) ||
+                org.slug.toLowerCase().includes(search.toLowerCase()) ||
+                (org.owner?.name && org.owner.name.toLowerCase().includes(search.toLowerCase())) ||
+                (org.owner?.email && org.owner.email.toLowerCase().includes(search.toLowerCase()));
+
+            if (!matchesSearch) return false;
+
+            if (statusFilter === 'active' && (org.is_expired || org.status !== 'active')) return false;
+            if (statusFilter === 'expiring_soon' && !org.is_expiring_soon) return false;
+            if (statusFilter === 'expired' && (!org.is_expired && org.status !== 'expired')) return false;
+
+            if (planFilter !== 'all' && org.subscription_plan !== planFilter) return false;
+
+            return true;
+        });
+    }, [organizations, search, statusFilter, planFilter]);
+
+    return (
+        <>
+            <Head title="Client Subscriptions & Revenue • Super Admin" />
+
+            <div className="space-y-4 w-full max-w-7xl mx-auto pb-10">
+                {/* Header Banner */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card border border-border/70 rounded-2xl p-4 sm:p-5 shadow-2xs">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                                Subscriptions & Client Plans
+                            </h1>
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-[10px] font-bold uppercase tracking-wider">
+                                Revenue Engine
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            Real-time tracking of who bought subscriptions, active licenses, expiry countdowns, renewals, and official invoices.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.reload()}
+                            className="h-8 px-3 text-xs gap-1.5 cursor-pointer rounded-xl border-border/80"
+                        >
+                            <RefreshCw className="size-3.5" />
+                            <span>Refresh</span>
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Sleek, Compact Stat Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                                <CheckCircle2 className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Active Subscriptions</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            {stats.active_subscriptions}
+                            <span className="text-xs font-normal text-muted-foreground ml-1">/ {stats.total_organizations}</span>
+                        </span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-amber-500/15 text-amber-600 flex items-center justify-center">
+                                <Clock className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Expiring Soon (30d)</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{stats.expiring_soon}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/5 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-rose-500/15 text-rose-600 flex items-center justify-center">
+                                <XCircle className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">Expired</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-rose-600 dark:text-rose-400">{stats.expired_subscriptions}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                                <CreditCard className="size-3.5" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Total Revenue</span>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{stats.total_revenue_formatted}</span>
+                    </div>
+                </div>
+
+                {/* Filters & Search */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 bg-card border border-border/70 rounded-xl p-2.5 shadow-2xs">
+                    <div className="relative w-full sm:w-72">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                        <Input
+                            placeholder="Search client, business name, or email..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 h-8 text-xs bg-muted/40"
+                        />
+                    </div>
+
+                    {/* Segmented Color-Coded Tabs */}
+                    <div className="inline-flex items-center gap-1 p-1 bg-muted/60 border border-border/60 rounded-xl w-full sm:w-auto overflow-x-auto">
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('all')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                statusFilter === 'all'
+                                    ? 'bg-background text-foreground shadow-xs border border-border/60'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <span>All</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                statusFilter === 'all' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                            }`}>
+                                {organizations.length}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('active')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                statusFilter === 'active'
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'text-emerald-600 hover:bg-emerald-500/10'
+                            }`}
+                        >
+                            <span>Active</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                statusFilter === 'active' ? 'bg-white/25 text-white' : 'bg-emerald-500/15 text-emerald-600'
+                            }`}>
+                                {stats.active_subscriptions}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('expiring_soon')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                statusFilter === 'expiring_soon'
+                                    ? 'bg-amber-600 text-white shadow-xs'
+                                    : 'text-amber-600 hover:bg-amber-500/10'
+                            }`}
+                        >
+                            <span>Expiring Soon</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                statusFilter === 'expiring_soon' ? 'bg-white/25 text-white' : 'bg-amber-500/15 text-amber-600'
+                            }`}>
+                                {stats.expiring_soon}
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter('expired')}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                statusFilter === 'expired'
+                                    ? 'bg-rose-600 text-white shadow-xs'
+                                    : 'text-rose-600 hover:bg-rose-500/10'
+                            }`}
+                        >
+                            <span>Expired</span>
+                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                statusFilter === 'expired' ? 'bg-white/25 text-white' : 'bg-rose-500/15 text-rose-600'
+                            }`}>
+                                {stats.expired_subscriptions}
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Subscriptions Table */}
+                <Card className="shadow-2xs border-border/70 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                            <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
+                                <tr>
+                                    <th className="py-2.5 px-3">Client Workspace</th>
+                                    <th className="py-2.5 px-3">Owner Contact</th>
+                                    <th className="py-2.5 px-3">Current Plan</th>
+                                    <th className="py-2.5 px-3">Subscription Status</th>
+                                    <th className="py-2.5 px-3">Plan Price</th>
+                                    <th className="py-2.5 px-3">Expiry / Remaining</th>
+                                    <th className="py-2.5 px-3">Invoices</th>
+                                    <th className="py-2.5 px-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                                {filteredOrganizations.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="py-8 text-center text-muted-foreground text-xs">
+                                            No subscriptions match your search or filter.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    filteredOrganizations.map((org) => {
+                                        return (
+                                            <tr key={org.id} className="hover:bg-muted/30 transition-colors">
+                                                <td className="py-3 px-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs uppercase">
+                                                            {org.name.slice(0, 2)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                                                <span>{org.name}</span>
+                                                                {org.b2b_agent && (
+                                                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-amber-500/10 text-amber-600 border-amber-500/25">
+                                                                        via {org.b2b_agent.name}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-[11px] text-muted-foreground">
+                                                                /{org.slug} • Joined {org.created_at}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                <td className="py-3 px-3">
+                                                    {org.owner ? (
+                                                        <div>
+                                                            <div className="font-medium text-foreground">{org.owner.name}</div>
+                                                            <div className="text-[11px] text-muted-foreground">{org.owner.email}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground">—</span>
+                                                    )}
+                                                </td>
+
+                                                <td className="py-3 px-3">
+                                                    <Badge variant="outline" className="text-[10px] font-semibold capitalize bg-primary/5 text-primary border-primary/20">
+                                                        {org.subscription_plan}
+                                                    </Badge>
+                                                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                                                        {org.channels_count} / {org.max_channels <= 0 ? '∞' : org.max_channels} Numbers
+                                                    </div>
+                                                </td>
+
+                                                <td className="py-3 px-3">
+                                                    {org.is_expired || org.status === 'expired' ? (
+                                                        <Badge variant="destructive" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20 font-semibold">
+                                                            Expired
+                                                        </Badge>
+                                                    ) : org.is_expiring_soon ? (
+                                                        <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/25 font-semibold">
+                                                            Expiring Soon
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/25 font-semibold">
+                                                            Active
+                                                        </Badge>
+                                                    )}
+                                                </td>
+
+                                                <td className="py-3 px-3 font-semibold text-foreground">
+                                                    {org.subscription_price_formatted}
+                                                    <span className="text-[10px] font-normal text-muted-foreground block">
+                                                        / year
+                                                    </span>
+                                                </td>
+
+                                                <td className="py-3 px-3">
+                                                    <div className="font-medium text-foreground">
+                                                        {org.subscription_expires_at_formatted}
+                                                    </div>
+                                                    <div className="text-[10px] mt-0.5">
+                                                        {org.days_remaining !== null ? (
+                                                            org.days_remaining > 0 ? (
+                                                                <span className={org.days_remaining <= 30 ? 'text-amber-600 font-semibold' : 'text-emerald-600'}>
+                                                                    {org.days_remaining} days left
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-rose-600 font-semibold">
+                                                                    Expired {Math.abs(org.days_remaining)}d ago
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span className="text-muted-foreground">Unlimited validity</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+
+                                                <td className="py-3 px-3">
+                                                    {org.invoices.length > 0 ? (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => openInvoicesModal(org)}
+                                                            className="h-6 text-[11px] px-1.5 text-primary hover:underline gap-1"
+                                                        >
+                                                            <Receipt className="size-3" />
+                                                            <span>{org.invoices.length} Invoices</span>
+                                                        </Button>
+                                                    ) : (
+                                                        <span className="text-[11px] text-muted-foreground">0 invoices</span>
+                                                    )}
+                                                </td>
+
+                                                <td className="py-3 px-3 text-right">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => openEditModal(org)}
+                                                        className="h-7 text-xs px-2.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 gap-1"
+                                                    >
+                                                        <SlidersHorizontal className="size-3" />
+                                                        <span>Renew / Plan</span>
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+
+                {/* Edit / Renew Subscription Modal */}
+                <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-bold flex items-center gap-2">
+                                <Sparkles className="size-4 text-primary" />
+                                <span>Manage Subscription: {editOrg?.name}</span>
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Update the subscription plan, validity period, pricing, or activate an extension for this client.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <form onSubmit={handleSaveSubscription} className="space-y-3 pt-2">
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Subscription Plan</Label>
+                                    <select
+                                        value={plan}
+                                        onChange={(e) => setPlan(e.target.value)}
+                                        className="w-full h-8 text-xs rounded-lg border border-border bg-background px-2"
+                                    >
+                                        <option value="annual">Annual Business Suite</option>
+                                        <option value="starter">Starter Plan</option>
+                                        <option value="business_pro">Business Pro</option>
+                                        <option value="enterprise">Enterprise Custom</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label className="text-xs">Status</Label>
+                                    <select
+                                        value={status}
+                                        onChange={(e) => setStatus(e.target.value)}
+                                        className="w-full h-8 text-xs rounded-lg border border-border bg-background px-2"
+                                    >
+                                        <option value="active">Active</option>
+                                        <option value="expired">Expired</option>
+                                        <option value="suspended">Suspended</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs">Expiry Date</Label>
+                                    <div className="flex items-center gap-1 text-[10px]">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleQuickDays(30)}
+                                            className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground"
+                                        >
+                                            +30d
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleQuickDays(180)}
+                                            className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground"
+                                        >
+                                            +6mo
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleQuickDays(365)}
+                                            className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold hover:bg-primary/20"
+                                        >
+                                            +1yr
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleQuickDays(730)}
+                                            className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground"
+                                        >
+                                            +2yr
+                                        </button>
+                                    </div>
+                                </div>
+                                <Input
+                                    type="date"
+                                    value={expiryDate}
+                                    onChange={(e) => setExpiryDate(e.target.value)}
+                                    className="h-8 text-xs"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label className="text-xs">Plan Price (₹ INR)</Label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={priceRupees}
+                                    onChange={(e) => setPriceRupees(e.target.value)}
+                                    className="h-8 text-xs font-semibold"
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2 p-2.5 bg-muted/40 rounded-lg border border-border/60">
+                                <input
+                                    type="checkbox"
+                                    id="generate-invoice-cb"
+                                    checked={generateInvoice}
+                                    onChange={(e) => setGenerateInvoice(e.target.checked)}
+                                    className="rounded border-border size-4 text-primary"
+                                />
+                                <label htmlFor="generate-invoice-cb" className="text-xs font-medium cursor-pointer text-foreground">
+                                    Record official Paid Invoice in system
+                                </label>
+                            </div>
+
+                            <DialogFooter className="pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsEditModalOpen(false)}
+                                    className="h-8 text-xs"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    disabled={isSubmitting}
+                                    className="h-8 text-xs font-semibold bg-primary"
+                                >
+                                    {isSubmitting ? 'Saving...' : 'Save Subscription'}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* View Invoices Modal */}
+                <Dialog open={isInvoicesModalOpen} onOpenChange={setIsInvoicesModalOpen}>
+                    <DialogContent className="sm:max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-bold flex items-center gap-2">
+                                <Receipt className="size-4 text-primary" />
+                                <span>Invoices for {viewInvoicesOrg?.name}</span>
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                All recorded billing transactions and payments for this workspace.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-2 max-h-80 overflow-y-auto pt-1">
+                            {viewInvoicesOrg?.invoices.map((inv) => (
+                                <div
+                                    key={inv.id}
+                                    className="p-3 bg-muted/40 rounded-xl border border-border/70 flex items-center justify-between text-xs"
+                                >
+                                    <div>
+                                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                            <span>{inv.amount_formatted}</span>
+                                            <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 capitalize">
+                                                {inv.status}
+                                            </Badge>
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                                            Plan: {inv.plan} • Ref: {inv.provider_payment_id || inv.id.slice(0, 8)}
+                                        </div>
+                                    </div>
+                                    <div className="text-right text-[11px] text-muted-foreground">
+                                        {inv.paid_at || inv.created_at}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <DialogFooter className="pt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsInvoicesModalOpen(false)}
+                                className="h-8 text-xs"
+                            >
+                                Close
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
+        </>
+    );
+}

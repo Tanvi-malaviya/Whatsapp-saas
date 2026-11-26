@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import inertia from '@inertiajs/vite';
 import { wayfinder } from '@laravel/vite-plugin-wayfinder';
 import babel from '@rolldown/plugin-babel';
@@ -6,6 +7,15 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
 import { bunny } from 'laravel-vite-plugin/fonts';
 import { defineConfig, lazyPlugins } from 'vite-plus';
+
+const hasPhp = (() => {
+    try {
+        execSync('php -v', { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+})();
 
 export default defineConfig({
     plugins: lazyPlugins(() => [
@@ -26,7 +36,10 @@ export default defineConfig({
         tailwindcss(),
         wayfinder({
             formVariants: true,
-            command: process.env.SKIP_WAYFINDER ? 'cmd /c echo skip' : 'php artisan wayfinder:generate',
+            command:
+                process.env.SKIP_WAYFINDER || !hasPhp
+                    ? (process.platform === 'win32' ? 'cmd /c echo skip' : 'true')
+                    : 'php artisan wayfinder:generate',
         }),
     ]),
     server: {

@@ -129,7 +129,7 @@ export default function AgentDashboard({ agent, customers, stats, referral }: Pr
     });
 
     return (
-        <AppLayout breadcrumbs={breadcrumbs}>
+        <>
             <Head title="B2B Partner & Reseller Portal" />
 
             <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto w-full">
@@ -489,6 +489,6 @@ export default function AgentDashboard({ agent, customers, stats, referral }: Pr
                     </div>
                 </div>
             )}
-        </AppLayout>
+        </>
     );
 }

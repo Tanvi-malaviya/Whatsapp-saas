@@ -37,6 +37,7 @@ class CreateNewUser implements CreatesNewUsers
         $user->markEmailAsVerified();
 
         // Handle referral code if provided
+        $referrer = null;
         if (! empty($input['referral_code'])) {
             $code = strtoupper(trim($input['referral_code']));
             $referrer = User::where('referral_code', $code)->first();
@@ -59,6 +60,10 @@ class CreateNewUser implements CreatesNewUsers
             'status' => 'active',
         ];
 
+        if ($referrer && $referrer->isB2BAgent()) {
+            $orgData['b2b_agent_id'] = $referrer->id;
+        }
+
         if (Schema::hasColumn('organizations', 'max_channels')) {
             $orgData['max_channels'] = 1; // Default to Single Number
         }
@@ -67,6 +72,10 @@ class CreateNewUser implements CreatesNewUsers
         $org->getOrCreateWallet();
         $user->organizations()->attach($org->id, ['role' => 'Owner']);
         $user->update(['current_organization_id' => $org->id]);
+
+        if ($referrer) {
+            app(\App\Services\ReferralService::class)->rewardOnSubscription($user, $org);
+        }
 
         return $user;
     }
