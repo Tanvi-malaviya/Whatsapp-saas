@@ -1,6 +1,9 @@
 import * as XLSX from 'xlsx';
+import { getCountries, getCountryCallingCode, getExampleNumber, type CountryCode } from 'libphonenumber-js';
+import phoneExamples from 'libphonenumber-js/mobile/examples';
+import { normalizeCampaignRecipients } from '@/lib/campaign-recipients';
 import { TemplateFields, templateVariables, templateHasVariables, templateMediaFormat, templateMediaTypes, type MessageTemplate, type TemplateValues } from '@/components/template-fields';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Send,
@@ -46,6 +49,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+
+const countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
+const recipientCountries = getCountries().map(code => ({
+    code,
+    name: countryNames.of(code) ?? code,
+    callingCode: getCountryCallingCode(code),
+})).sort((a, b) => a.name.localeCompare(b.name));
 
 interface TemplateItem extends MessageTemplate {
     id: string;
@@ -142,8 +152,9 @@ export default function CampaignsList({
         contacts.map((c) => c.id)
     );
     const [manualPhoneInput, setManualPhoneInput] = useState('');
+    const [recipientCountry, setRecipientCountry] = useState<CountryCode>('IN');
     const [uploadedRecipients, setUploadedRecipients] = useState<{ phone: string; name: string }[]>([]);
-    const [uploadSummary, setUploadSummary] = useState<{ filename: string; valid: number; skipped: number } | null>(null);
+    const [uploadSummary, setUploadSummary] = useState<{ filename: string } | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [templateParams, setTemplateParams] = useState<string[]>([]);
     const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -156,6 +167,13 @@ export default function CampaignsList({
         sent?: number;
         failed?: number;
     } | null>(null);
+
+    const uploadedAudience = useMemo(() => normalizeCampaignRecipients(uploadedRecipients, recipientCountry), [uploadedRecipients, recipientCountry]);
+    const manualAudience = useMemo(() => normalizeCampaignRecipients(
+        manualPhoneInput.split(/[\n,;]+/).map(phone => phone.trim()).filter(Boolean).map(phone => ({ phone, name: 'Valued Customer' })),
+        recipientCountry,
+    ), [manualPhoneInput, recipientCountry]);
+    const recipientExample = getExampleNumber(recipientCountry, phoneExamples);
 
     const handlePause = async (id: string) => {
         setCampaignActionBusy(id);
@@ -343,44 +361,19 @@ export default function CampaignsList({
                     nameCol = nameHeaderIdx !== -1 ? nameHeaderIdx : (phoneCol === 0 ? 1 : 0);
                 }
 
-                const seen = new Set<string>();
-                const validList: { phone: string; name: string }[] = [];
-                let skipped = 0;
-
+                // Keep original numbers so changing the selected country reprocesses every row.
+                const recipientRows: { phone: string; name: string }[] = [];
                 for (let i = startRow; i < rows.length; i++) {
                     const row = rows[i];
-                    if (!row || row.every((cell) => String(cell ?? '').trim() === '')) continue;
-
-                    const rawPhone = String(row[phoneCol] ?? '').trim();
-                    const digits = rawPhone.replace(/\D/g, '');
-                    if (digits.length < 8 || digits.length > 15) {
-                        skipped++;
-                        continue;
-                    }
-                    if (seen.has(digits)) {
-                        continue;
-                    }
-                    seen.add(digits);
-                    const rawName = String(row[nameCol] ?? '').trim();
-                    validList.push({
-                        phone: digits,
-                        name: rawName || 'Valued Customer',
+                    if (!row || row.every(cell => String(cell ?? '').trim() === '')) continue;
+                    recipientRows.push({
+                        phone: String(row[phoneCol] ?? '').trim(),
+                        name: String(row[nameCol] ?? '').trim() || 'Valued Customer',
                     });
                 }
-
-                if (validList.length === 0) {
-                    setUploadError('No valid phone numbers found. Ensure phone numbers have 8-15 digits (with country code).');
-                    setUploadedRecipients([]);
-                    setUploadSummary(null);
-                    return;
-                }
-
-                setUploadedRecipients(validList);
-                setUploadSummary({
-                    filename: file.name,
-                    valid: validList.length,
-                    skipped,
-                });
+                setUploadedRecipients(recipientRows);
+                setUploadSummary({ filename: file.name });
+                if (recipientRows.length === 0) setUploadError('No recipient rows found in this file.');
             } catch (err: any) {
                 setUploadError('Could not read file: ' + (err?.message || 'Invalid Excel/CSV format'));
             }
@@ -391,8 +384,7 @@ export default function CampaignsList({
 
     const downloadSampleExcel = () => {
         const sampleRows = [
-            { phone: '919898696798', name: 'Bhavesh Sathwara' },
-            { phone: '917405402826', name: 'Aarav Patel' },
+            { phone: recipientExample?.formatNational() ?? '+919876543210', name: 'Sample Customer' },
         ];
         const ws = XLSX.utils.json_to_sheet(sampleRows);
         const wb = XLSX.utils.book_new();
@@ -427,14 +419,9 @@ export default function CampaignsList({
                 .map((c) => ({ phone: c.phone, name: c.name }));
         }
         if (audienceMode === 'upload') {
-            return uploadedRecipients;
+            return uploadedAudience.recipients;
         }
-        // Manual numbers parsed by line or comma
-        const lines = manualPhoneInput
-            .split(/[\n,;]+/)
-            .map((s) => s.trim())
-            .filter((s) => s.length >= 8);
-        return lines.map((phone) => ({ phone, name: 'Valued Customer' }));
+        return manualAudience.recipients;
     };
 
     const recipientsCount = getRecipientsList().length;
@@ -983,7 +970,7 @@ export default function CampaignsList({
                                             }`}
                                         >
                                             <FileSpreadsheet className="size-3 text-emerald-600" />
-                                            Excel / CSV ({uploadedRecipients.length})
+                                            Excel / CSV ({uploadedAudience.recipients.length})
                                         </button>
                                         <button
                                             type="button"
@@ -998,6 +985,15 @@ export default function CampaignsList({
                                         </button>
                                     </div>
                                 </div>
+
+                                {audienceMode !== 'contacts' && <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                                    <Label htmlFor="recipient-country" className="text-xs font-semibold">Country for local phone numbers</Label>
+                                    <select id="recipient-country" value={recipientCountry} onChange={event => setRecipientCountry(event.target.value as CountryCode)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs">
+                                        {recipientCountries.map(country => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
+                                    </select>
+                                    <p className="text-[11px] text-muted-foreground">Local numbers automatically use +{getCountryCallingCode(recipientCountry)}. International numbers starting with + or 00 keep their country code. Use + for numbers from other countries.</p>
+                                    {recipientExample && <p className="text-[11px] text-muted-foreground">Example: {recipientExample.formatNational()} → {recipientExample.number}</p>}
+                                </div>}
 
                                 {audienceMode === 'contacts' ? (
                                     <div className="rounded-lg border border-border bg-card p-2 space-y-2 max-h-40 overflow-y-auto">
@@ -1092,12 +1088,13 @@ export default function CampaignsList({
                                             </div>
                                         )}
 
+                                        {uploadSummary && uploadedAudience.recipients.length === 0 && <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-[11px] text-destructive">No valid recipients for the selected country. Check the country selection and phone column.</p>}
                                         {uploadSummary ? (
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between text-[11px] bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md text-emerald-700 dark:text-emerald-300">
                                                     <span>
-                                                        <strong>{uploadSummary.filename}</strong>: {uploadSummary.valid} valid numbers loaded
-                                                        {uploadSummary.skipped > 0 ? ` (${uploadSummary.skipped} invalid skipped)` : ''}
+                                                        <strong>{uploadSummary.filename}</strong>: {uploadedAudience.recipients.length} valid numbers loaded
+                                                        {uploadedAudience.skipped > 0 ? ` (${uploadedAudience.skipped} invalid skipped)` : ''}{uploadedAudience.duplicates > 0 ? ` (${uploadedAudience.duplicates} duplicates removed)` : ''}
                                                     </span>
                                                     <button
                                                         type="button"
@@ -1111,22 +1108,22 @@ export default function CampaignsList({
                                                     </button>
                                                 </div>
                                                 <div className="max-h-28 overflow-y-auto divide-y divide-border/50 border border-border rounded-md text-[11px]">
-                                                    {uploadedRecipients.slice(0, 20).map((r, idx) => (
+                                                    {uploadedAudience.recipients.slice(0, 20).map((r, idx) => (
                                                         <div key={idx} className="px-2.5 py-1 flex items-center justify-between">
                                                             <span className="font-mono text-foreground">{r.phone}</span>
                                                             <span className="text-muted-foreground truncate max-w-[160px]">{r.name}</span>
                                                         </div>
                                                     ))}
-                                                    {uploadedRecipients.length > 20 && (
+                                                    {uploadedAudience.recipients.length > 20 && (
                                                         <div className="px-2.5 py-1 text-center text-[10px] text-muted-foreground">
-                                                            +{uploadedRecipients.length - 20} more numbers ready
+                                                            +{uploadedAudience.recipients.length - 20} more numbers ready
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         ) : (
                                             <p className="text-[10px] text-muted-foreground">
-                                                Upload a spreadsheet with a <code>phone</code> column (include country code, e.g. 919898696798) and optional <code>name</code> column.
+                                                Upload a spreadsheet with a <code>phone</code> column and optional <code>name</code> column. Local numbers use the country selected above.
                                             </p>
                                         )}
                                     </div>
@@ -1136,12 +1133,16 @@ export default function CampaignsList({
                                             rows={3}
                                             value={manualPhoneInput}
                                             onChange={(e) => setManualPhoneInput(e.target.value)}
-                                            placeholder="Paste recipient numbers (separated by comma or newline), e.g.&#10;919898696798&#10;917405402826"
+                                            placeholder={`Paste numbers separated by comma or newline, e.g.\n${recipientExample?.formatNational() ?? '+919876543210'}`}
                                             className="w-full rounded-md border border-input bg-background p-2 text-xs font-mono"
                                         />
                                         <p className="text-[10px] text-muted-foreground">
-                                            Include country code without + or spaces (e.g. 919898696798).
+                                            Paste local numbers without the country code, or full international numbers starting with +.
                                         </p>
+                                        {manualPhoneInput.trim() && <div className="space-y-1 text-[11px] text-muted-foreground">
+                                            <p>{manualAudience.recipients.length} valid recipients · {manualAudience.skipped} invalid skipped · {manualAudience.duplicates} duplicates removed</p>
+                                            {manualAudience.recipients.slice(0, 3).map(recipient => <p key={recipient.phone} className="font-mono">{recipient.phone}</p>)}
+                                        </div>}
                                     </div>
                                 )}
                             </div>

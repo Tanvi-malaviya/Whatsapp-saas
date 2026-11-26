@@ -68,7 +68,7 @@ export function TemplateFields({ template, value, onChange, hideBody = false, sh
     const headerPreview = <>
         {showContent && (headerText || media) && <div className="space-y-2">
             <p className="text-xs font-semibold">Header{media ? ` — ${format.toLowerCase()}` : ''}</p>
-            {headerText && <p className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm font-semibold">{headerText}</p>}
+            {headerText && <p className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm font-semibold">{renderTemplateText(headerText, value.header_parameters)}</p>}
             {media && <div className="rounded-lg border bg-muted/30 p-3 text-xs">
                 {format === 'IMAGE' && previewUrl ? <img src={previewUrl} alt="Template header" className={layout === 'columns' ? "max-h-24 rounded-md object-contain" : "max-h-48 rounded-md object-contain"} />
                     : format === 'VIDEO' && previewUrl ? <video src={previewUrl} controls preload="none" className={layout === 'columns' ? "max-h-24 w-full rounded-md" : "max-h-48 w-full rounded-md"} />
@@ -106,7 +106,7 @@ export function TemplateFields({ template, value, onChange, hideBody = false, sh
     const bodyPreview = <>
         {showContent && <div className="space-y-2">
             <p className="text-xs font-semibold">Template Content</p>
-            <p className={`whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed ${layout === 'columns' ? 'max-h-56 overflow-y-auto overscroll-contain' : ''}`}>{template.body}</p>
+            <p className={`whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed ${layout === 'columns' ? 'max-h-56 overflow-y-auto overscroll-contain' : ''}`}>{renderTemplateText(template.body, value.parameters)}</p>
         </div>}
     </>;
     const bodyFields = <>

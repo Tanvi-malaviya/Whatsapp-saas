@@ -103,6 +103,7 @@ class BroadcastTemplateMediaTest extends TestCase
         $this->assertEquals('new-media', $components->firstWhere('type', 'header')['parameters'][0]['image']['id']);
         $this->assertEquals('discount', $components->firstWhere('type', 'button')['parameters'][0]['text']);
         Http::assertSent(fn ($request) => str_ends_with($request->url(), '/messages')
+            && $request['to'] === '919999900001'
             && collect($request['template']['components'])->firstWhere('type', 'header')['parameters'][0]['image']['id'] === 'new-media');
     }
 
@@ -143,6 +144,7 @@ class BroadcastTemplateMediaTest extends TestCase
         $this->broadcast($this->campaignData(['recipients' => $recipients]))->assertOk();
         $this->assertDatabaseCount('campaign_recipients', 600);
         $this->assertEquals(600, BroadcastCampaign::withoutGlobalScopes()->firstOrFail()->recipients_count);
+        Queue::assertPushed(\App\Jobs\SendCampaignRecipient::class, 600);
     }
 
     public function test_wrong_media_type_and_oversized_uploads_are_rejected_before_charging(): void
