@@ -102,7 +102,7 @@ class MetaWebhookController extends Controller
                             130429 => 'Rate limit exceeded: Too many messages sent too quickly.',
                             default => $details,
                         };
-                        $errorReason = ($code ? "[Meta #{$code}] " : '').$friendlyTip;
+                        $errorReason = ($code ? "[Meta #{$code}] " : '').implode(' — ', array_unique(array_filter([$status['errors'][0]['message'] ?? $status['errors'][0]['title'] ?? null, $details, $friendlyTip])));
                         $meta['failure_reason'] = $errorReason;
                     }
                     $message->update(['status' => $status['status'], 'metadata' => $meta]);
