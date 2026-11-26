@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class BroadcastCampaign extends Model
 {
-    use HasFactory, HasUuids, BelongsToTenant;
+    use BelongsToTenant, HasFactory, HasUuids;
 
     protected $table = 'broadcast_campaigns';
 
@@ -29,6 +29,7 @@ class BroadcastCampaign extends Model
         'max_contacts_limit',
         'status',
         'parameters',
+        'scheduled_at',
     ];
 
     protected $casts = [
@@ -40,6 +41,7 @@ class BroadcastCampaign extends Model
         'cost_paise' => 'integer',
         'is_paused' => 'boolean',
         'max_contacts_limit' => 'integer',
+        'scheduled_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

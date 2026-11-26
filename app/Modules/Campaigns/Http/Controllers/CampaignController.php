@@ -13,6 +13,7 @@ use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\WebhookInbox;
 use App\Modules\MetaConnection\Http\Controllers\MetaWebhookController;
 use App\Modules\MetaConnection\Models\WhatsAppChannel;
+use App\Services\CampaignLimits;
 use App\Services\MetaApi;
 use App\Services\TemplatePayload;
 use App\Services\WalletService;
@@ -21,6 +22,7 @@ use App\Shared\TenantContext;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -217,6 +219,7 @@ class CampaignController extends Controller
                 'category' => $c->category,
                 'isPaused' => (bool) $c->is_paused,
                 'status' => $c->status,
+                'scheduledAt' => $c->scheduled_at?->toIso8601String(),
                 'date' => $c->created_at ? $c->created_at->timezone('Asia/Kolkata')->format('M d, Y h:i A') : 'Just now',
             ])
             ->values()
@@ -242,7 +245,8 @@ class CampaignController extends Controller
             );
             $walletBalances = $this->walletService->getBalances($org);
         }
-        $maxContactsLimit = (int) PlatformSetting::read('campaign_max_contacts', 2000);
+        $messagingLimits = app(CampaignLimits::class)->forChannel($channel);
+        $maxContactsLimit = $messagingLimits['batchLimit'];
 
         return Inertia::render('campaigns/index', [
             'channels' => WhatsAppChannel::where('status', 'connected')->get(['id', 'name', 'phone_number']),
@@ -253,6 +257,7 @@ class CampaignController extends Controller
             'autoOpenBroadcast' => $request->boolean('open_broadcast', false),
             'wallet' => $walletBalances,
             'maxContactsLimit' => $maxContactsLimit,
+            'messagingLimits' => $messagingLimits,
             'channel' => $channel ? [
                 'id' => $channel->id,
                 'name' => $channel->name,
@@ -332,7 +337,7 @@ class CampaignController extends Controller
                 'template_name' => 'required|string|max:512',
                 'template_language' => 'required|string|max:30',
                 'campaign_name' => 'nullable|string|max:150',
-                'recipients' => 'required|array|min:1|max:'.$maxAllowed,
+                'recipients' => 'required|array|min:1|max:100000',
                 'recipients.*.phone' => 'required|string|max:30',
                 'recipients.*.name' => 'nullable|string|max:100',
                 'parameters' => 'nullable|array',
@@ -392,11 +397,8 @@ class CampaignController extends Controller
                 fn ($r) => ['phone' => (new PhoneNumber($r['phone']))->getE164(), 'name' => $r['name'] ?? null]
             )->unique('phone');
 
-            if ($recipients->count() > $maxAllowed) {
-                throw ValidationException::withMessages([
-                    'recipients' => "Campaign exceeds the maximum allowed limit of {$maxAllowed} contacts.",
-                ]);
-            }
+            $limits = app(CampaignLimits::class)->forChannel($channel);
+            $maxAllowed = $limits['batchLimit'];
 
             // Validate opt-out contacts
             $blocked = Contact::where('organization_id', $org->id)
@@ -443,78 +445,80 @@ class CampaignController extends Controller
                 ]);
             }
 
-            [$campaign, $recipientIds] = DB::transaction(function () use ($org, $channel, $data, $payload, $recipients, $category, $estimatedCostPaise, $maxAllowed) {
-                $campaign = BroadcastCampaign::create([
-                    'organization_id' => $org->id,
-                    'channel_id' => $channel->id,
-                    'name' => $data['campaign_name'] ?: $data['template_name'],
-                    'template_name' => $data['template_name'],
-                    'template_language' => $data['template_language'],
-                    'recipients_count' => $recipients->count(),
-                    'success_count' => 0,
-                    'failed_count' => 0,
-                    'cost_paise' => $estimatedCostPaise,
-                    'category' => $category,
-                    'is_paused' => false,
-                    'max_contacts_limit' => $maxAllowed,
-                    'status' => 'queued',
-                    'parameters' => $data['parameters'] ?? [],
-                    'payload' => [...$payload, 'category' => $category],
-                ]);
-
-                // Deduct messaging wallet balance atomically
-                $this->walletService->debit(
-                    org: $org,
-                    amountPaise: $estimatedCostPaise,
-                    description: "Campaign dispatch: '{$campaign->name}' ({$recipients->count()} messages, {$category})",
-                    referenceId: $campaign->id,
-                    metadata: [
-                        'campaign_id' => $campaign->id,
-                        'recipients_count' => $recipients->count(),
-                        'category' => $category,
-                    ]
+            [$campaigns, $dispatches] = DB::transaction(function () use ($org, $channel, $data, $payload, $recipients, $category, $maxAllowed, $limits) {
+                // Serialize submissions in this workspace so batches reserve capacity atomically.
+                Organization::whereKey($org->id)->lockForUpdate()->firstOrFail();
+                $chunks = $recipients->values()->chunk($maxAllowed);
+                $batchCount = $chunks->count();
+                $times = app(CampaignLimits::class)->plan(
+                    $chunks->map(fn ($chunk) => $chunk->count())->all(),
+                    $limits['dailyLimit'],
+                    $limits['dailyLimit'] ? app(CampaignLimits::class)->reservations($org->id) : [],
                 );
-
-                $recipientIds = [];
-                foreach ($recipients as $recipient) {
-                    $recipientIds[] = DB::table('campaign_recipients')->insertGetId([
-                        'campaign_id' => $campaign->id,
-                        ...$recipient,
-                        'status' => 'queued',
-                        'created_at' => now(),
-                        'updated_at' => now(),
+                $campaigns = [];
+                $dispatches = [];
+                foreach ($chunks as $index => $chunk) {
+                    $scheduledAt = Carbon::createFromTimestamp($times[$index], config('app.timezone'));
+                    $batchCost = $this->walletService->estimateCost($chunk->count(), $category);
+                    $name = ($data['campaign_name'] ?? null) ?: $data['template_name'];
+                    $suffix = $batchCount > 1 ? ' ('.($index + 1).'/'.$batchCount.')' : '';
+                    $campaign = BroadcastCampaign::create([
+                        'organization_id' => $org->id, 'channel_id' => $channel->id,
+                        'name' => Str::limit($name, 150 - strlen($suffix), '').$suffix,
+                        'template_name' => $data['template_name'], 'template_language' => $data['template_language'],
+                        'recipients_count' => $chunk->count(), 'success_count' => 0, 'failed_count' => 0,
+                        'cost_paise' => $batchCost, 'category' => $category, 'is_paused' => false,
+                        'max_contacts_limit' => $maxAllowed, 'scheduled_at' => $scheduledAt,
+                        'status' => $scheduledAt->isFuture() ? 'scheduled' : 'queued',
+                        'parameters' => $data['parameters'] ?? [],
+                        'payload' => [...$payload, 'category' => $category, 'batch_index' => $index + 1, 'batch_count' => $batchCount, 'messaging_tier' => $limits['tier']],
                     ]);
+                    $this->walletService->debit(
+                        org: $org, amountPaise: $batchCost,
+                        description: "Campaign dispatch: '{$campaign->name}' ({$chunk->count()} messages, {$category})",
+                        referenceId: $campaign->id,
+                        metadata: ['campaign_id' => $campaign->id, 'recipients_count' => $chunk->count(), 'category' => $category],
+                    );
+                    foreach ($chunk as $recipient) {
+                        $recipientId = DB::table('campaign_recipients')->insertGetId([
+                            'campaign_id' => $campaign->id, ...$recipient, 'status' => 'queued', 'created_at' => now(), 'updated_at' => now(),
+                        ]);
+                        $dispatches[] = ['id' => $recipientId, 'at' => $scheduledAt];
+                    }
+                    $campaigns[] = $campaign;
                 }
 
-                return [$campaign, $recipientIds];
+                return [$campaigns, $dispatches];
             });
 
-            // If small recipient list (<= 10 recipients), dispatch immediately so messages deliver in real-time without waiting for background worker!
-            if (count($recipientIds) <= 10) {
-                foreach ($recipientIds as $recId) {
+            foreach ($dispatches as $dispatch) {
+                if (count($dispatches) <= 10 && ! $dispatch['at']->isFuture()) {
                     try {
-                        SendCampaignRecipient::dispatchSync($recId);
+                        SendCampaignRecipient::dispatchSync($dispatch['id']);
                     } catch (\Throwable $e) {
-                        Log::error("Immediate dispatch error for recipient {$recId}: ".$e->getMessage());
+                        Log::error('Immediate dispatch error for recipient '.$dispatch['id'].': '.$e->getMessage());
                     }
-                }
-            } else {
-                foreach ($recipientIds as $recId) {
-                    SendCampaignRecipient::dispatch($recId);
+                } else {
+                    SendCampaignRecipient::enqueue($dispatch['id'], $dispatch['at']);
                 }
             }
-
-            // Reload campaign to get latest counts if dispatched synchronously
-            $campaign->refresh();
+            foreach ($campaigns as $campaign) {
+                $campaign->refresh();
+            }
+            $campaign = $campaigns[0];
+            $count = count($campaigns);
 
             return response()->json([
                 'success' => true,
-                'message' => $campaign->status === 'completed' ? 'Broadcast dispatched and delivered successfully!' : 'Broadcast queued for dispatch.',
+                'message' => $count > 1 ? "Broadcast split automatically into {$count} campaigns. Scheduled batches will send when their reserved allowance becomes available." : 'Broadcast accepted for dispatch.',
                 'campaign_id' => $campaign->id,
-                'cost_paise' => $campaign->cost_paise,
-                'cost_formatted' => '₹'.number_format($campaign->cost_paise / 100, 2),
-                'success_count' => (int) $campaign->success_count,
-                'failed_count' => (int) $campaign->failed_count,
+                'campaign_ids' => array_map(fn ($batch) => $batch->id, $campaigns),
+                'campaigns_count' => $count,
+                'campaigns' => array_map(fn ($batch) => ['id' => $batch->id, 'name' => $batch->name, 'recipients_count' => $batch->recipients_count, 'scheduled_at' => $batch->scheduled_at?->toIso8601String(), 'status' => $batch->status], $campaigns),
+                'messaging_limits' => $limits,
+                'cost_paise' => $estimatedCostPaise, 'cost_formatted' => '₹'.number_format($estimatedCostPaise / 100, 2),
+                'success_count' => array_sum(array_map(fn ($batch) => (int) $batch->success_count, $campaigns)),
+                'failed_count' => array_sum(array_map(fn ($batch) => (int) $batch->failed_count, $campaigns)),
             ]);
         } catch (ValidationException $e) {
             return response()->json([
@@ -565,7 +569,7 @@ class CampaignController extends Controller
 
         $campaign->update([
             'is_paused' => false,
-            'status' => 'processing',
+            'status' => $campaign->scheduled_at?->isFuture() ? 'scheduled' : 'processing',
         ]);
 
         // Re-dispatch remaining queued recipients
@@ -575,7 +579,7 @@ class CampaignController extends Controller
             ->pluck('id');
 
         foreach ($queuedIds as $rId) {
-            SendCampaignRecipient::dispatch($rId);
+            SendCampaignRecipient::enqueue($rId, $campaign->scheduled_at);
         }
 
         return response()->json([

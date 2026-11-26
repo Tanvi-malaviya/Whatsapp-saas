@@ -92,6 +92,7 @@ interface CampaignHistoryItem {
     isPaused?: boolean;
     status: string;
     date: string;
+    scheduledAt?: string | null;
 }
 
 interface CampaignsPageProps {
@@ -116,6 +117,7 @@ interface CampaignsPageProps {
         total_balance_formatted: string;
     };
     maxContactsLimit?: number;
+    messagingLimits?: { tier: string; dailyLimit: number | null; localRemaining: number | null; unlimited: boolean; batchLimit: number; configuredBatchLimit: number; source: 'meta' | 'saved' | 'unknown'; checkedAt: string | null };
 }
 
 export default function CampaignsList({
@@ -128,6 +130,7 @@ export default function CampaignsList({
     channels = [],
     wallet,
     maxContactsLimit = 2000,
+    messagingLimits,
 }: CampaignsPageProps) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
@@ -425,17 +428,8 @@ export default function CampaignsList({
     };
 
     const recipientsCount = getRecipientsList().length;
-
-    // Generate live preview body
-    const generatePreviewBody = () => {
-        if (!selectedTemplate) return '';
-        let text = selectedTemplate.body;
-        templateVariables(text).forEach((token, position) => {
-            const index = /^\d+$/.test(token) ? Number(token) - 1 : position;
-            text = text.replace(new RegExp(`\\{\\{\\s*${token}\\s*\\}\\}`, 'g'), () => templateParams[index] || `[${token}]`);
-        });
-        return text;
-    };
+    const campaignCount = Math.ceil(recipientsCount / Math.max(1, maxContactsLimit));
+    const batchSizes = Array.from({ length: Math.min(campaignCount, 5) }, (_, index) => Math.min(maxContactsLimit, recipientsCount - index * maxContactsLimit));
 
     const handleExecuteBroadcast = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -490,7 +484,7 @@ export default function CampaignsList({
                 });
                 setTimeout(() => {
                     setIsBroadcastOpen(false);
-                    router.reload({ only: ['recentCampaigns', 'contacts'] });
+                    router.reload({ only: ['recentCampaigns', 'contacts', 'messagingLimits', 'maxContactsLimit', 'wallet'] });
                 }, 1800);
             } else {
                 const errMessage = data?.message
@@ -523,6 +517,7 @@ export default function CampaignsList({
                     </p>
 
                     <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <Badge variant="outline" className="text-[11px]">Batch: {maxContactsLimit.toLocaleString()} · Meta: {messagingLimits?.unlimited ? 'Unlimited' : messagingLimits?.dailyLimit ? `${messagingLimits.dailyLimit.toLocaleString()}/24h` : 'Not verified'}{messagingLimits?.source === 'saved' ? ' (saved)' : ''}</Badge>
                         <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 h-9 rounded-lg text-xs shadow-2xs">
                             <span className="text-[11px] text-muted-foreground font-medium">Sender:</span>
                             <select
@@ -648,6 +643,7 @@ export default function CampaignsList({
                                                     >
                                                         {camp.name}
                                                     </button>
+                                                    {camp.scheduledAt && camp.status === 'scheduled' && <p className="mt-1 text-[10px] text-muted-foreground">Scheduled: {new Date(camp.scheduledAt).toLocaleString()}</p>}
                                                 </td>
                                                 <td className="py-2.5 px-4">
                                                     <span className="font-mono text-[11px] text-foreground">{camp.templateName}</span>
@@ -669,7 +665,7 @@ export default function CampaignsList({
                                                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                                                             camp.status === 'completed'
                                                                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                                                : camp.status === 'paused'
+                                                                : camp.status === 'paused' || camp.status === 'scheduled'
                                                                 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                                                                 : camp.status === 'cancelled'
                                                                 ? 'bg-muted text-muted-foreground'
@@ -682,7 +678,7 @@ export default function CampaignsList({
                                                             className={`size-1.5 rounded-full ${
                                                                 camp.status === 'completed'
                                                                     ? 'bg-emerald-500'
-                                                                    : camp.status === 'paused'
+                                                                    : camp.status === 'paused' || camp.status === 'scheduled'
                                                                     ? 'bg-amber-500'
                                                                     : camp.status === 'processing' || camp.status === 'queued'
                                                                     ? 'bg-blue-500 animate-pulse'
@@ -860,359 +856,293 @@ export default function CampaignsList({
 
             {/* Broadcast Launch Modal Dialog */}
             <Dialog open={isBroadcastOpen} onOpenChange={setIsBroadcastOpen}>
-                <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <form onSubmit={handleExecuteBroadcast} className="space-y-4">
-                        <DialogHeader>
-                            <DialogTitle className="text-base font-bold flex items-center gap-2">
-                                <Send className="size-5 text-primary" />
+                <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] max-w-7xl flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl">
+                    <form onSubmit={handleExecuteBroadcast} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-10 sm:px-5 sm:pr-12">
+                            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+                                <Send className="size-5 shrink-0 text-primary" />
                                 Launch WhatsApp Broadcast Campaign
                             </DialogTitle>
                             <DialogDescription className="text-xs text-muted-foreground">
-                                Broadcast this verified Meta template to multiple customer WhatsApp numbers simultaneously.
+                                Prepare your message, choose your audience, and review the campaign plan.
                             </DialogDescription>
                         </DialogHeader>
 
-                        {broadcastResult && (
-                            <div
-                                className={`p-3 rounded-lg text-xs font-medium ${
-                                    broadcastResult.success
-                                        ? 'bg-primary/10 text-primary border border-primary/30'
-                                        : 'bg-destructive/10 text-destructive border border-destructive/30'
-                                }`}
-                            >
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                            {broadcastResult && <div role="status" className={`rounded-lg border p-3 text-xs font-medium ${broadcastResult.success ? 'border-primary/30 bg-primary/10 text-primary' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
                                 {broadcastResult.message}
-                            </div>
-                        )}
+                            </div>}
 
-                        <div className="space-y-4">
-                            {/* Campaign Name */}
-                            <div className="space-y-1">
-                                <Label className="text-xs font-semibold">Campaign Name</Label>
-                                <Input
-                                    value={campaignName}
-                                    onChange={(e) => setCampaignName(e.target.value)}
-                                    placeholder="e.g. October Discount Reminder"
-                                    className="text-xs"
-                                    required
-                                />
-                            </div>
-
-                            {/* Template Selector */}
-                            <div className="space-y-1">
-                                <Label className="text-xs font-semibold">Select Meta Template</Label>
-                                <select
-                                    value={selectedTemplate?.id || ''}
-                                    onChange={(e) => handleSelectTemplateInModal(e.target.value)}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium"
-                                >
-                                    {templates.map((t) => (
-                                        <option key={t.id} value={t.id}>
-                                            {t.name} ({t.language}) - {t.category} · {templateMediaTypes[templateMediaFormat(t)] ? `${templateMediaFormat(t).toLowerCase()} attachment` : 'Text only'}{templateHasVariables(t) ? ' · Dynamic values' : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <TemplateFields
-                                template={selectedTemplate}
-                                value={{ ...extraValues, parameters: templateParams }}
-                                onChange={(v) => {
-                                    setExtraValues(v);
-                                    setTemplateParams(v.parameters);
-                                }}
-                                mediaFile={mediaFile}
-                                onMediaFileChange={setMediaFile}
-                            />
-                            {selectedTemplate && !templateMediaTypes[templateMediaFormat(selectedTemplate)] && <p className="text-xs text-muted-foreground">This template has no media header. Select an image, video, or document template to attach media.</p>}
-
-                            {/* Live WhatsApp Bubble Preview */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                                    <MessageSquare className="size-3.5 text-primary" />
-                                    Customer Message Preview:
-                                </Label>
-                                <div className="rounded-xl bg-[#e5ddd5] dark:bg-[#111b21] p-3 text-xs shadow-inner">
-                                    <div className="max-w-[85%] rounded-lg bg-white dark:bg-[#202c33] p-2.5 shadow-sm text-foreground text-xs leading-relaxed space-y-1.5">
-                                        <p className="whitespace-pre-wrap">{generatePreviewBody()}</p>
-                                        <div className="text-[9px] text-muted-foreground text-right">
-                                            12:00 PM ✓✓
-                                        </div>
-                                    </div>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="broadcast-campaign-name" className="text-xs font-semibold">Campaign Name</Label>
+                                    <Input id="broadcast-campaign-name" value={campaignName} onChange={event => setCampaignName(event.target.value)} placeholder="e.g. Festival Offer" className="text-xs" required />
                                 </div>
-                            </div>
-
-                            {/* Audience / Recipients Selection */}
-                            <div className="space-y-2">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <Label className="text-xs font-semibold flex items-center gap-1.5">
-                                        <Users className="size-3.5 text-primary" />
-                                        Target Audience ({recipientsCount} selected)
-                                    </Label>
-                                    <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 text-xs">
-                                        <button
-                                            type="button"
-                                            onClick={() => setAudienceMode('contacts')}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                                                audienceMode === 'contacts'
-                                                    ? 'bg-card text-foreground shadow-2xs font-semibold'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                            }`}
-                                        >
-                                            CRM Contacts ({contacts.length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAudienceMode('upload')}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
-                                                audienceMode === 'upload'
-                                                    ? 'bg-card text-foreground shadow-2xs font-semibold'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                            }`}
-                                        >
-                                            <FileSpreadsheet className="size-3 text-emerald-600" />
-                                            Excel / CSV ({uploadedAudience.recipients.length})
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAudienceMode('manual')}
-                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                                                audienceMode === 'manual'
-                                                    ? 'bg-card text-foreground shadow-2xs font-semibold'
-                                                    : 'text-muted-foreground hover:text-foreground'
-                                            }`}
-                                        >
-                                            Paste Numbers
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {audienceMode !== 'contacts' && <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
-                                    <Label htmlFor="recipient-country" className="text-xs font-semibold">Country for local phone numbers</Label>
-                                    <select id="recipient-country" value={recipientCountry} onChange={event => setRecipientCountry(event.target.value as CountryCode)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs">
-                                        {recipientCountries.map(country => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="broadcast-template" className="text-xs font-semibold">Select Meta Template</Label>
+                                    <select id="broadcast-template" value={selectedTemplate?.id || ''} onChange={event => handleSelectTemplateInModal(event.target.value)} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-xs font-medium">
+                                        {templates.map(template => <option key={template.id} value={template.id}>
+                                            {template.name} ({template.language}) · {templateMediaTypes[templateMediaFormat(template)] ? `${templateMediaFormat(template).toLowerCase()} attachment` : 'Text only'}{templateHasVariables(template) ? ' · Dynamic values' : ''}
+                                        </option>)}
                                     </select>
-                                    <p className="text-[11px] text-muted-foreground">Local numbers automatically use +{getCountryCallingCode(recipientCountry)}. International numbers starting with + or 00 keep their country code. Use + for numbers from other countries.</p>
-                                    {recipientExample && <p className="text-[11px] text-muted-foreground">Example: {recipientExample.formatNational()} → {recipientExample.number}</p>}
-                                </div>}
+                                </div>
+                            </div>
 
-                                {audienceMode === 'contacts' ? (
-                                    <div className="rounded-lg border border-border bg-card p-2 space-y-2 max-h-40 overflow-y-auto">
-                                        <div className="flex items-center justify-between border-b border-border/60 pb-1.5 px-1">
-                                            <span className="text-[11px] text-muted-foreground font-medium">
-                                                Select contacts from current workspace:
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={handleSelectAllContacts}
-                                                className="text-[11px] text-primary font-semibold hover:underline"
-                                            >
-                                                {selectedContactIds.length === contacts.length
-                                                    ? 'Deselect All'
-                                                    : 'Select All'}
-                                            </button>
-                                        </div>
-                                        {contacts.length === 0 ? (
-                                            <div className="py-4 text-center text-xs text-muted-foreground">
-                                                No contacts in this workspace yet. Switch to "Excel / CSV" or "Paste Numbers" tab to broadcast to any phone number.
-                                            </div>
-                                        ) : (
-                                            contacts.map((c) => {
-                                                const isChecked = selectedContactIds.includes(c.id);
-                                                const isOptedOut = c.isOptedIn === false;
-                                                return (
-                                                    <label
-                                                        key={c.id}
-                                                        className={`flex items-center justify-between p-1.5 rounded cursor-pointer text-xs transition-colors ${
-                                                            isOptedOut ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={isChecked}
-                                                                onChange={() => handleToggleContact(c.id)}
-                                                                className="rounded border-input text-primary focus:ring-primary"
-                                                            />
-                                                            <span className="font-semibold text-foreground">
-                                                                {c.name}
-                                                            </span>
-                                                            <span className="font-mono text-muted-foreground text-[11px]">
-                                                                {c.phone}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5">
-                                                            {isOptedOut ? (
-                                                                <Badge variant="destructive" className="text-[9px] py-0 px-1.5 bg-destructive/15 text-destructive border-destructive/30">
-                                                                    Opted Out
-                                                                </Badge>
-                                                            ) : (
-                                                                <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-emerald-600 border-emerald-500/30">
-                                                                    Opted In
-                                                                </Badge>
-                                                            )}
-                                                            <Badge variant="outline" className="text-[9px] py-0 px-1.5">
-                                                                {c.label}
-                                                            </Badge>
-                                                        </div>
-                                                    </label>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                ) : audienceMode === 'upload' ? (
-                                    <div className="rounded-lg border border-dashed border-border bg-card p-3 space-y-2.5">
+                            <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+                                <section aria-label="Template preview and values" className="min-w-0 rounded-xl border border-border bg-card p-3">
+                                    <TemplateFields
+                                        template={selectedTemplate}
+                                        value={{ ...extraValues, parameters: templateParams }}
+                                        onChange={value => { setExtraValues(value); setTemplateParams(value.parameters); }}
+                                        mediaFile={mediaFile}
+                                        onMediaFileChange={setMediaFile}
+                                        showContent
+                                        layout="columns"
+                                    />
+                                </section>
+                                <section aria-label="Campaign audience" className="min-w-0 rounded-xl border border-border bg-card p-3">
+                                    {/* Audience / Recipients Selection */}
+                                    <div className="space-y-2">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-colors">
-                                                <Upload className="size-3.5" />
-                                                <span>Upload Excel (.xlsx / .xls) or CSV</span>
-                                                <input
-                                                    type="file"
-                                                    accept=".xlsx,.xls,.csv"
-                                                    onChange={handleFileUpload}
-                                                    className="hidden"
-                                                />
-                                            </label>
-                                            <button
-                                                type="button"
-                                                onClick={downloadSampleExcel}
-                                                className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold hover:underline"
-                                            >
-                                                <Download className="size-3" />
-                                                Download Sample Excel
-                                            </button>
+                                            <Label className="text-xs font-semibold flex items-center gap-1.5">
+                                                <Users className="size-3.5 text-primary" />
+                                                Audience ({recipientsCount.toLocaleString()} selected)
+                                            </Label>
+                                            <div className="flex w-full flex-wrap items-center gap-1 rounded-lg bg-muted p-0.5 text-xs">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAudienceMode('contacts')}
+                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                                                        audienceMode === 'contacts'
+                                                            ? 'bg-card text-foreground shadow-2xs font-semibold'
+                                                            : 'text-muted-foreground hover:text-foreground'
+                                                    }`}
+                                                >
+                                                    CRM Contacts ({contacts.length})
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAudienceMode('upload')}
+                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                                                        audienceMode === 'upload'
+                                                            ? 'bg-card text-foreground shadow-2xs font-semibold'
+                                                            : 'text-muted-foreground hover:text-foreground'
+                                                    }`}
+                                                >
+                                                    <FileSpreadsheet className="size-3 text-emerald-600" />
+                                                    Excel / CSV ({uploadedAudience.recipients.length})
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setAudienceMode('manual')}
+                                                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                                                        audienceMode === 'manual'
+                                                            ? 'bg-card text-foreground shadow-2xs font-semibold'
+                                                            : 'text-muted-foreground hover:text-foreground'
+                                                    }`}
+                                                >
+                                                    Paste Numbers
+                                                </button>
+                                            </div>
                                         </div>
 
-                                        {uploadError && (
-                                            <div className="p-2 rounded bg-destructive/10 border border-destructive/20 text-[11px] text-destructive">
-                                                {uploadError}
-                                            </div>
-                                        )}
+                                        {audienceMode !== 'contacts' && <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                                            <Label htmlFor="recipient-country" className="text-xs font-semibold">Country for local phone numbers</Label>
+                                            <select id="recipient-country" value={recipientCountry} onChange={event => setRecipientCountry(event.target.value as CountryCode)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs">
+                                                {recipientCountries.map(country => <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>)}
+                                            </select>
+                                            <p className="text-[11px] text-muted-foreground">Local numbers automatically use +{getCountryCallingCode(recipientCountry)}. International numbers starting with + or 00 keep their country code. Use + for numbers from other countries.</p>
+                                            {recipientExample && <p className="text-[11px] text-muted-foreground">Example: {recipientExample.formatNational()} → {recipientExample.number}</p>}
+                                        </div>}
 
-                                        {uploadSummary && uploadedAudience.recipients.length === 0 && <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-[11px] text-destructive">No valid recipients for the selected country. Check the country selection and phone column.</p>}
-                                        {uploadSummary ? (
-                                            <div className="space-y-2">
-                                                <div className="flex items-center justify-between text-[11px] bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md text-emerald-700 dark:text-emerald-300">
-                                                    <span>
-                                                        <strong>{uploadSummary.filename}</strong>: {uploadedAudience.recipients.length} valid numbers loaded
-                                                        {uploadedAudience.skipped > 0 ? ` (${uploadedAudience.skipped} invalid skipped)` : ''}{uploadedAudience.duplicates > 0 ? ` (${uploadedAudience.duplicates} duplicates removed)` : ''}
+                                        {audienceMode === 'contacts' ? (
+                                            <div className="rounded-lg border border-border bg-card p-2 space-y-2 max-h-40 overflow-y-auto">
+                                                <div className="flex items-center justify-between border-b border-border/60 pb-1.5 px-1">
+                                                    <span className="text-[11px] text-muted-foreground font-medium">
+                                                        Select contacts from current workspace:
                                                     </span>
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
-                                                            setUploadedRecipients([]);
-                                                            setUploadSummary(null);
-                                                        }}
-                                                        className="text-[10px] underline ml-2"
+                                                        onClick={handleSelectAllContacts}
+                                                        className="text-[11px] text-primary font-semibold hover:underline"
                                                     >
-                                                        Clear
+                                                        {selectedContactIds.length === contacts.length
+                                                            ? 'Deselect All'
+                                                            : 'Select All'}
                                                     </button>
                                                 </div>
-                                                <div className="max-h-28 overflow-y-auto divide-y divide-border/50 border border-border rounded-md text-[11px]">
-                                                    {uploadedAudience.recipients.slice(0, 20).map((r, idx) => (
-                                                        <div key={idx} className="px-2.5 py-1 flex items-center justify-between">
-                                                            <span className="font-mono text-foreground">{r.phone}</span>
-                                                            <span className="text-muted-foreground truncate max-w-[160px]">{r.name}</span>
-                                                        </div>
-                                                    ))}
-                                                    {uploadedAudience.recipients.length > 20 && (
-                                                        <div className="px-2.5 py-1 text-center text-[10px] text-muted-foreground">
-                                                            +{uploadedAudience.recipients.length - 20} more numbers ready
-                                                        </div>
-                                                    )}
+                                                {contacts.length === 0 ? (
+                                                    <div className="py-4 text-center text-xs text-muted-foreground">
+                                                        No contacts in this workspace yet. Switch to "Excel / CSV" or "Paste Numbers" tab to broadcast to any phone number.
+                                                    </div>
+                                                ) : (
+                                                    contacts.map((c) => {
+                                                        const isChecked = selectedContactIds.includes(c.id);
+                                                        const isOptedOut = c.isOptedIn === false;
+                                                        return (
+                                                            <label
+                                                                key={c.id}
+                                                                className={`flex items-center justify-between p-1.5 rounded cursor-pointer text-xs transition-colors ${
+                                                                    isOptedOut ? 'bg-destructive/5 hover:bg-destructive/10' : 'hover:bg-muted/50'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isChecked}
+                                                                        onChange={() => handleToggleContact(c.id)}
+                                                                        className="rounded border-input text-primary focus:ring-primary"
+                                                                    />
+                                                                    <span className="font-semibold text-foreground">
+                                                                        {c.name}
+                                                                    </span>
+                                                                    <span className="font-mono text-muted-foreground text-[11px]">
+                                                                        {c.phone}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    {isOptedOut ? (
+                                                                        <Badge variant="destructive" className="text-[9px] py-0 px-1.5 bg-destructive/15 text-destructive border-destructive/30">
+                                                                            Opted Out
+                                                                        </Badge>
+                                                                    ) : (
+                                                                        <Badge variant="outline" className="text-[9px] py-0 px-1.5 text-emerald-600 border-emerald-500/30">
+                                                                            Opted In
+                                                                        </Badge>
+                                                                    )}
+                                                                    <Badge variant="outline" className="text-[9px] py-0 px-1.5">
+                                                                        {c.label}
+                                                                    </Badge>
+                                                                </div>
+                                                            </label>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                        ) : audienceMode === 'upload' ? (
+                                            <div className="rounded-lg border border-dashed border-border bg-card p-3 space-y-2.5">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-colors">
+                                                        <Upload className="size-3.5" />
+                                                        <span>Upload Excel (.xlsx / .xls) or CSV</span>
+                                                        <input
+                                                            type="file"
+                                                            accept=".xlsx,.xls,.csv"
+                                                            onChange={handleFileUpload}
+                                                            className="hidden"
+                                                        />
+                                                    </label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={downloadSampleExcel}
+                                                        className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold hover:underline"
+                                                    >
+                                                        <Download className="size-3" />
+                                                        Download Sample Excel
+                                                    </button>
                                                 </div>
+
+                                                {uploadError && (
+                                                    <div className="p-2 rounded bg-destructive/10 border border-destructive/20 text-[11px] text-destructive">
+                                                        {uploadError}
+                                                    </div>
+                                                )}
+
+                                                {uploadSummary && uploadedAudience.recipients.length === 0 && <p className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-[11px] text-destructive">No valid recipients for the selected country. Check the country selection and phone column.</p>}
+                                                {uploadSummary ? (
+                                                    <div className="space-y-2">
+                                                        <div className="flex items-center justify-between text-[11px] bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-md text-emerald-700 dark:text-emerald-300">
+                                                            <span>
+                                                                <strong>{uploadSummary.filename}</strong>: {uploadedAudience.recipients.length} valid numbers loaded
+                                                                {uploadedAudience.skipped > 0 ? ` (${uploadedAudience.skipped} invalid skipped)` : ''}{uploadedAudience.duplicates > 0 ? ` (${uploadedAudience.duplicates} duplicates removed)` : ''}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setUploadedRecipients([]);
+                                                                    setUploadSummary(null);
+                                                                }}
+                                                                className="text-[10px] underline ml-2"
+                                                            >
+                                                                Clear
+                                                            </button>
+                                                        </div>
+                                                        <div className="max-h-28 overflow-y-auto divide-y divide-border/50 border border-border rounded-md text-[11px]">
+                                                            {uploadedAudience.recipients.slice(0, 20).map((r, idx) => (
+                                                                <div key={idx} className="px-2.5 py-1 flex items-center justify-between">
+                                                                    <span className="font-mono text-foreground">{r.phone}</span>
+                                                                    <span className="text-muted-foreground truncate max-w-[160px]">{r.name}</span>
+                                                                </div>
+                                                            ))}
+                                                            {uploadedAudience.recipients.length > 20 && (
+                                                                <div className="px-2.5 py-1 text-center text-[10px] text-muted-foreground">
+                                                                    +{uploadedAudience.recipients.length - 20} more numbers ready
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[10px] text-muted-foreground">
+                                                        Upload a spreadsheet with a <code>phone</code> column and optional <code>name</code> column. Local numbers use the country selected above.
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : (
-                                            <p className="text-[10px] text-muted-foreground">
-                                                Upload a spreadsheet with a <code>phone</code> column and optional <code>name</code> column. Local numbers use the country selected above.
-                                            </p>
+                                            <div className="space-y-1">
+                                                <textarea
+                                                    rows={3}
+                                                    value={manualPhoneInput}
+                                                    onChange={(e) => setManualPhoneInput(e.target.value)}
+                                                    placeholder={`Paste numbers separated by comma or newline, e.g.\n${recipientExample?.formatNational() ?? '+919876543210'}`}
+                                                    className="w-full rounded-md border border-input bg-background p-2 text-xs font-mono"
+                                                />
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Paste local numbers without the country code, or full international numbers starting with +.
+                                                </p>
+                                                {manualPhoneInput.trim() && <div className="space-y-1 text-[11px] text-muted-foreground">
+                                                    <p>{manualAudience.recipients.length} valid recipients · {manualAudience.skipped} invalid skipped · {manualAudience.duplicates} duplicates removed</p>
+                                                    {manualAudience.recipients.slice(0, 3).map(recipient => <p key={recipient.phone} className="font-mono">{recipient.phone}</p>)}
+                                                </div>}
+                                            </div>
                                         )}
                                     </div>
-                                ) : (
-                                    <div className="space-y-1">
-                                        <textarea
-                                            rows={3}
-                                            value={manualPhoneInput}
-                                            onChange={(e) => setManualPhoneInput(e.target.value)}
-                                            placeholder={`Paste numbers separated by comma or newline, e.g.\n${recipientExample?.formatNational() ?? '+919876543210'}`}
-                                            className="w-full rounded-md border border-input bg-background p-2 text-xs font-mono"
-                                        />
-                                        <p className="text-[10px] text-muted-foreground">
-                                            Paste local numbers without the country code, or full international numbers starting with +.
-                                        </p>
-                                        {manualPhoneInput.trim() && <div className="space-y-1 text-[11px] text-muted-foreground">
-                                            <p>{manualAudience.recipients.length} valid recipients · {manualAudience.skipped} invalid skipped · {manualAudience.duplicates} duplicates removed</p>
-                                            {manualAudience.recipients.slice(0, 3).map(recipient => <p key={recipient.phone} className="font-mono">{recipient.phone}</p>)}
-                                        </div>}
-                                    </div>
-                                )}
+                                </section>
+                            </div>
+
+                            <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3 text-xs sm:grid-cols-3">
+                                <div className="space-y-1">
+                                    <p className="text-[11px] text-muted-foreground">Estimated total cost</p>
+                                    <p className="text-lg font-bold">₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}</p>
+                                    <p className="text-[10px] text-muted-foreground">{recipientsCount.toLocaleString()} recipients · ₹{selectedTemplate?.category === 'UTILITY' ? '0.14' : '0.88'} / message</p>
+                                </div>
+                                <div className="space-y-1 sm:border-l sm:border-border sm:pl-3">
+                                    <p className="text-[11px] text-muted-foreground">Wallet balance</p>
+                                    <p className="text-lg font-bold text-primary">{wallet?.total_balance_formatted ?? '₹0.00'}</p>
+                                    {wallet && wallet.total_balance_paise < Math.round(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 14 : 88)) && recipientsCount > 0 && <p className="text-[11px] text-destructive">Insufficient balance. <Link href="/wallet" className="font-semibold underline">Recharge wallet</Link></p>}
+                                </div>
+                                <div className="space-y-1 sm:border-l sm:border-border sm:pl-3">
+                                    <p className="text-[11px] text-muted-foreground">Campaign plan</p>
+                                    <p className="text-lg font-bold">{campaignCount.toLocaleString()} campaign{campaignCount === 1 ? '' : 's'}</p>
+                                    <p className="text-[10px] text-muted-foreground">Up to {maxContactsLimit.toLocaleString()} recipients per campaign</p>
+                                </div>
+                                <div className="space-y-1 border-t border-border pt-2 text-[11px] sm:col-span-3">
+                                    <p>Meta allowance: {messagingLimits?.unlimited ? 'Unlimited' : messagingLimits?.dailyLimit ? `${messagingLimits.dailyLimit.toLocaleString()} unique recipients / rolling 24 hours` : 'Not verified'}{messagingLimits?.source === 'saved' ? ' (saved; live check unavailable)' : ''}{messagingLimits?.localRemaining != null ? ` · Estimated available: ${messagingLimits.localRemaining.toLocaleString()}` : ''}</p>
+                                    {campaignCount > 1 && <p className="font-semibold text-primary">Automatic split: {campaignCount <= 5 ? batchSizes.map(size => size.toLocaleString()).join(' + ') : `${maxContactsLimit.toLocaleString()} per batch (final batch: ${(recipientsCount - (campaignCount - 1) * maxContactsLimit).toLocaleString()})`} recipients. Same template, media, and values in every campaign.</p>}
+                                    {messagingLimits?.dailyLimit && recipientsCount > messagingLimits.dailyLimit && <p className="text-amber-700 dark:text-amber-300">Overflow batches will be scheduled for later allowance windows.</p>}
+                                    {messagingLimits?.source === 'unknown' && <p className="text-amber-700 dark:text-amber-300">Meta’s tier could not be verified. Check Messaging Limits in WhatsApp Manager.</p>}
+                                    <details className="text-muted-foreground">
+                                        <summary className="cursor-pointer text-[10px]">About the allowance estimate</summary>
+                                        <p className="pt-1 text-[10px]">Meta shares this allowance across your business portfolio. This estimate includes workspace activity; activity outside this workspace may affect delivery.</p>
+                                    </details>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Wallet Balance & Cost Estimate Banner */}
-                        <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2 text-xs">
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-foreground flex items-center gap-1.5">
-                                    <WalletIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                                    Estimated Campaign Cost &amp; Wallet
-                                </span>
-                                <span className="font-bold text-foreground">
-                                    ~₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/50 text-[11px] text-muted-foreground">
-                                <div>
-                                    <span>Rate ({selectedTemplate?.category || 'MARKETING'}):</span>{' '}
-                                    <span className="font-medium text-foreground">
-                                        ₹{selectedTemplate?.category === 'UTILITY' ? '0.14' : '0.88'} / msg
-                                    </span>
-                                </div>
-                                <div className="text-right">
-                                    <span>Available Balance:</span>{' '}
-                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                        {wallet?.total_balance_formatted ?? '₹0.00'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Wallet Warning if balance is insufficient */}
-                            {wallet && wallet.total_balance_paise < Math.round(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 14 : 88)) && recipientsCount > 0 && (
-                                <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-700 dark:text-red-300 flex items-center justify-between text-[11px] mt-1">
-                                    <div className="flex items-center gap-1.5">
-                                        <AlertCircle className="size-3.5 shrink-0" />
-                                        <span>Insufficient balance. Required: ₹{(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 0.14 : 0.88)).toFixed(2)}</span>
-                                    </div>
-                                    <Link href="/wallet" className="font-bold underline ml-2">
-                                        Recharge Wallet &rarr;
-                                    </Link>
-                                </div>
-                            )}
-
-                            {/* Max Contacts Limit Warning */}
-                            {recipientsCount > maxContactsLimit && (
-                                <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-300 flex items-center gap-1.5 text-[11px]">
-                                    <AlertCircle className="size-3.5 shrink-0" />
-                                    <span>Maximum limit is {maxContactsLimit} contacts per campaign. Please deselect some contacts.</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Recipient Consent Checkbox */}
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground pt-1 cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                required
-                                checked={consentConfirmed}
-                                onChange={(e) => setConsentConfirmed(e.target.checked)}
-                                className="rounded border-input text-primary focus:ring-primary size-3.5"
-                            />
-                            <span>I confirm these recipients consented to receive this broadcast.</span>
-                        </label>
-
-                        <DialogFooter className="flex items-center justify-between pt-3 border-t border-border">
-                            <span className="text-xs text-muted-foreground font-mono">
-                                {recipientsCount} recipient{recipientsCount === 1 ? '' : 's'} selected
-                            </span>
+                        <DialogFooter className="shrink-0 gap-3 border-t border-border bg-muted/20 px-4 py-3 sm:items-center sm:justify-between sm:px-5">
+                            <label className="flex min-w-0 items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                                <input type="checkbox" required checked={consentConfirmed} onChange={event => setConsentConfirmed(event.target.checked)} className="mt-0.5 size-3.5 shrink-0 rounded border-input text-primary focus:ring-primary" />
+                                <span>I confirm these recipients consented to receive this broadcast.</span>
+                            </label>
                             <div className="flex items-center gap-2">
                                 <Button
                                     type="button"
@@ -1230,7 +1160,6 @@ export default function CampaignsList({
                                     disabled={
                                         isSending ||
                                         recipientsCount === 0 ||
-                                        recipientsCount > maxContactsLimit ||
                                         (wallet ? wallet.total_balance_paise < Math.round(recipientsCount * (selectedTemplate?.category === 'UTILITY' ? 14 : 88)) : false)
                                     }
                                     className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 px-4 shadow-xs"
@@ -1243,7 +1172,7 @@ export default function CampaignsList({
                                     ) : (
                                         <>
                                             <Send className="size-3.5" />
-                                            <span>Launch Broadcast ({recipientsCount})</span>
+                                            <span>{campaignCount > 1 ? `Create ${campaignCount} Campaigns (${recipientsCount})` : `Launch Broadcast (${recipientsCount})`}</span>
                                         </>
                                     )}
                                 </Button>
