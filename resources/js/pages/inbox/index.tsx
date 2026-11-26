@@ -1949,37 +1949,33 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
             {/* Start New Conversation Modal */}
             {showNewChatDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in-50">
-                    <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 animate-in fade-in-50">
+                    <div role="dialog" aria-modal="true" aria-labelledby="new-chat-title" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
                             <div className="flex items-center gap-2">
-                                <div className="size-8 rounded-lg bg-[#47b672]/15 flex items-center justify-center text-[#47b672]">
+                                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#47b672]/15 text-[#47b672]">
                                     <Plus className="size-4" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-bold text-foreground">Start New WhatsApp Conversation</h3>
-                                    <p className="text-[11px] text-muted-foreground">Send a WhatsApp message directly to any phone number</p>
+                                    <h3 id="new-chat-title" className="text-sm font-bold text-foreground">Start New WhatsApp Conversation</h3>
+                                    <p className="text-[11px] text-muted-foreground">Choose a recipient and prepare your message</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setShowNewChatDialog(false)}
-                                className="text-muted-foreground hover:text-foreground text-xs p-1"
-                            >
-                                ✕
+                            <button type="button" aria-label="Close new chat" onClick={() => setShowNewChatDialog(false)} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+                                <X className="size-4" />
                             </button>
                         </div>
-
-                        {newChatStatus && (
-                            <div className={`p-2.5 rounded-lg text-xs ${newChatStatus.success
-                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
-                                    : 'bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20'
-                                }`}>
-                                {newChatStatus.message}
-                            </div>
-                        )}
-
-                        <form onSubmit={handleStartNewChat} className="space-y-3.5">
-<label className="block text-xs"><input type="checkbox" required checked={consentConfirmed} onChange={e => setConsentConfirmed(e.target.checked)} /> This contact consented to receive messages.</label>
+                        <form onSubmit={handleStartNewChat} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+                                {newChatStatus && (
+                                    <div role="status" className={`mb-3 rounded-lg border p-2.5 text-xs ${newChatStatus.success
+                                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                        : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'}`}>
+                                        {newChatStatus.message}
+                                    </div>
+                                )}
+                                <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,2fr)]">
+                                    <div className="min-w-0 space-y-3 lg:border-r lg:border-border lg:pr-4">
                             {channels.length > 1 && (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold">Send From WhatsApp Number *</label>
@@ -1997,7 +1993,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 gap-3">
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold">Recipient Mobile Number *</label>
                                     <input
@@ -2054,8 +2050,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 </div>
                             </div>
 
+                                        <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 p-2.5 text-xs leading-relaxed">
+                                            <input type="checkbox" required checked={consentConfirmed} onChange={event => setConsentConfirmed(event.target.checked)} className="mt-0.5 shrink-0" />
+                                            This contact consented to receive messages.
+                                        </label>
+                                    </div>
+                                    <div className="min-w-0">
                             {newChatMsgType === 'template' ? (
-                                <div className="space-y-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                                <div className="min-w-0 space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
                                     <label className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                                         Select Meta Approved Template *
                                     </label>
@@ -2079,14 +2081,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                     <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
                                         Pre-approved templates land directly on the user's phone to start the conversation.
                                     </p>
-                                    <TemplateFields template={metaTemplates.find(t => t.name === newChatTemplate) ?? null} value={newValues} onChange={setNewValues} mediaFile={newHeaderFile} onMediaFileChange={setNewHeaderFile} showContent />
+                                    <TemplateFields template={metaTemplates.find(t => t.name === newChatTemplate) ?? null} value={newValues} onChange={setNewValues} mediaFile={newHeaderFile} onMediaFileChange={setNewHeaderFile} showContent layout="columns" />
                                 </div>
                             ) : (
                                 <div className="space-y-1">
                                     <label className="text-xs font-semibold">Message Text *</label>
                                     <textarea
                                         required
-                                        rows={3}
+                                        rows={8}
                                         value={newChatMessage}
                                         onChange={(e) => setNewChatMessage(e.target.value)}
                                         placeholder="Type your WhatsApp message..."
@@ -2095,24 +2097,14 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setShowNewChatDialog(false)}
-                                    className="text-xs"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    size="sm"
-                                    disabled={isStartingChat}
-                                    className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
-                                >
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-muted/20 px-4 py-3 sm:px-5">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setShowNewChatDialog(false)} className="text-xs">Cancel</Button>
+                                <Button type="submit" size="sm" disabled={isStartingChat} className="gap-1.5 bg-[#47b672] px-4 text-xs font-semibold text-white shadow-sm hover:bg-[#349c5e]">
                                     <Send className="size-3.5" />
-                                    {isStartingChat ? 'Sending & Opening...' : '🚀 Start Chat & Send'}
+                                    {isStartingChat ? 'Sending & Opening...' : 'Start Chat & Send'}
                                 </Button>
                             </div>
                         </form>
