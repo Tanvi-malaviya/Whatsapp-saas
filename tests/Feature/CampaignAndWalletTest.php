@@ -167,5 +167,18 @@ class CampaignAndWalletTest extends TestCase
                 'failed' => 1,
             ],
         ]);
+
+        // Full-page Inertia view with search & status filter
+        $pageResp = $this->actingAs($user)->get("/campaigns/{$campaign->id}/analytics?status=failed&search=9999900003");
+        $pageResp->assertOk();
+        $pageResp->assertInertia(fn ($page) => $page
+            ->component('campaigns/analytics')
+            ->where('campaign.id', $campaign->id)
+            ->where('metrics.failed', 1)
+            ->where('filters.status', 'failed')
+            ->where('filters.search', '9999900003')
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.phone', '+919999900003')
+        );
     }
 }

@@ -630,7 +630,7 @@ class CampaignController extends Controller
         });
     }
 
-    public function analytics(Request $request, string $id): JsonResponse
+    public function analytics(Request $request, string $id): JsonResponse|Response
     {
         $org = $this->resolveOrg($request);
         $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
@@ -659,16 +659,18 @@ class CampaignController extends Controller
             ->toArray();
 
         $totalSelected = $campaign->recipients_count;
-        $queued = $counts['queued'] ?? 0;
-        $sent = $counts['sent'] ?? 0;
-        $delivered = $counts['delivered'] ?? 0;
-        $read = $counts['read'] ?? 0;
-        $failed = $counts['failed'] ?? 0;
-        $cancelled = $counts['cancelled'] ?? 0;
+        $queued = (int) ($counts['queued'] ?? 0);
+        $sent = (int) ($counts['sent'] ?? 0);
+        $delivered = (int) ($counts['delivered'] ?? 0);
+        $read = (int) ($counts['read'] ?? 0);
+        $failed = (int) ($counts['failed'] ?? 0);
+        $cancelled = (int) ($counts['cancelled'] ?? 0);
 
-        $totalDispatched = $sent + $delivered + $read + $failed;
-        $deliveryRate = $totalDispatched > 0 ? round((($delivered + $read) / $totalDispatched) * 100, 1) : 0;
-        $readRate = ($delivered + $read) > 0 ? round(($read / ($delivered + $read)) * 100, 1) : 0;
+        $sentTotal = $sent + $delivered + $read;
+        $deliveredTotal = $delivered + $read;
+        $totalDispatched = $sentTotal + $failed;
+        $deliveryRate = $totalDispatched > 0 ? round(($deliveredTotal / $totalDispatched) * 100, 1) : 0;
+        $readRate = $deliveredTotal > 0 ? round(($read / $deliveredTotal) * 100, 1) : 0;
 
         // Group failure reasons
         $failureReasons = DB::table('campaign_recipients')
@@ -678,7 +680,7 @@ class CampaignController extends Controller
             ->selectRaw('error, COUNT(*) as count')
             ->groupBy('error')
             ->orderByDesc('count')
-            ->take(10)
+            ->take(20)
             ->get();
 
         // Count customer inbound replies
@@ -691,40 +693,95 @@ class CampaignController extends Controller
             ->whereHas('conversation', fn ($q) => $q->where('organization_id', $org->id)->whereIn('contact_phone', $recipientPhones))
             ->count();
 
-        // Sample recent recipients
-        $recipients = DB::table('campaign_recipients')
-            ->where('campaign_id', $campaign->id)
-            ->orderByDesc('updated_at')
-            ->take(50)
-            ->get();
+        $campaignData = [
+            'id' => $campaign->id,
+            'name' => $campaign->name,
+            'template_name' => $campaign->template_name,
+            'template_language' => $campaign->template_language,
+            'category' => $campaign->category,
+            'cost_paise' => $campaign->cost_paise,
+            'cost_formatted' => '₹'.number_format($campaign->cost_paise / 100, 2),
+            'status' => $campaign->status,
+            'is_paused' => (bool) $campaign->is_paused,
+            'created_at' => $campaign->created_at->format('d M Y, h:i A'),
+            'scheduled_at' => $campaign->scheduled_at?->format('d M Y, h:i A'),
+        ];
 
-        return response()->json([
-            'campaign' => [
-                'id' => $campaign->id,
-                'name' => $campaign->name,
-                'template_name' => $campaign->template_name,
-                'template_language' => $campaign->template_language,
-                'category' => $campaign->category,
-                'cost_paise' => $campaign->cost_paise,
-                'cost_formatted' => '₹'.number_format($campaign->cost_paise / 100, 2),
-                'status' => $campaign->status,
-                'is_paused' => (bool) $campaign->is_paused,
-                'created_at' => $campaign->created_at->format('d M Y, h:i A'),
-            ],
-            'metrics' => [
-                'total_selected' => $totalSelected,
-                'queued' => $queued,
-                'sent' => $sent,
-                'delivered' => $delivered,
-                'read' => $read,
-                'failed' => $failed,
-                'cancelled' => $cancelled,
-                'replies' => $replies,
-                'delivery_rate' => $deliveryRate,
-                'read_rate' => $readRate,
-                'failure_reasons' => $failureReasons,
-            ],
+        $metricsData = [
+            'total_selected' => $totalSelected,
+            'queued' => $queued,
+            'sent' => $sent,
+            'delivered' => $delivered,
+            'read' => $read,
+            'failed' => $failed,
+            'cancelled' => $cancelled,
+            'sent_total' => $sentTotal,
+            'delivered_total' => $deliveredTotal,
+            'replies' => $replies,
+            'delivery_rate' => $deliveryRate,
+            'read_rate' => $readRate,
+            'failure_reasons' => $failureReasons,
+        ];
+
+        if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+            $recipients = DB::table('campaign_recipients')
+                ->where('campaign_id', $campaign->id)
+                ->orderByDesc('updated_at')
+                ->take(50)
+                ->get();
+
+            return response()->json([
+                'campaign' => $campaignData,
+                'metrics' => $metricsData,
+                'recipients' => $recipients,
+            ]);
+        }
+
+        $search = trim((string) $request->query('search', ''));
+        $statusFilter = trim((string) $request->query('status', ''));
+        $allowedStatuses = ['queued', 'sent', 'delivered', 'read', 'failed', 'cancelled'];
+        if (! in_array($statusFilter, $allowedStatuses, true)) {
+            $statusFilter = '';
+        }
+
+        $recipientsQuery = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id);
+
+        if ($statusFilter !== '') {
+            $recipientsQuery->where('status', $statusFilter);
+        }
+
+        if ($search !== '') {
+            $recipientsQuery->where(function ($q) use ($search) {
+                $q->where('phone', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('error', 'like', "%{$search}%");
+            });
+        }
+
+        $recipients = $recipientsQuery
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->paginate(25)
+            ->withQueryString()
+            ->through(fn ($row) => [
+                'id' => $row->id,
+                'phone' => $row->phone,
+                'name' => $row->name,
+                'status' => $row->status,
+                'error' => $row->error,
+                'wamid' => $row->wamid,
+                'updated_at' => $row->updated_at ? Carbon::parse($row->updated_at)->format('d M Y, h:i A') : null,
+            ]);
+
+        return Inertia::render('campaigns/analytics', [
+            'campaign' => $campaignData,
+            'metrics' => $metricsData,
             'recipients' => $recipients,
+            'filters' => [
+                'search' => $search,
+                'status' => $statusFilter,
+            ],
         ]);
     }
 

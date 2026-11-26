@@ -140,10 +140,6 @@ export default function CampaignsList({
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false);
 
-    // Analytics Modal State
-    const [analyticsOpen, setAnalyticsOpen] = useState(false);
-    const [analyticsData, setAnalyticsData] = useState<any>(null);
-    const [loadingAnalytics, setLoadingAnalytics] = useState(false);
     const [campaignActionBusy, setCampaignActionBusy] = useState<string | null>(null);
 
     // Broadcast Modal State
@@ -212,20 +208,6 @@ export default function CampaignsList({
             alert((e as Error).message);
         } finally {
             setCampaignActionBusy(null);
-        }
-    };
-
-    const handleViewAnalytics = async (id: string) => {
-        setLoadingAnalytics(true);
-        setAnalyticsOpen(true);
-        try {
-            const data = await api(`/campaigns/${id}/analytics`, 'GET');
-            setAnalyticsData(data);
-        } catch (e) {
-            alert((e as Error).message);
-            setAnalyticsOpen(false);
-        } finally {
-            setLoadingAnalytics(false);
         }
     };
 
@@ -635,14 +617,13 @@ export default function CampaignsList({
                                         {recentCampaigns.map((camp) => (
                                             <tr key={camp.id} className="hover:bg-muted/30 transition-colors">
                                                 <td className="py-2.5 px-4 font-medium text-foreground">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleViewAnalytics(camp.id)}
+                                                    <Link
+                                                        href={`/campaigns/${camp.id}/analytics`}
                                                         className="font-semibold text-foreground hover:text-primary hover:underline text-left cursor-pointer"
                                                         title="Click to view detailed campaign analytics"
                                                     >
                                                         {camp.name}
-                                                    </button>
+                                                    </Link>
                                                     {camp.scheduledAt && camp.status === 'scheduled' && <p className="mt-1 text-[10px] text-muted-foreground">Scheduled: {new Date(camp.scheduledAt).toLocaleString()}</p>}
                                                 </td>
                                                 <td className="py-2.5 px-4">
@@ -733,12 +714,14 @@ export default function CampaignsList({
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
+                                                            asChild
                                                             className="h-6.5 text-[11px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10 font-semibold cursor-pointer"
                                                             title="View Delivery Performance, Read Rate & Replies"
-                                                            onClick={() => handleViewAnalytics(camp.id)}
                                                         >
-                                                            <BarChart2 className="size-3" />
-                                                            Analytics
+                                                            <Link href={`/campaigns/${camp.id}/analytics`}>
+                                                                <BarChart2 className="size-3" />
+                                                                Analytics
+                                                            </Link>
                                                         </Button>
                                                     </div>
                                                 </td>
@@ -1179,219 +1162,6 @@ export default function CampaignsList({
                             </div>
                         </DialogFooter>
                     </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* Campaign Analytics Dialog */}
-            <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
-                <DialogContent className="w-[calc(100vw-1.5rem)] max-w-xl max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
-                        <div className="flex items-center justify-between pr-6">
-                            <DialogTitle className="text-base font-bold flex items-center gap-2">
-                                <BarChart2 className="size-5 text-primary" />
-                                Campaign Analytics &amp; Delivery Performance
-                            </DialogTitle>
-                            {analyticsData?.campaign?.id && (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleViewAnalytics(analyticsData.campaign.id)}
-                                    disabled={loadingAnalytics}
-                                    className="h-7 text-[11px] gap-1.5"
-                                >
-                                    <RefreshCw className={`size-3 ${loadingAnalytics ? 'animate-spin' : ''}`} />
-                                    Refresh
-                                </Button>
-                            )}
-                        </div>
-                        <DialogDescription className="text-xs text-muted-foreground">
-                            {analyticsData?.campaign?.name} ({analyticsData?.campaign?.created_at})
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {loadingAnalytics ? (
-                        <div className="py-12 flex flex-col items-center justify-center gap-2">
-                            <Loader2 className="size-6 animate-spin text-primary" />
-                            <span className="text-xs text-muted-foreground">Fetching live campaign delivery analytics...</span>
-                        </div>
-                    ) : analyticsData ? (
-                        <div className="space-y-4 text-xs">
-                            {/* Key Performance Indicators */}
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                                <div className="p-2.5 bg-muted/40 rounded-lg border border-border">
-                                    <div className="text-[10px] text-muted-foreground uppercase font-semibold">Total Selected</div>
-                                    <div className="text-lg font-bold text-foreground mt-0.5">{analyticsData.metrics.total_selected}</div>
-                                </div>
-                                <div className="p-2.5 bg-sky-500/10 rounded-lg border border-sky-500/30">
-                                    <div className="text-[10px] text-sky-700 dark:text-sky-300 uppercase font-semibold">Sent</div>
-                                    <div className="text-lg font-bold text-sky-600 dark:text-sky-400 mt-0.5">
-                                        {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read}
-                                        <span className="text-[10px] font-normal ml-1">
-                                            ({analyticsData.metrics.total_selected > 0
-                                                ? Math.round(((analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read) / analyticsData.metrics.total_selected) * 100)
-                                                : 0}%)
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="p-2.5 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
-                                    <div className="text-[10px] text-emerald-700 dark:text-emerald-300 uppercase font-semibold">Delivered</div>
-                                    <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                        {analyticsData.metrics.delivered + analyticsData.metrics.read}
-                                        <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.delivery_rate}%)</span>
-                                    </div>
-                                </div>
-                                <div className="p-2.5 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                                    <div className="text-[10px] text-blue-700 dark:text-blue-300 uppercase font-semibold">Read (Seen)</div>
-                                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                                        {analyticsData.metrics.read}
-                                        <span className="text-[10px] font-normal ml-1">({analyticsData.metrics.read_rate}%)</span>
-                                    </div>
-                                </div>
-                                <div className="p-2.5 bg-purple-500/10 rounded-lg border border-purple-500/30 col-span-2 sm:col-span-1">
-                                    <div className="text-[10px] text-purple-700 dark:text-purple-300 uppercase font-semibold">Replies</div>
-                                    <div className="text-lg font-bold text-purple-600 dark:text-purple-400 mt-0.5">
-                                        {analyticsData.metrics.replies}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Delivery Funnel Bar */}
-                            <div className="p-3 bg-muted/30 rounded-xl border border-border/70 space-y-2">
-                                <div className="flex items-center justify-between text-[11px] font-semibold text-foreground">
-                                    <span>Live Delivery &amp; Engagement Funnel</span>
-                                    <span className="text-muted-foreground">
-                                        {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read} Sent · {analyticsData.metrics.delivered + analyticsData.metrics.read} Delivered · {analyticsData.metrics.read} Read
-                                    </span>
-                                </div>
-                                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden flex">
-                                    <div
-                                        style={{ width: `${Math.min(100, analyticsData.metrics.delivery_rate)}%` }}
-                                        className="bg-emerald-500 h-full transition-all"
-                                        title={`Delivered: ${analyticsData.metrics.delivered + analyticsData.metrics.read}`}
-                                    />
-                                    {analyticsData.metrics.sent > 0 && (
-                                        <div
-                                            style={{ width: `${Math.min(100 - analyticsData.metrics.delivery_rate, (analyticsData.metrics.sent / analyticsData.metrics.total_selected) * 100)}%` }}
-                                            className="bg-sky-400 h-full transition-all"
-                                            title={`Sent (awaiting device receipt): ${analyticsData.metrics.sent}`}
-                                        />
-                                    )}
-                                    {analyticsData.metrics.failed > 0 && (
-                                        <div
-                                            style={{ width: `${Math.min(100 - analyticsData.metrics.delivery_rate, 15)}%` }}
-                                            className="bg-destructive h-full transition-all"
-                                            title={`Failed: ${analyticsData.metrics.failed}`}
-                                        />
-                                    )}
-                                </div>
-                                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground pt-0.5">
-                                    <span className="flex items-center gap-1 text-sky-600 font-medium">
-                                        <span className="size-2 rounded-full bg-sky-500 inline-block" />
-                                        Sent: {analyticsData.metrics.sent + analyticsData.metrics.delivered + analyticsData.metrics.read}
-                                    </span>
-                                    <span className="flex items-center gap-1 text-emerald-600 font-medium">
-                                        <span className="size-2 rounded-full bg-emerald-500 inline-block" />
-                                        Delivered: {analyticsData.metrics.delivered + analyticsData.metrics.read}
-                                    </span>
-                                    <span className="flex items-center gap-1 text-blue-600 font-medium">
-                                        <span className="size-2 rounded-full bg-blue-500 inline-block" />
-                                        Read: {analyticsData.metrics.read}
-                                    </span>
-                                    <span className="flex items-center gap-1 text-purple-600 font-medium">
-                                        <span className="size-2 rounded-full bg-purple-500 inline-block" />
-                                        Replies: {analyticsData.metrics.replies}
-                                    </span>
-                                    {analyticsData.metrics.failed > 0 && (
-                                        <span className="flex items-center gap-1 text-destructive font-medium">
-                                            <span className="size-2 rounded-full bg-destructive inline-block" />
-                                            Failed: {analyticsData.metrics.failed}
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Secondary Status Breakdown */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-card rounded-lg border border-border text-center">
-                                <div>
-                                    <div className="text-[10px] text-muted-foreground">Queued / Sending</div>
-                                    <div className="text-sm font-semibold">{analyticsData.metrics.queued}</div>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] text-muted-foreground">Failed Messages</div>
-                                    <div className="text-sm font-semibold text-destructive">{analyticsData.metrics.failed}</div>
-                                </div>
-                                <div>
-                                    <div className="text-[10px] text-muted-foreground">Campaign Cost</div>
-                                    <div className="text-sm font-semibold">{analyticsData.campaign.cost_formatted}</div>
-                                </div>
-                            </div>
-
-                            {/* Failure Reasons Breakdown if any failed */}
-                            {analyticsData.metrics.failure_reasons && analyticsData.metrics.failure_reasons.length > 0 && (
-                                <div className="space-y-1.5 pt-2">
-                                    <div className="font-semibold text-foreground flex items-center gap-1.5 text-xs text-destructive">
-                                        <AlertCircle className="size-3.5" />
-                                        Failure Reasons &amp; Undelivered Breakdown
-                                    </div>
-                                    <div className="space-y-1 bg-destructive/5 p-2.5 rounded-lg border border-destructive/20 text-[11px]">
-                                        {analyticsData.metrics.failure_reasons.map((fr: any, i: number) => (
-                                            <div key={i} className="flex justify-between items-start gap-2">
-                                                <span className="text-destructive font-mono truncate">{fr.error}</span>
-                                                <Badge variant="outline" className="border-destructive/30 text-destructive text-[10px] shrink-0">
-                                                    {fr.count} msgs
-                                                </Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Recent Recipients Log */}
-                            <div className="space-y-1.5 pt-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="font-semibold text-foreground text-xs">Recent Recipients Activity</span>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        asChild
-                                        className="h-7 text-[11px] gap-1.5"
-                                    >
-                                        <a href={`/campaigns/${analyticsData.campaign.id}/export`}>
-                                            <Download className="size-3 text-emerald-600" />
-                                            Export Full Report (CSV)
-                                        </a>
-                                    </Button>
-                                </div>
-                                <div className="max-h-40 overflow-y-auto divide-y divide-border/60 border border-border rounded-lg">
-                                    {analyticsData.recipients?.slice(0, 20).map((r: any) => (
-                                        <div key={r.id} className="p-2 flex items-center justify-between text-[11px]">
-                                            <span className="font-mono text-foreground">{r.phone}</span>
-                                            <span
-                                                className={`capitalize px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
-                                                    r.status === 'read'
-                                                        ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                                                        : r.status === 'delivered'
-                                                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                                                        : r.status === 'sent'
-                                                        ? 'bg-sky-500/10 text-sky-600 border border-sky-500/20'
-                                                        : r.status === 'failed'
-                                                        ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                                                        : 'bg-muted text-muted-foreground'
-                                                }`}
-                                            >
-                                                {r.status === 'read' ? '✓✓ Read' : r.status === 'delivered' ? '✓✓ Delivered' : r.status === 'sent' ? '✓ Sent' : r.status}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <p className="text-[10px] text-muted-foreground italic">
-                                    💡 <strong>Sent (✓):</strong> Message dispatched to WhatsApp. <strong>Delivered (✓✓):</strong> Recipient device received it. Status updates in real-time as delivery webhooks arrive.
-                                </p>
-                            </div>
-                        </div>
-                    ) : null}
                 </DialogContent>
             </Dialog>
         </>

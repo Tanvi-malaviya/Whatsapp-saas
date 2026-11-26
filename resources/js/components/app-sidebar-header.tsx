@@ -87,6 +87,10 @@ function resolvePageHeaderMeta(url: string): PageHeaderMeta | null {
         return { title: 'Settings', icon: Settings, iconClass: 'text-muted-foreground' };
     }
 
+    if (/^\/campaigns\/[^/]+\/analytics$/.test(path)) {
+        return { title: 'Campaign Analytics', icon: BarChart3, iconClass: 'text-primary' };
+    }
+
     return null;
 }
 
