@@ -679,7 +679,7 @@ export default function MessageTemplates({
                     </div>
 
                     {/* Right: Realistic WhatsApp Mobile Screen Preview */}
-                    <div className="lg:col-span-5 sticky top-6">
+                    <div className="lg:col-span-5 lg:sticky lg:top-6">
                         <Card className="border-border/80 shadow-xs rounded-xl overflow-hidden">
                             <CardHeader className="py-2.5 px-4 bg-muted/30 border-b border-border/80">
                                 <div className="flex items-center justify-between">
@@ -816,7 +816,7 @@ export default function MessageTemplates({
                     )}
 
                     <form onSubmit={handleCreateTemplate} className="space-y-3 py-1">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-xs font-medium">
                                     Template Name <span className="text-red-500">*</span>
@@ -845,7 +845,7 @@ export default function MessageTemplates({
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <Label className="text-xs font-medium">Language</Label>
                                 <select
@@ -1003,7 +1003,7 @@ export default function MessageTemplates({
                         </div>
 
                         {newButtonType === 'URL' && (
-                            <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5">
                                 <div className="space-y-1">
                                     <Label className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Button Label</Label>
                                     <Input

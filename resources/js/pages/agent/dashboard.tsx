@@ -187,7 +187,7 @@ export default function AgentDashboard({ agent, customers = [], stats, referral 
                 </div>
 
                 {/* Sleek, Compact KPI Metric Cards (Uniform bg-card styling) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     {/* Card 1: Managed Clients */}
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
                         <div className="flex items-center gap-2.5">
@@ -350,7 +350,7 @@ export default function AgentDashboard({ agent, customers = [], stats, referral 
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[700px] text-left text-xs">
                                 <thead className="bg-muted/40 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
                                         <th className="py-2.5 px-3.5">Business Workspace</th>
@@ -444,128 +444,134 @@ export default function AgentDashboard({ agent, customers = [], stats, referral 
 
             {/* Onboard Customer Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-card border border-border/80 w-full max-w-md rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between pb-3 border-b border-border/60">
-                            <div className="flex items-center gap-2">
-                                <div className="size-7.5 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold">
-                                    <Plus className="size-4" />
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+                    <div className="bg-card border border-border/80 w-[calc(100vw-1.25rem)] sm:w-full max-w-md max-h-[calc(100dvh-1.25rem)] sm:max-h-[85vh] rounded-xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-3.5 sm:p-4 pb-2.5 sm:pb-3 border-b border-border/60 shrink-0 gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="size-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                                    <Plus className="size-3.5" />
                                 </div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-foreground">Onboard Client Workspace</h3>
-                                    <p className="text-[11px] text-muted-foreground">Set up a new client account with annual SaaS plan.</p>
+                                <div className="min-w-0">
+                                    <h3 className="text-xs sm:text-sm font-bold text-foreground truncate">Onboard Client Workspace</h3>
+                                    <p className="text-[10px] sm:text-[11px] text-muted-foreground truncate">Set up a new client account with annual SaaS plan.</p>
                                 </div>
                             </div>
                             <button
+                                type="button"
                                 onClick={() => setShowCreateModal(false)}
-                                className="size-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+                                className="size-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer shrink-0"
                             >
                                 <X className="size-4" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateCustomer} className="space-y-3">
-                            <div className="space-y-1">
-                                <Label htmlFor="business_name" className="text-xs font-semibold text-foreground">
-                                    Client Business Name
-                                </Label>
-                                <Input
-                                    id="business_name"
-                                    required
-                                    placeholder="e.g. Acme Retailers Pvt Ltd"
-                                    value={formData.business_name}
-                                    onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                                    className="h-8 text-xs bg-muted/30"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label htmlFor="owner_name" className="text-xs font-semibold text-foreground">
-                                    Client Owner Full Name
-                                </Label>
-                                <Input
-                                    id="owner_name"
-                                    required
-                                    placeholder="e.g. Ramesh Patel"
-                                    value={formData.owner_name}
-                                    onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
-                                    className="h-8 text-xs bg-muted/30"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label htmlFor="owner_email" className="text-xs font-semibold text-foreground">
-                                    Client Login Email
-                                </Label>
-                                <Input
-                                    id="owner_email"
-                                    type="email"
-                                    required
-                                    placeholder="owner@acme.com"
-                                    value={formData.owner_email}
-                                    onChange={(e) => setFormData({ ...formData, owner_email: e.target.value })}
-                                    className="h-8 text-xs bg-muted/30"
-                                />
-                            </div>
-
-                            <div className="space-y-1">
-                                <Label htmlFor="owner_password" className="text-xs font-semibold text-foreground">
-                                    Temporary Password
-                                </Label>
-                                <div className="relative">
+                        {/* Scrollable Form Body */}
+                        <form onSubmit={handleCreateCustomer} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3 min-h-0">
+                                <div className="space-y-1">
+                                    <Label htmlFor="business_name" className="text-xs font-semibold text-foreground">
+                                        Client Business Name
+                                    </Label>
                                     <Input
-                                        id="owner_password"
-                                        type={showPassword ? 'text' : 'password'}
+                                        id="business_name"
                                         required
-                                        minLength={8}
-                                        placeholder="Minimum 8 characters"
-                                        value={formData.owner_password}
-                                        onChange={(e) => setFormData({ ...formData, owner_password: e.target.value })}
-                                        className="h-8 text-xs bg-muted/30 pr-8"
+                                        placeholder="e.g. Acme Retailers Pvt Ltd"
+                                        value={formData.business_name}
+                                        onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
+                                        className="h-8 text-xs bg-muted/30"
                                     />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
-                                        title={showPassword ? 'Hide password' : 'Show password'}
-                                    >
-                                        {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                                    </button>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label htmlFor="owner_name" className="text-xs font-semibold text-foreground">
+                                        Client Owner Full Name
+                                    </Label>
+                                    <Input
+                                        id="owner_name"
+                                        required
+                                        placeholder="e.g. Ramesh Patel"
+                                        value={formData.owner_name}
+                                        onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
+                                        className="h-8 text-xs bg-muted/30"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label htmlFor="owner_email" className="text-xs font-semibold text-foreground">
+                                        Client Login Email
+                                    </Label>
+                                    <Input
+                                        id="owner_email"
+                                        type="email"
+                                        required
+                                        placeholder="owner@acme.com"
+                                        value={formData.owner_email}
+                                        onChange={(e) => setFormData({ ...formData, owner_email: e.target.value })}
+                                        className="h-8 text-xs bg-muted/30"
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label htmlFor="owner_password" className="text-xs font-semibold text-foreground">
+                                        Temporary Password
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="owner_password"
+                                            type={showPassword ? 'text' : 'password'}
+                                            required
+                                            minLength={8}
+                                            placeholder="Minimum 8 characters"
+                                            value={formData.owner_password}
+                                            onChange={(e) => setFormData({ ...formData, owner_password: e.target.value })}
+                                            className="h-8 text-xs bg-muted/30 pr-8"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
+                                            title={showPassword ? 'Hide password' : 'Show password'}
+                                        >
+                                            {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Auto-provision package overview */}
+                                <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/20 space-y-1 text-xs">
+                                    <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-[11px] uppercase tracking-wider">
+                                        Auto-Provisioned Package:
+                                    </div>
+                                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                        <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                        <span>Annual SaaS License (365 Days validity)</span>
+                                    </div>
+                                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                        <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                        <span>₹500 Welcome Bonus credited to Client Wallet</span>
+                                    </div>
+                                    <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                        <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                        <span>₹500 Referral Commission credited to your Partner Ledger</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Auto-provision package overview */}
-                            <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/20 space-y-1 text-xs">
-                                <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-[11px] uppercase tracking-wider">
-                                    Auto-Provisioned Package:
-                                </div>
-                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
-                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
-                                    <span>Annual SaaS License (365 Days validity)</span>
-                                </div>
-                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
-                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
-                                    <span>₹500 Welcome Bonus credited to Client Wallet</span>
-                                </div>
-                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
-                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
-                                    <span>₹500 Referral Commission credited to your Partner Ledger</span>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                            {/* Footer */}
+                            <div className="p-2.5 sm:p-3.5 bg-muted/20 border-t border-border/60 flex items-center justify-end gap-2 shrink-0">
                                 <Button
                                     type="button"
                                     variant="outline"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="h-8 text-xs rounded-lg cursor-pointer"
+                                    className="h-7 sm:h-8 text-xs rounded-lg cursor-pointer px-3"
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer shadow-2xs"
+                                    className="h-7 sm:h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer shadow-2xs px-3"
                                 >
                                     {isSubmitting ? 'Provisioning...' : 'Provision Client Workspace'}
                                 </Button>

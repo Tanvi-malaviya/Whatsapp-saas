@@ -51,11 +51,11 @@ export function WhatsAppStatusPill({
         return (
             <Link
                 href="/whatsapp/connect"
-                className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50/60 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-100/70 dark:bg-emerald-950/40 dark:text-emerald-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50/60 px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs text-emerald-700 hover:bg-emerald-100/70 dark:bg-emerald-950/40 dark:text-emerald-300 transition-colors cursor-pointer shrink-0"
                 title="Manage WhatsApp Channels"
                 aria-label="WhatsApp connected. Manage channels"
             >
-                <span className="relative flex size-2">
+                <span className="relative flex size-2 shrink-0">
                     <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
                 </span>
@@ -72,13 +72,14 @@ export function WhatsAppStatusPill({
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50/80 px-3 py-1 text-xs text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 transition-all cursor-pointer shadow-2xs"
+                    className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-50/80 px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 transition-all cursor-pointer shadow-2xs shrink-0"
                 >
-                    <span className="relative flex size-2">
+                    <span className="relative flex size-2 shrink-0">
                         <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
                         <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
                     </span>
-                    <span className="font-semibold">{totalCount} Numbers Active</span>
+                    <span className="font-semibold hidden sm:inline">{totalCount} Numbers Active</span>
+                    <span className="font-semibold sm:hidden">{totalCount} Active</span>
                     {phoneNumber && (
                         <span className="opacity-75 hidden md:inline">
                             (Default: {phoneNumber})

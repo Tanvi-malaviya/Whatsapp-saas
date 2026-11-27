@@ -202,7 +202,7 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                 <Card className="border-border shadow-2xs">
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[700px] text-left text-xs">
                                 <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground">
                                     <tr>
                                         <th className="py-2.5 px-4">Contact</th>

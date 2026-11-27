@@ -279,7 +279,7 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                 {activeTab === 'workspaces' && (
                     <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[750px] text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
                                         <th className="py-2.5 px-3.5">Client Workspace</th>
@@ -378,7 +378,7 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                 {activeTab === 'history' && (
                     <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[750px] text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
                                         <th className="py-2.5 px-3.5 whitespace-nowrap">Date & Time</th>

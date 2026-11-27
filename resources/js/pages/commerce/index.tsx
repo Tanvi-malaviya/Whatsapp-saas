@@ -400,11 +400,11 @@ export default function CommerceIndex({
         <>
             <Head title="WhatsApp Commerce & Meta Catalog | WhatsApp SaaS" />
 
-            <div className="flex flex-col gap-3 p-3.5 md:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
+            <div className="flex flex-col gap-3 p-2.5 sm:p-4 md:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden font-sans">
                 {/* Compact Action Toolbar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 border-b border-border/60 pb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
                             <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             Meta Connected
                         </span>
@@ -413,13 +413,13 @@ export default function CommerceIndex({
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap">
                         {catalogMeta.share_catalog_url && (
                             <Button
                                 variant="outline"
                                 size="sm"
                                 asChild
-                                className="h-8 px-2.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 gap-1.5 font-semibold"
+                                className="h-7.5 sm:h-8 px-2 sm:px-2.5 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 gap-1 sm:gap-1.5 font-semibold shrink-0"
                             >
                                 <a
                                     href={catalogMeta.share_catalog_url}
@@ -427,9 +427,9 @@ export default function CommerceIndex({
                                     rel="noopener noreferrer"
                                     title="Open Full WhatsApp Business Catalog"
                                 >
-                                    <Store className="size-3.5 text-emerald-600" />
-                                    <span>Share Full Catalog</span>
-                                    <ExternalLink className="size-2.5 opacity-70" />
+                                    <Store className="size-3.5 text-emerald-600 shrink-0" />
+                                    <span>Share Catalog</span>
+                                    <ExternalLink className="size-2.5 opacity-70 shrink-0" />
                                 </a>
                             </Button>
                         )}
@@ -438,10 +438,10 @@ export default function CommerceIndex({
                             variant="outline"
                             size="sm"
                             onClick={() => setIsSendCatalogModalOpen(true)}
-                            className="h-8 px-2.5 text-xs border-primary/30 text-primary hover:bg-primary/10 gap-1.5 font-medium"
+                            className="h-7.5 sm:h-8 px-2 sm:px-2.5 text-xs border-primary/30 text-primary hover:bg-primary/10 gap-1 sm:gap-1.5 font-medium shrink-0"
                         >
-                            <Send className="size-3" />
-                            Send Catalog
+                            <Send className="size-3 shrink-0" />
+                            <span>Send Catalog</span>
                         </Button>
 
                         <Button
@@ -449,49 +449,51 @@ export default function CommerceIndex({
                             size="sm"
                             onClick={handleSyncCatalog}
                             disabled={isSyncing}
-                            className="h-8 px-2.5 text-xs border-border gap-1.5 font-medium"
+                            className="h-7.5 sm:h-8 px-2 sm:px-2.5 text-xs border-border gap-1 sm:gap-1.5 font-medium shrink-0"
                             title="Sync with Meta Commerce Manager"
                         >
-                            <RefreshCw className={`size-3 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
-                            {isSyncing ? 'Syncing...' : 'Sync'}
+                            <RefreshCw className={`size-3 shrink-0 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
+                            <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
                         </Button>
 
                         <a
                             href="/commerce/export-csv"
                             download
-                            className="inline-flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted h-8 px-2.5 text-xs gap-1.5 font-medium text-foreground transition-colors"
+                            className="inline-flex items-center justify-center rounded-lg border border-border bg-background hover:bg-muted h-7.5 sm:h-8 px-2 sm:px-2.5 text-xs gap-1 sm:gap-1.5 font-medium text-foreground transition-colors shrink-0"
                             title="Download Meta Catalog CSV to upload into Meta Commerce Manager"
                         >
-                            <Download className="size-3 text-muted-foreground" />
-                            Export Meta CSV
+                            <Download className="size-3 text-muted-foreground shrink-0" />
+                            <span>Export CSV</span>
                         </a>
 
                         <Button
                             onClick={() => setIsAddModalOpen(true)}
-                            className="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs font-semibold gap-1.5 shadow-2xs"
+                            className="bg-primary text-primary-foreground hover:bg-primary/90 h-7.5 sm:h-8 px-2.5 sm:px-3 text-xs font-semibold gap-1 sm:gap-1.5 shadow-2xs shrink-0"
                         >
-                            <Plus className="size-3.5" />
-                            Add Product
+                            <Plus className="size-3.5 shrink-0" />
+                            <span>Add Product</span>
                         </Button>
                     </div>
                 </div>
 
                 {/* Channel Scope Selector */}
                 {channels && channels.length > 0 && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 px-3 rounded-xl bg-card border border-border/70 shadow-2xs">
-                        <div className="flex items-center gap-2">
-                            <Smartphone className="size-3.5 text-emerald-600" />
-                            <span className="text-xs font-bold text-foreground">Catalog WhatsApp Number:</span>
-                            <span className="text-[11px] text-muted-foreground">
-                                {catalogMeta.linked_channel_name} ({catalogMeta.linked_phone || 'All'})
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 sm:p-3 rounded-xl bg-card border border-border/70 shadow-2xs">
+                        <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0 flex-wrap sm:flex-nowrap">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                <Smartphone className="size-3.5 text-emerald-600 shrink-0" />
+                                <span className="text-xs font-bold text-foreground shrink-0">Catalog Number:</span>
+                            </div>
+                            <span className="text-[11px] font-medium text-muted-foreground truncate bg-muted/60 px-2 py-0.5 rounded-md">
+                                {catalogMeta.linked_channel_name || 'Store'} {catalogMeta.linked_phone ? `(${catalogMeta.linked_phone})` : ''}
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1">
                             <button
                                 type="button"
                                 onClick={() => router.get('/commerce', { channel_id: 'all' }, { preserveScroll: true, preserveState: true })}
-                                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                                     selected_channel_id === 'all'
                                         ? 'bg-primary text-primary-foreground shadow-xs'
                                         : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -504,16 +506,16 @@ export default function CommerceIndex({
                                     key={ch.id}
                                     type="button"
                                     onClick={() => router.get('/commerce', { channel_id: ch.id }, { preserveScroll: true, preserveState: true })}
-                                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 ${
                                         selected_channel_id === ch.id
                                             ? 'bg-primary text-primary-foreground shadow-xs'
                                             : 'border border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted'
                                     }`}
                                 >
-                                    <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                                    <span className="size-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                                     <span>{ch.phone_number || ch.name}</span>
                                     {ch.is_default && (
-                                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase ${
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-mono uppercase shrink-0 ${
                                             selected_channel_id === ch.id ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
                                         }`}>
                                             Default
@@ -526,55 +528,55 @@ export default function CommerceIndex({
                 )}
 
                 {syncMessage && (
-                    <div className="p-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center justify-between animate-in fade-in duration-200">
-                        <div className="flex items-center gap-1.5">
+                    <div className="p-2 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                        <div className="flex items-center gap-1.5 min-w-0">
                             <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
-                            <span>{syncMessage}</span>
+                            <span className="truncate">{syncMessage}</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground font-mono">Catalog ID: {catalogMeta.catalog_id}</span>
+                        <span className="text-[10px] text-muted-foreground font-mono shrink-0">Catalog ID: {catalogMeta.catalog_id}</span>
                     </div>
                 )}
 
-                {/* 2. Compact Key Metrics Strip (~48px height) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 rounded-xl border border-border/80 bg-card/70 divide-y md:divide-y-0 md:divide-x divide-border/60 shadow-2xs overflow-hidden">
-                    <div className="px-3.5 py-2 flex items-center justify-between">
-                        <div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Products</span>
-                            <div className="text-base font-bold text-foreground leading-tight">{products.length}</div>
+                {/* 2. Responsive Key Metrics Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+                    <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+                        <div className="min-w-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block truncate">Products</span>
+                            <div className="text-base sm:text-lg font-bold text-foreground leading-tight mt-0.5">{products.length}</div>
                         </div>
-                        <span className="text-[10px] text-primary font-medium flex items-center gap-0.5 bg-primary/10 px-1.5 py-0.5 rounded-md">
+                        <span className="text-[10px] text-primary font-medium flex items-center gap-0.5 bg-primary/10 px-2 py-0.5 rounded-md shrink-0">
                             <Check className="size-2.5" /> Live in Meta
                         </span>
                     </div>
 
-                    <div className="px-3.5 py-2 flex items-center justify-between">
-                        <div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">WhatsApp Orders</span>
-                            <div className="text-base font-bold text-foreground leading-tight">{orders.length}</div>
+                    <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+                        <div className="min-w-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block truncate">WhatsApp Orders</span>
+                            <div className="text-base sm:text-lg font-bold text-foreground leading-tight mt-0.5">{orders.length}</div>
                         </div>
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md">Direct Carts</span>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-md shrink-0 font-medium">Direct Carts</span>
                     </div>
 
-                    <div className="px-3.5 py-2 flex items-center justify-between">
-                        <div>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Catalog Sales</span>
-                            <div className="text-base font-bold text-foreground leading-tight">₹{totalRevenue.toLocaleString('en-IN')}</div>
+                    <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+                        <div className="min-w-0">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block truncate">Catalog Sales</span>
+                            <div className="text-base sm:text-lg font-bold text-foreground leading-tight mt-0.5">₹{totalRevenue.toLocaleString('en-IN')}</div>
                         </div>
-                        <span className="text-[10px] text-primary font-medium bg-primary/10 px-1.5 py-0.5 rounded-md">INR</span>
+                        <span className="text-[10px] text-primary font-medium bg-primary/10 px-2 py-0.5 rounded-md shrink-0">INR</span>
                     </div>
 
-                    <div className="px-3.5 py-2 flex items-center justify-between">
-                        <div className="min-w-0 pr-1">
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Linked WhatsApp Channel</span>
-                            <div className="text-[11px] font-semibold text-foreground truncate flex items-center gap-1">
-                                <span>{catalogMeta.linked_phone || catalogMeta.catalog_id}</span>
+                    <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-2 min-w-0">
+                        <div className="min-w-0 flex-1 pr-1">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block truncate">Linked Channel</span>
+                            <div className="text-xs font-bold text-foreground truncate flex items-center gap-1.5 mt-0.5">
+                                <span className="truncate">{catalogMeta.linked_phone || catalogMeta.catalog_id}</span>
                                 {catalogMeta.linked_channel_name && (
-                                    <span className="text-[9px] px-1 py-0.2 bg-primary/10 text-primary font-bold rounded">
+                                    <span className="text-[9px] px-1.5 py-0.2 bg-primary/10 text-primary font-bold rounded shrink-0">
                                         {catalogMeta.linked_channel_name}
                                     </span>
                                 )}
                             </div>
-                            <span className="text-[9px] font-mono text-muted-foreground block truncate">
+                            <span className="text-[9px] font-mono text-muted-foreground block truncate mt-0.5">
                                 WABA: {catalogMeta.linked_waba_id || catalogMeta.catalog_id}
                             </span>
                         </div>
@@ -584,35 +586,35 @@ export default function CommerceIndex({
 
                 {/* 3. Main Navigation & Unified Controls Bar */}
                 <Tabs defaultValue="products" className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2">
-                        <TabsList className="bg-muted/50 p-0.5 border border-border/70 rounded-lg h-8 flex flex-wrap gap-0.5">
-                            <TabsTrigger value="products" className="text-xs font-semibold px-2.5 py-1 data-[state=active]:bg-card data-[state=active]:shadow-2xs rounded-md">
-                                <Package className="size-3 mr-1.5" />
-                                Products ({products.length})
+                    <div className="flex flex-col gap-2.5 border-b border-border/60 pb-2.5">
+                        <TabsList className="grid grid-cols-2 sm:flex sm:flex-row w-full sm:w-auto p-1 border border-border/70 rounded-xl h-auto gap-1 bg-muted/60 justify-start">
+                            <TabsTrigger value="products" className="w-full sm:w-auto justify-center text-xs font-semibold px-2.5 sm:px-3 py-2 sm:py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs rounded-lg transition-all">
+                                <Package className="size-3.5 mr-1.5 shrink-0" />
+                                <span>Products ({products.length})</span>
                             </TabsTrigger>
-                            <TabsTrigger value="orders" className="text-xs font-semibold px-2.5 py-1 data-[state=active]:bg-card data-[state=active]:shadow-2xs rounded-md">
-                                <ShoppingBag className="size-3 mr-1.5" />
-                                Orders ({orders.length})
+                            <TabsTrigger value="orders" className="w-full sm:w-auto justify-center text-xs font-semibold px-2.5 sm:px-3 py-2 sm:py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs rounded-lg transition-all">
+                                <ShoppingBag className="size-3.5 mr-1.5 shrink-0" />
+                                <span>Orders ({orders.length})</span>
                             </TabsTrigger>
-                            <TabsTrigger value="preview" className="text-xs font-semibold px-2.5 py-1 data-[state=active]:bg-card data-[state=active]:shadow-2xs rounded-md">
-                                <Smartphone className="size-3 mr-1.5 text-primary" />
-                                Chat Preview
+                            <TabsTrigger value="preview" className="w-full sm:w-auto justify-center text-xs font-semibold px-2.5 sm:px-3 py-2 sm:py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs rounded-lg transition-all">
+                                <Smartphone className="size-3.5 mr-1.5 text-primary shrink-0" />
+                                <span>Chat Preview</span>
                             </TabsTrigger>
-                            <TabsTrigger value="settings" className="text-xs font-semibold px-2.5 py-1 data-[state=active]:bg-card data-[state=active]:shadow-2xs rounded-md">
-                                <Sliders className="size-3 mr-1.5" />
-                                Settings
+                            <TabsTrigger value="settings" className="w-full sm:w-auto justify-center text-xs font-semibold px-2.5 sm:px-3 py-2 sm:py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs rounded-lg transition-all">
+                                <Sliders className="size-3.5 mr-1.5 shrink-0" />
+                                <span>Settings</span>
                             </TabsTrigger>
                         </TabsList>
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 w-full min-w-0">
                             {/* Search */}
-                            <div className="relative flex-1 sm:w-56">
+                            <div className="relative flex-1 min-w-0">
                                 <Search className="size-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                                 <Input
                                     placeholder="Search products or SKU..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-8 h-8 text-xs bg-card"
+                                    className="pl-8 h-8 text-xs bg-card w-full"
                                 />
                             </div>
 
@@ -621,7 +623,7 @@ export default function CommerceIndex({
                                 <button
                                     type="button"
                                     onClick={() => setViewMode('table')}
-                                    className={`p-1 rounded-md transition-colors ${
+                                    className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                                         viewMode === 'table'
                                             ? 'bg-card text-foreground shadow-2xs font-medium'
                                             : 'text-muted-foreground hover:text-foreground'
@@ -633,7 +635,7 @@ export default function CommerceIndex({
                                 <button
                                     type="button"
                                     onClick={() => setViewMode('grid')}
-                                    className={`p-1 rounded-md transition-colors ${
+                                    className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                                         viewMode === 'grid'
                                             ? 'bg-card text-foreground shadow-2xs font-medium'
                                             : 'text-muted-foreground hover:text-foreground'
@@ -650,7 +652,7 @@ export default function CommerceIndex({
                     <TabsContent value="products" className="space-y-3">
                         {/* Channel / Number Catalog Filter Pills */}
                         {channels.length > 0 && (
-                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-border/40">
+                            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-border/40 -mx-1 px-1">
                                 <span className="text-[10px] text-muted-foreground font-bold tracking-wider uppercase shrink-0">Store Catalog:</span>
                                 <button
                                     type="button"
@@ -685,13 +687,13 @@ export default function CommerceIndex({
                         )}
 
                         {/* Category Filter Pills */}
-                        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+                        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
                             {categories.map((cat) => (
                                 <button
                                     key={cat}
                                     type="button"
                                     onClick={() => setCategoryFilter(cat)}
-                                    className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all ${
+                                    className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-all shrink-0 ${
                                         categoryFilter === cat
                                             ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
                                             : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/40'
@@ -819,7 +821,7 @@ export default function CommerceIndex({
                             </Card>
                         ) : (
                             /* View 2: Compact Card Grid View */
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3">
                                 {filteredProducts.map((p) => (
                                     <Card
                                         key={p.id}
@@ -1072,7 +1074,7 @@ export default function CommerceIndex({
 
                             {/* Right: Realistic WhatsApp Mobile Phone Simulation */}
                             <div className="md:col-span-6 flex justify-center min-w-0">
-                                <div className="w-full max-w-[320px] rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
+                                <div className="w-full max-w-[290px] sm:max-w-[320px] rounded-[32px] sm:rounded-[36px] border-4 border-neutral-800 bg-neutral-900 p-2.5 sm:p-3 shadow-2xl shadow-black/40">
                                     {/* Phone Screen Header */}
                                     <div className="rounded-[28px] overflow-hidden bg-[#0b141a] text-white text-xs">
                                         <div className="bg-[#202c33] p-3 flex items-center gap-2.5 border-b border-neutral-700">
@@ -1137,13 +1139,13 @@ export default function CommerceIndex({
 
                     {/* ================= TAB 4: SETTINGS ================= */}
                     <TabsContent value="settings" className="space-y-4">
-                        <Card className="border-border/80 bg-card p-6 rounded-xl shadow-xs max-w-2xl space-y-4">
-                            <CardTitle className="text-base font-bold flex items-center justify-between">
+                        <Card className="border-border/80 bg-card p-4 sm:p-6 rounded-xl shadow-xs max-w-2xl space-y-4">
+                            <CardTitle className="text-sm sm:text-base font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <span className="flex items-center gap-2">
-                                    <Sliders className="size-4 text-primary" />
-                                    Meta Commerce Manager &amp; WhatsApp Catalog
+                                    <Sliders className="size-4 text-primary shrink-0" />
+                                    <span>Meta Commerce Manager &amp; WhatsApp Catalog</span>
                                 </span>
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0 self-start sm:self-auto">
                                     Official WhatsApp Catalog
                                 </span>
                             </CardTitle>
@@ -1208,21 +1210,21 @@ export default function CommerceIndex({
 
                                 {/* Automated Hands-Free Scheduled Data Feed URL */}
                                 <div className="space-y-1.5 p-3 rounded-xl border border-primary/20 bg-primary/5">
-                                    <div className="flex items-center justify-between">
-                                        <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
-                                            <Sparkles className="size-3.5" />
-                                            Automated Scheduled Feed URL (Hands-Free Auto Sync)
+                                    <div className="flex items-center justify-between gap-2 min-w-0 flex-wrap">
+                                        <Label className="text-xs font-semibold text-primary flex items-center gap-1.5 shrink-0">
+                                            <Sparkles className="size-3.5 shrink-0" />
+                                            <span>Scheduled Feed URL</span>
                                         </Label>
-                                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-medium">Auto-Sync</span>
+                                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono font-medium shrink-0">Auto-Sync</span>
                                     </div>
                                     <p className="text-[11px] text-muted-foreground">
                                         Paste this URL once in <em>Meta Commerce Manager &gt; Data sources &gt; Add items &gt; Data feed &gt; Scheduled feed</em>. Meta will automatically fetch all products you add to this panel!
                                     </p>
-                                    <div className="flex items-center gap-2 pt-1">
+                                    <div className="flex items-center gap-2 pt-1 min-w-0">
                                         <Input
                                             readOnly
                                             value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}` : '/commerce/catalog-feed.csv'}
-                                            className="h-8 text-[11px] font-mono bg-background"
+                                            className="h-8 text-[11px] font-mono bg-background min-w-0 flex-1 truncate"
                                         />
                                         <Button
                                             type="button"
@@ -1235,7 +1237,7 @@ export default function CommerceIndex({
                                                     alert('Copied Feed URL to clipboard!');
                                                 }
                                             }}
-                                            className="h-8 px-2.5 text-xs shrink-0 gap-1"
+                                            className="h-8 px-2.5 text-xs shrink-0 gap-1 cursor-pointer"
                                         >
                                             <Copy className="size-3" />
                                             Copy
@@ -1244,29 +1246,26 @@ export default function CommerceIndex({
                                 </div>
 
                                 {/* Quick Action Buttons for Meta Integration */}
-                                <div className="pt-3 border-t border-border flex flex-col sm:flex-row gap-2">
+                                <div className="pt-3 border-t border-border/70 flex flex-col sm:flex-row gap-2.5">
                                     <Button
                                         type="button"
-                                        variant="outline"
-                                        size="sm"
                                         disabled={isLinkingCatalog}
                                         onClick={handleLinkCatalogToMeta}
-                                        className="text-xs h-9 flex-1 gap-1.5 border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                        className="h-auto py-2.5 px-3 text-xs font-semibold flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-xs rounded-lg transition-all cursor-pointer"
                                     >
-                                        <Store className="size-3.5" />
-                                        {isLinkingCatalog ? 'Connecting...' : '⚡ 1-Click Enable WhatsApp Storefront'}
+                                        <Store className="size-4 shrink-0" />
+                                        <span>{isLinkingCatalog ? 'Connecting...' : 'Enable WhatsApp Storefront'}</span>
                                     </Button>
 
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        size="sm"
                                         disabled={isSyncing}
                                         onClick={handleSyncCatalog}
-                                        className="text-xs h-9 flex-1 gap-1.5"
+                                        className="h-auto py-2.5 px-3 text-xs font-semibold flex-1 flex items-center justify-center gap-2 border-border/80 bg-background hover:bg-muted text-foreground shadow-2xs rounded-lg transition-all cursor-pointer"
                                     >
-                                        <RefreshCw className={`size-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                                        {isSyncing ? 'Syncing...' : '🔄 Push Products to Meta Catalog'}
+                                        <RefreshCw className={`size-4 shrink-0 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
+                                        <span>{isSyncing ? 'Syncing...' : 'Push Products to Meta'}</span>
                                     </Button>
                                 </div>
                             </div>

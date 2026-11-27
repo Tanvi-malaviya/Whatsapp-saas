@@ -248,6 +248,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // CRM & Segments
     Route::get('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'index'])->name('contacts.index');
     Route::post('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'store'])->name('contacts.store');
+    Route::post('contacts/labels', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'saveLabel'])->name('contacts.labels.store');
+    Route::delete('contacts/labels', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'deleteLabel'])->name('contacts.labels.destroy');
     Route::post('contacts/bulk', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'bulk'])->name('contacts.bulk');
     Route::put('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'update'])->name('contacts.update');
     Route::delete('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'destroy'])->name('contacts.destroy');

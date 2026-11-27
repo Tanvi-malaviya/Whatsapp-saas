@@ -141,7 +141,13 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         });
     }
 
-    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(initialThreads[0] || null);
+    const [selectedThread, setSelectedThread] = useState<ChatThread | null>(() => {
+        // On small mobile screens (<768px), start on the conversation list so user sees their inbox list
+        if (typeof window !== 'undefined' && window.innerWidth < 768) {
+            return null;
+        }
+        return initialThreads[0] || null;
+    });
     const [selectedHistoryFilter, setSelectedHistoryFilter] = useState('All');
     const [selectedChannelFilter, setSelectedChannelFilter] = useState('All channels');
     const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'unread' | 'open' | 'resolved'>('all');
@@ -272,9 +278,15 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         setThreads(initialThreads);
         if (initialThreads.length > 0) {
             setSelectedThread((prev) => {
-                if (!prev) return initialThreads[0];
-                const found = initialThreads.find((t) => t.id === prev.id);
-                return found || initialThreads[0];
+                if (!prev) {
+                    // On desktop, select first thread; on mobile keep null so user stays on conversation list
+                    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+                        return initialThreads[0];
+                    }
+                    return null;
+                }
+                const found = initialThreads.find((t) => String(t.id) === String(prev.id));
+                return found || prev;
             });
             const updatedMsgMap: Record<string, ChatMessage[]> = {};
             initialThreads.forEach((t) => {
@@ -292,15 +304,19 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     useEffect(() => {
         const interval = setInterval(async () => {
             try {
-                const res = await fetch('/inbox/sync');
+                const res = await fetch('/inbox/sync', {
+                    headers: { 'Accept': 'application/json' }
+                });
                 const data = await res.json();
                 if (data.success && Array.isArray(data.threads)) {
                     setThreads(data.threads);
 
                     setSelectedThread((prev) => {
-                        if (!prev) return data.threads[0] || null;
-                        const match = data.threads.find((t: ChatThread) => t.id === prev.id);
-                        return match || (data.threads.length > 0 ? data.threads[0] : null);
+                        // If user has not selected a thread (e.g. viewing thread list on mobile), DO NOT force-open any chat!
+                        if (!prev) return null;
+                        const match = data.threads.find((t: ChatThread) => String(t.id) === String(prev.id));
+                        // Update with fresh properties from sync while preserving current state; DO NOT reset to null or threads[0]
+                        return match ? { ...prev, ...match } : prev;
                     });
 
                     // Update message map for threads that changed
@@ -1021,10 +1037,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
         <>
             <Head title="Chat - Sathwara InfoTech | WhatsApp Business SaaS" />
 
-            {/* Clean Modern 2-Column WhatsApp Chat Layout - Single Screen, No Outer Scrollbar */}
-            <div className="flex flex-1 h-[calc(100dvh-64px)] max-h-[calc(100dvh-64px)] overflow-hidden bg-background">
-                {/* 1. Left Column: Conversation List */}
-                <div className="w-full sm:w-80 md:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card">
+            {/* Clean Modern 2-Column WhatsApp Chat Layout - Fully Responsive for Mobile & Desktop */}
+            <div className="flex flex-1 h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] max-h-[calc(100dvh-3.5rem)] sm:max-h-[calc(100dvh-4rem)] overflow-hidden bg-background">
+                {/* 1. Left Column: Conversation List (Full width on mobile when no thread selected) */}
+                <div className={`w-full md:w-80 lg:w-96 shrink-0 border-r border-border/80 flex flex-col bg-card ${
+                    selectedThread ? 'hidden md:flex' : 'flex'
+                }`}>
                     {/* Search & Header */}
                     <div className="p-3.5 border-b border-border/80 space-y-2.5 bg-card">
                         <div className="flex items-center justify-between">
@@ -1246,34 +1264,45 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                     </div>
                 </div>
 
-                {/* 2. Right Column: Chat Conversation Thread OR Empty State */}
-                <div className="flex-1 flex flex-col bg-muted/20 overflow-hidden">
+                {/* 2. Right Column: Chat Conversation Thread OR Empty State (Full width on mobile when thread selected) */}
+                <div className={`flex-1 flex flex-col bg-muted/20 overflow-hidden ${
+                    selectedThread ? 'flex' : 'hidden md:flex'
+                }`}>
                     {selectedThread ? (
                         /* Active Conversation View */
                         <div className="flex flex-col h-full">
                             {/* Thread Header with Contact Options - Clean Compact, No Scrollbars */}
-                            <div className="min-h-13 border-b border-border/80 px-3.5 md:px-4 py-2 flex items-center justify-between bg-card shrink-0 gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
+                            <div className="min-h-12 border-b border-border/80 px-2 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between bg-card shrink-0 gap-1.5 sm:gap-2">
+                                <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedThread(null)}
+                                        className="md:hidden -ml-1 mr-0.5 p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0"
+                                        title="Back to conversations list"
+                                        aria-label="Back to conversations"
+                                    >
+                                        <ArrowLeft className="size-4" />
+                                    </button>
+                                    <div className="flex size-7.5 sm:size-8 shrink-0 items-center justify-center rounded-full bg-[#47b672]/15 text-[#28804c] dark:text-[#52c480] font-bold text-xs border border-[#47b672]/30">
                                         {selectedThread.contactName.slice(0, 2).toUpperCase()}
                                     </div>
-                                    <div className="min-w-0 space-y-0.5">
-                                        <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                                            <h3 className="text-xs sm:text-sm font-bold text-foreground truncate max-w-[130px] sm:max-w-[200px] leading-tight">
+                                    <div className="min-w-0 flex-1 space-y-0.5">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+                                            <h3 className="text-xs sm:text-sm font-bold text-foreground truncate max-w-[110px] sm:max-w-[200px] leading-tight">
                                                 {selectedThread.contactName}
                                             </h3>
                                             <button
                                                 type="button"
                                                 onClick={handleOpenEditContact}
-                                                className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
+                                                className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors shrink-0"
                                                 title="Edit Contact Name & Pipeline"
                                             >
-                                                <Pencil className="size-3" />
+                                                <Pencil className="size-2.5 sm:size-3" />
                                             </button>
-                                            <span className="rounded bg-[#47b672]/15 px-1.5 py-0.5 text-[9px] font-semibold text-[#28804c] dark:text-[#52c480] whitespace-nowrap shrink-0">
+                                            <span className="rounded bg-[#47b672]/15 px-1.5 py-0.2 text-[9px] font-semibold text-[#28804c] dark:text-[#52c480] whitespace-nowrap shrink-0">
                                                 {selectedThread.channel}
                                             </span>
-                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${selectedThread.status === 'resolved'
+                                            <span className={`rounded px-1.5 py-0.2 text-[9px] font-semibold border hidden sm:inline-flex items-center gap-1 whitespace-nowrap shrink-0 ${selectedThread.status === 'resolved'
                                                     ? 'bg-muted text-muted-foreground border-border/70'
                                                     : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25'
                                                 }`}>
@@ -1281,33 +1310,33 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                 {selectedThread.status === 'resolved' ? 'Resolved' : 'Open'}
                                             </span>
                                             {selectedThread.stage && (
-                                                <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold border whitespace-nowrap shrink-0 ${STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
+                                                <span className={`rounded px-1.5 py-0.2 text-[9px] font-semibold border hidden sm:inline-flex whitespace-nowrap shrink-0 ${STAGE_CONFIG[selectedThread.stage]?.badge || 'bg-muted text-muted-foreground'
                                                     }`}>
                                                     {STAGE_CONFIG[selectedThread.stage]?.icon || '🎯'} {selectedThread.stage}
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono leading-none">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] text-muted-foreground font-mono leading-none truncate">
                                             <span>{selectedThread.phone}</span>
                                             <button
                                                 type="button"
                                                 onClick={() => handleCopyPhone(selectedThread.phone)}
-                                                className="hover:text-foreground text-muted-foreground p-0.5 transition-colors"
+                                                className="hover:text-foreground text-muted-foreground p-0.5 transition-colors shrink-0"
                                                 title="Copy phone number"
                                             >
                                                 <Copy className="size-2.5" />
                                             </button>
                                             {copiedPhone && <span className="text-[9px] text-emerald-600 font-semibold font-sans">Copied!</span>}
                                             <span>•</span>
-                                            <span className="font-sans">Session Window:</span>
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-sans">{selectedThread.windowRemaining}</span>
+                                            <span className={`font-sans text-[10px] font-semibold ${selectedThread.windowRemaining === 'Closed' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                {selectedThread.windowRemaining === 'Closed' ? 'Closed' : `${selectedThread.windowRemaining} left`}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Header Action Buttons */}
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                    {/* Quick Mark Resolved / Reopen */}
+                                <div className="flex items-center gap-1 shrink-0">
                                     {selectedThread.status === 'resolved' ? (
                                         <Button
                                             type="button"
@@ -1326,10 +1355,10 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleToggleResolve('resolved')}
-                                            className="h-7 text-xs font-semibold gap-1 text-muted-foreground hover:text-emerald-700 hover:border-emerald-500/40 px-2.5 shadow-2xs"
+                                            className="h-7 w-7 sm:w-auto p-0 sm:px-2.5 text-xs font-semibold gap-1 text-muted-foreground hover:text-emerald-700 hover:border-emerald-500/40 shadow-2xs"
                                             title="Mark conversation as resolved"
                                         >
-                                            <CheckCircle2 className="size-3 text-emerald-600" />
+                                            <CheckCircle2 className="size-3.5 text-emerald-600" />
                                             <span className="hidden sm:inline">Resolve</span>
                                         </Button>
                                     )}
@@ -1344,12 +1373,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                             {/* Message Feed */}
                             <div
                                 ref={chatFeedRef}
-                                className="flex-1 overflow-y-auto p-5 space-y-3.5 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px]"
+                                className="flex-1 overflow-y-auto p-2.5 sm:p-4 md:p-5 space-y-2 sm:space-y-3.5 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:16px_16px]"
                             >
                                 {(messages[selectedThread.id] || []).map((msg) => (
                                     <div
                                         key={msg.id}
-                                        className={`flex flex-col max-w-[70%] ${msg.sender === 'agent'
+                                        className={`flex flex-col max-w-[95%] sm:max-w-[85%] md:max-w-[70%] ${msg.sender === 'agent'
                                                 ? 'ml-auto items-end'
                                                 : msg.sender === 'bot'
                                                     ? 'mr-auto items-start'
@@ -1357,7 +1386,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             }`}
                                     >
                                         <div
-                                            className={`rounded-2xl px-4 py-2.5 text-xs shadow-xs leading-relaxed ${msg.sender === 'agent'
+                                            className={`rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 text-xs shadow-xs leading-relaxed max-w-full break-words ${msg.sender === 'agent'
                                                     ? 'bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef] rounded-tr-xs'
                                                     : msg.sender === 'bot'
                                                         ? 'bg-card text-foreground border border-purple-500/30 rounded-tl-xs'
@@ -1376,7 +1405,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                                 if (parsedAttachment) {
                                                     return (
-                                                        <div className="space-y-1.5 min-w-[220px] max-w-[320px] sm:max-w-[360px]">
+                                                        <div className="space-y-1.5 min-w-0 w-full max-w-[320px] sm:max-w-[360px]">
                                                             {/* Document Card */}
                                                             {parsedAttachment.fileType === 'image' && parsedAttachment.url ? (
                                                                 <div className="rounded-xl overflow-hidden border border-black/10 dark:border-white/10 max-w-xs shadow-xs">
@@ -1472,7 +1501,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     };
 
                                                     return (
-                                                        <div className="space-y-2 min-w-[240px] max-w-[340px] sm:max-w-[420px] pt-0.5">
+                                                        <div className="space-y-2 min-w-0 w-full max-w-[340px] sm:max-w-[420px] pt-0.5">
                                                             {/* Official WhatsApp Template Badge Header */}
                                                             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-black/10 dark:border-white/10 text-[10px]">
                                                                 <div className="flex items-center gap-1.5 font-bold text-[#1e6e3c] dark:text-[#52c480]">
@@ -1706,7 +1735,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                 {/* 2. Interactive Emoji Picker Popover */}
                                 {showEmojiPicker && (
-                                    <div className="absolute bottom-16 left-3 z-50 w-72 sm:w-80 rounded-2xl border border-border bg-card p-3 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-2">
+                                    <div className="absolute bottom-16 left-2 right-2 sm:right-auto sm:left-3 z-50 max-w-[calc(100vw-1rem)] sm:w-80 rounded-2xl border border-border bg-card p-3 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-2">
                                         <div className="flex items-center justify-between border-b border-border/70 pb-2">
                                             <span className="text-xs font-bold text-foreground">Select Emoji</span>
                                             <button
@@ -1753,7 +1782,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                 {/* 3. Interactive Attachment Menu Popover */}
                                 {showAttachmentMenu && (
-                                    <div className="absolute bottom-16 left-10 z-50 w-64 rounded-2xl border border-border bg-card p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-1">
+                                    <div className="absolute bottom-16 left-2 sm:left-10 z-50 w-[calc(100vw-2rem)] max-w-xs rounded-2xl border border-border bg-card p-2 shadow-2xl animate-in fade-in slide-in-from-bottom-2 space-y-1">
                                         <div className="flex items-center justify-between px-2 py-1 text-xs font-bold text-foreground border-b border-border/70 mb-1">
                                             <span>Attach Content</span>
                                             <button
@@ -1854,28 +1883,27 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                 {/* 24h Window Closed Warning Banner */}
                                 {selectedThread.windowRemaining === 'Closed' && (
-                                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <AlertCircle className="size-3.5 text-amber-600 shrink-0" />
-                                            24h customer window is closed. Custom text messages cannot be sent. Re-open chat with an approved Meta Template.
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 sm:px-3 sm:py-1.5 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
+                                        <span className="flex items-start sm:items-center gap-1.5 font-medium leading-tight">
+                                            <AlertCircle className="size-3.5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+                                            <span>24h customer window is closed. Custom text messages cannot be sent. Re-open chat with an approved Meta Template.</span>
                                         </span>
                                         <Button
                                             type="button"
                                             size="sm"
                                             onClick={() => {
-
                                                 setShowDirectTemplateModal(true);
                                             }}
-                                            className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-2.5 shrink-0 font-semibold"
+                                            className="h-6.5 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-2.5 shrink-0 font-semibold self-end sm:self-auto cursor-pointer"
                                         >
                                             <Sparkles className="size-3" />
-                                            Send Template
+                                            <span>Send Template</span>
                                         </Button>
                                     </div>
                                 )}
 
                                 {/* Main Input Row */}
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 sm:gap-2">
                                     <Button
                                         type="button"
                                         variant="ghost"
@@ -1884,7 +1912,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             setShowEmojiPicker(!showEmojiPicker);
                                             setShowAttachmentMenu(false);
                                         }}
-                                        className={`size-8 p-0 transition-colors ${showEmojiPicker
+                                        className={`size-7.5 sm:size-8 p-0 shrink-0 transition-colors ${showEmojiPicker
                                                 ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
                                                 : 'text-muted-foreground hover:text-foreground'
                                             }`}
@@ -1901,7 +1929,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             setShowAttachmentMenu(!showAttachmentMenu);
                                             setShowEmojiPicker(false);
                                         }}
-                                        className={`size-8 p-0 transition-colors ${showAttachmentMenu
+                                        className={`size-7.5 sm:size-8 p-0 shrink-0 transition-colors ${showAttachmentMenu
                                                 ? 'bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480]'
                                                 : 'text-muted-foreground hover:text-foreground'
                                             }`}
@@ -1916,12 +1944,11 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => {
-
                                             setShowDirectTemplateModal(true);
                                             setShowAttachmentMenu(false);
                                             setShowEmojiPicker(false);
                                         }}
-                                        className="size-8 p-0 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 transition-colors"
+                                        className="size-7.5 sm:size-8 p-0 shrink-0 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 transition-colors"
                                         title="Send Approved WhatsApp Template directly"
                                     >
                                         <Sparkles className="size-4" />
@@ -1932,16 +1959,16 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                         type="text"
                                         value={replyText}
                                         onChange={(e) => setReplyText(e.target.value)}
-                                        placeholder={`Type a WhatsApp reply to ${selectedThread.contactName}...`}
-                                        className="flex-1 rounded-lg border border-input bg-background px-3.5 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
+                                        placeholder={`Type a reply...`}
+                                        className="min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-[#47b672]"
                                     />
                                     <Button
                                         type="submit"
                                         size="sm"
-                                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1.5 px-4 shadow-sm"
+                                        className="bg-[#47b672] text-white hover:bg-[#349c5e] text-xs font-semibold gap-1 px-2.5 sm:px-4 shrink-0 shadow-sm"
                                     >
                                         <Send className="size-3.5" />
-                                        <span>Send</span>
+                                        <span className="hidden sm:inline">Send</span>
                                     </Button>
                                 </div>
                             </form>

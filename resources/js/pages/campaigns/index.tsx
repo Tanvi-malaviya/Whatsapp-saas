@@ -569,8 +569,8 @@ export default function CampaignsList({
                     {/* Top Row: Title, Badge, and Primary Action */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
-                            <div className="flex items-center gap-2.5">
-                                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
                                     WhatsApp Broadcasts &amp; Campaigns
                                 </h1>
                                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-[10px] font-bold uppercase tracking-wider shrink-0">
@@ -593,12 +593,12 @@ export default function CampaignsList({
                     </div>
 
                     {/* Integrated Channel & Quick Tools Bar */}
-                    <div className="mt-3.5 pt-3.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                    <div className="mt-3.5 pt-3.5 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                         {/* Sender Number Selector */}
                         {channels && channels.length > 0 && (
-                            <div className="flex items-center gap-2">
-                                <span className="text-[11px] font-medium text-muted-foreground">Active WhatsApp Sender:</span>
-                                <div className="flex items-center gap-1.5 bg-muted/40 border border-border/80 px-2.5 h-7.5 rounded-lg text-xs">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                                <span className="text-[11px] font-medium text-muted-foreground shrink-0">Active WhatsApp Sender:</span>
+                                <div className="flex items-center gap-1.5 bg-muted/40 border border-border/80 px-2.5 h-8 rounded-lg text-xs w-full sm:w-auto max-w-full">
                                     <Smartphone className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                     <select
                                         aria-label="Sender number"
@@ -612,7 +612,7 @@ export default function CampaignsList({
                                                 router.get('/campaigns', {}, { preserveState: false });
                                             }
                                         }}
-                                        className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+                                        className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer w-full sm:w-auto truncate"
                                     >
                                         {channels.map((c) => (
                                             <option value={c.id} key={c.id}>
@@ -628,63 +628,63 @@ export default function CampaignsList({
                 </div>
 
                 {/* 4 KPI Overview Metric Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
                     {/* Card 1: Total Campaigns */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
-                        <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <div className="size-7.5 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                                 <Send className="size-3.5" />
                             </div>
-                            <div>
-                                <span className="text-xs font-semibold text-foreground block leading-tight">Total Campaigns</span>
-                                <span className="text-[10px] text-muted-foreground">{completedCampaignsCount} completed</span>
+                            <div className="min-w-0">
+                                <span className="text-xs font-semibold text-foreground block leading-tight truncate">Total Campaigns</span>
+                                <span className="text-[10px] text-muted-foreground truncate block">{completedCampaignsCount} completed</span>
                             </div>
                         </div>
-                        <span className="text-base font-bold tabular-nums text-foreground">{recentCampaigns.length}</span>
+                        <span className="text-base font-bold tabular-nums text-foreground shrink-0">{recentCampaigns.length}</span>
                     </div>
 
                     {/* Card 2: Messages Sent */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
-                        <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <div className="size-7.5 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
                                 <CheckCircle2 className="size-3.5" />
                             </div>
-                            <div>
-                                <span className="text-xs font-semibold text-foreground block leading-tight">Messages Sent</span>
-                                <span className="text-[10px] text-muted-foreground">Successful dispatches</span>
+                            <div className="min-w-0">
+                                <span className="text-xs font-semibold text-foreground block leading-tight truncate">Messages Sent</span>
+                                <span className="text-[10px] text-muted-foreground truncate block">Successful dispatches</span>
                             </div>
                         </div>
-                        <span className="text-base font-bold tabular-nums text-foreground">{totalMessagesSent.toLocaleString()}</span>
+                        <span className="text-base font-bold tabular-nums text-foreground shrink-0">{totalMessagesSent.toLocaleString()}</span>
                     </div>
 
                     {/* Card 3: Meta 24h Quota */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
-                        <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <div className="size-7.5 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
                                 <ShieldCheck className="size-3.5" />
                             </div>
-                            <div>
-                                <span className="text-xs font-semibold text-foreground block leading-tight">Meta 24h Quota</span>
-                                <span className="text-[10px] text-muted-foreground">{messagingLimits?.tier || 'Tier 1'} limit</span>
+                            <div className="min-w-0">
+                                <span className="text-xs font-semibold text-foreground block leading-tight truncate">Meta 24h Quota</span>
+                                <span className="text-[10px] text-muted-foreground truncate block">{messagingLimits?.tier || 'Tier 1'} limit</span>
                             </div>
                         </div>
-                        <span className="text-base font-bold tabular-nums text-foreground">
+                        <span className="text-base font-bold tabular-nums text-foreground shrink-0">
                             {messagingLimits?.unlimited ? 'Unlimited' : `${messagingLimits?.dailyLimit?.toLocaleString() || '1,000'}/24h`}
                         </span>
                     </div>
 
                     {/* Card 4: Wallet Balance */}
-                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
-                        <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <div className="size-7.5 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
                                 <WalletIcon className="size-3.5" />
                             </div>
-                            <div>
-                                <span className="text-xs font-semibold text-foreground block leading-tight">Available Credits</span>
-                                <span className="text-[10px] text-muted-foreground">Wallet balance</span>
+                            <div className="min-w-0">
+                                <span className="text-xs font-semibold text-foreground block leading-tight truncate">Available Credits</span>
+                                <span className="text-[10px] text-muted-foreground truncate block">Wallet balance</span>
                             </div>
                         </div>
-                        <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                        <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400 shrink-0">
                             {wallet?.total_balance_formatted || '₹500.00'}
                         </span>
                     </div>

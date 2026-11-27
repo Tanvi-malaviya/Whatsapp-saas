@@ -1170,12 +1170,14 @@ export default function BotFlows({ flows = [] }: Props) {
 
             {/* Create / Edit Flow Modal */}
             <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <div className="flex items-center justify-between gap-2">
-                            <DialogTitle className="text-base font-semibold flex items-center gap-2">
-                                <GitBranch className="size-4 text-[#47b672]" />
-                                {editingFlow ? `Edit Flow: ${editingFlow.name}` : 'Create WhatsApp Bot Flow'}
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pr-1">
+                            <DialogTitle className="text-sm sm:text-base font-semibold flex items-start sm:items-center gap-2 leading-snug">
+                                <GitBranch className="size-4 text-[#47b672] shrink-0 mt-0.5 sm:mt-0" />
+                                <span className="line-clamp-2 sm:line-clamp-none break-words">
+                                    {editingFlow ? `Edit Flow: ${editingFlow.name}` : 'Create WhatsApp Bot Flow'}
+                                </span>
                             </DialogTitle>
                             {!editingFlow && (
                                 <Button
@@ -1183,236 +1185,238 @@ export default function BotFlows({ flows = [] }: Props) {
                                     variant="outline"
                                     size="sm"
                                     onClick={loadSampleTemplate}
-                                    className="text-[11px] h-7 gap-1 text-muted-foreground hover:text-foreground"
+                                    className="text-[11px] h-7 gap-1 text-muted-foreground hover:text-foreground self-start sm:self-auto shrink-0"
                                 >
                                     <Sparkles className="size-3 text-amber-500" />
                                     <span>Fill Sample Template</span>
                                 </Button>
                             )}
                         </div>
-                        <DialogDescription className="text-xs text-muted-foreground">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Configure keyword triggers, automated welcome greeting, and interactive customer branches.
                         </DialogDescription>
                     </DialogHeader>
 
-                    {!editingFlow && (
-                        <div className="p-2.5 rounded-lg bg-muted/40 border border-border/70 space-y-1.5 my-1">
-                            <span className="text-[11px] font-semibold text-foreground flex items-center gap-1">
-                                <Sparkles className="size-3 text-amber-500" />
-                                Choose a pre-configured template to autofill:
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                                {STARTER_TEMPLATES.map((tmpl) => (
-                                    <button
-                                        key={tmpl.id}
-                                        type="button"
-                                        onClick={() => applyTemplate(tmpl)}
-                                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-background border border-border hover:border-[#47b672] hover:text-[#47b672] transition-colors"
+                    <form onSubmit={handleSaveFlow} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-0">
+                            {!editingFlow && (
+                                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/70 space-y-1.5">
+                                    <span className="text-[11px] font-semibold text-foreground flex items-center gap-1">
+                                        <Sparkles className="size-3 text-amber-500" />
+                                        Choose a pre-configured template to autofill:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {STARTER_TEMPLATES.map((tmpl) => (
+                                            <button
+                                                key={tmpl.id}
+                                                type="button"
+                                                onClick={() => applyTemplate(tmpl)}
+                                                className="px-2 py-0.5 rounded text-[10px] font-medium bg-background border border-border hover:border-[#47b672] hover:text-[#47b672] transition-colors"
+                                            >
+                                                {tmpl.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {formError && (
+                                <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
+                                    <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                                    <span>{formError}</span>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Flow Name *</Label>
+                                    <Input
+                                        value={formName}
+                                        onChange={(e) => setFormName(e.target.value)}
+                                        placeholder="e.g. Lead Qualification or Product Catalog"
+                                        className="text-xs"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <Label className="text-xs font-medium">Status *</Label>
+                                    <select
+                                        value={formStatus}
+                                        onChange={(e) => setFormStatus(e.target.value as 'active' | 'draft')}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
                                     >
-                                        {tmpl.name}
-                                    </button>
-                                ))}
+                                        <option value="active">Active (Responding to customers)</option>
+                                        <option value="draft">Draft (Paused)</option>
+                                    </select>
+                                </div>
                             </div>
-                        </div>
-                    )}
 
-                    {formError && (
-                        <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5 text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
-                            <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                            <span>{formError}</span>
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSaveFlow} className="space-y-4 py-1">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
-                                <Label className="text-xs font-medium">Flow Name *</Label>
+                                <Label className="text-xs font-medium">Trigger Keywords (comma separated) *</Label>
                                 <Input
-                                    value={formName}
-                                    onChange={(e) => setFormName(e.target.value)}
-                                    placeholder="e.g. Lead Qualification or Product Catalog"
-                                    className="text-xs"
+                                    value={formKeywords}
+                                    onChange={(e) => setFormKeywords(e.target.value)}
+                                    placeholder="e.g. hi, hello, price, quote, order, inquiry"
+                                    className="text-xs font-mono"
                                     required
+                                />
+                                <p className="text-[10px] text-muted-foreground">
+                                    Flow starts when a customer sends any of these words.
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label className="text-xs font-medium">Description (optional)</Label>
+                                <Input
+                                    value={formDescription}
+                                    onChange={(e) => setFormDescription(e.target.value)}
+                                    placeholder="e.g. Explains web services and connects hot leads to sales team."
+                                    className="text-xs"
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <Label className="text-xs font-medium">Status *</Label>
-                                <select
-                                    value={formStatus}
-                                    onChange={(e) => setFormStatus(e.target.value as 'active' | 'draft')}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none"
-                                >
-                                    <option value="active">Active (Responding to customers)</option>
-                                    <option value="draft">Draft (Paused)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label className="text-xs font-medium">Trigger Keywords (comma separated) *</Label>
-                            <Input
-                                value={formKeywords}
-                                onChange={(e) => setFormKeywords(e.target.value)}
-                                placeholder="e.g. hi, hello, price, quote, order, inquiry"
-                                className="text-xs font-mono"
-                                required
-                            />
-                            <p className="text-[10px] text-muted-foreground">
-                                Flow starts when a customer sends any of these words.
-                            </p>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label className="text-xs font-medium">Description (optional)</Label>
-                            <Input
-                                value={formDescription}
-                                onChange={(e) => setFormDescription(e.target.value)}
-                                placeholder="e.g. Explains web services and connects hot leads to sales team."
-                                className="text-xs"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label className="text-xs font-medium">Step 1: Automated Greeting &amp; Menu Message *</Label>
-                            <textarea
-                                rows={4}
-                                value={formGreeting}
-                                onChange={(e) => setFormGreeting(e.target.value)}
-                                placeholder="👋 Welcome! Please choose from our options below (1, 2, or 3)..."
-                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none leading-relaxed"
-                                required
-                            />
-                            <p className="text-[10px] text-muted-foreground">
-                                This message is sent immediately when a customer triggers this flow.
-                            </p>
-                        </div>
-
-                        {/* Options / Branches */}
-                        <div className="space-y-2.5 pt-1 border-t border-border/80">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <Label className="text-xs font-semibold">Step 2: Interactive Menu Options &amp; Branches</Label>
-                                    <p className="text-[10px] text-muted-foreground">
-                                        Add multiple steps (1, 2, 3...). You can send auto replies, ask follow-up questions, or transfer to human agents.
-                                    </p>
-                                </div>
-                                {formOptions.length < 10 && (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={addFormOption}
-                                        className="text-xs h-7 gap-1.5 border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/10"
-                                    >
-                                        <Plus className="size-3.5" />
-                                        Add Step / Option
-                                    </Button>
-                                )}
+                                <Label className="text-xs font-medium">Step 1: Automated Greeting &amp; Menu Message *</Label>
+                                <textarea
+                                    rows={4}
+                                    value={formGreeting}
+                                    onChange={(e) => setFormGreeting(e.target.value)}
+                                    placeholder="👋 Welcome! Please choose from our options below (1, 2, or 3)..."
+                                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none leading-relaxed"
+                                    required
+                                />
+                                <p className="text-[10px] text-muted-foreground">
+                                    This message is sent immediately when a customer triggers this flow.
+                                </p>
                             </div>
 
-                            <div className="space-y-3">
-                                {formOptions.map((opt, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="rounded-lg border border-border p-3 bg-muted/20 space-y-2 relative"
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex items-center gap-2 flex-1">
-                                                <span className="size-5 rounded-full bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480] text-[11px] font-bold flex items-center justify-center shrink-0">
-                                                    {opt.id}
-                                                </span>
-                                                <Input
-                                                    value={opt.label}
-                                                    onChange={(e) => updateOptionField(idx, 'label', e.target.value)}
-                                                    placeholder={`Option ${opt.id} Title (e.g. Web Development)`}
-                                                    className="text-xs h-7"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <div className="flex items-center gap-2">
-                                                <select
-                                                    value={opt.action_type || 'reply'}
-                                                    onChange={(e) =>
-                                                        updateOptionField(idx, 'action_type', e.target.value)
-                                                    }
-                                                    className="rounded border border-input bg-background px-2 py-1 text-[11px] h-7 focus:outline-none"
-                                                >
-                                                    <option value="reply">Instant Auto-Reply</option>
-                                                    <option value="followup">Ask Follow-up Question</option>
-                                                    <option value="human_handoff">Live Agent Handoff</option>
-                                                </select>
-
-                                                {formOptions.length > 1 && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-7 text-muted-foreground hover:text-red-600"
-                                                        onClick={() => removeFormOption(idx)}
-                                                    >
-                                                        <Trash2 className="size-3" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <textarea
-                                            rows={2}
-                                            value={opt.reply_text}
-                                            onChange={(e) => updateOptionField(idx, 'reply_text', e.target.value)}
-                                            placeholder={`Bot reply for Step ${opt.id}...`}
-                                            className="w-full rounded border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
-                                            required
-                                        />
-
-                                        {opt.action_type === 'followup' && (
-                                            <div className="space-y-2 pt-1.5 bg-amber-500/5 p-2.5 rounded-md border border-amber-500/20">
-                                                <div className="space-y-1">
-                                                    <Label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                                        <CornerDownRight className="size-3" />
-                                                        Next Follow-up Question (What the bot asks customer next):
-                                                    </Label>
-                                                    <Input
-                                                        value={opt.followup_question || ''}
-                                                        onChange={(e) => updateOptionField(idx, 'followup_question', e.target.value)}
-                                                        placeholder="e.g. What type of website or software do you need? Please share your requirement."
-                                                        className="text-xs h-7 bg-background"
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-1 pt-1.5 border-t border-amber-500/15">
-                                                    <Label className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                                                        <CheckCircle2 className="size-3" />
-                                                        Automated Confirmation Reply (Sent after customer answers):
-                                                    </Label>
-                                                    <textarea
-                                                        rows={2}
-                                                        value={opt.followup_reply || ''}
-                                                        onChange={(e) => updateOptionField(idx, 'followup_reply', e.target.value)}
-                                                        placeholder="e.g. ✅ Thank you! We have received your response. Our team will review your requirement and contact you shortly."
-                                                        className="w-full rounded border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
-                                                    />
-                                                    <p className="text-[9px] text-muted-foreground">
-                                                        Once customer replies to the follow-up question, the bot immediately confirms receipt with this message.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
+                            {/* Options / Branches */}
+                            <div className="space-y-2.5 pt-1 border-t border-border/80">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <Label className="text-xs font-semibold">Step 2: Interactive Menu Options &amp; Branches</Label>
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Add multiple steps (1, 2, 3...). You can send auto replies, ask follow-up questions, or transfer to human agents.
+                                        </p>
                                     </div>
-                                ))}
+                                    {formOptions.length < 10 && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={addFormOption}
+                                            className="text-xs h-7 gap-1.5 border-[#47b672]/40 text-[#28804c] dark:text-[#52c480] hover:bg-[#47b672]/10"
+                                        >
+                                            <Plus className="size-3.5" />
+                                            Add Step / Option
+                                        </Button>
+                                    )}
+                                </div>
+
+                                <div className="space-y-3">
+                                    {formOptions.map((opt, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="rounded-lg border border-border p-3 bg-muted/20 space-y-2 relative"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <span className="size-5 rounded-full bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480] text-[11px] font-bold flex items-center justify-center shrink-0">
+                                                        {opt.id}
+                                                    </span>
+                                                    <Input
+                                                        value={opt.label}
+                                                        onChange={(e) => updateOptionField(idx, 'label', e.target.value)}
+                                                        placeholder={`Option ${opt.id} Title (e.g. Web Development)`}
+                                                        className="text-xs h-7"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
+                                                    <select
+                                                        value={opt.action_type || 'reply'}
+                                                        onChange={(e) =>
+                                                            updateOptionField(idx, 'action_type', e.target.value)
+                                                        }
+                                                        className="rounded border border-input bg-background px-2 py-1 text-[11px] h-7 focus:outline-none"
+                                                    >
+                                                        <option value="reply">Instant Auto-Reply</option>
+                                                        <option value="followup">Ask Follow-up Question</option>
+                                                        <option value="human_handoff">Live Agent Handoff</option>
+                                                    </select>
+
+                                                    {formOptions.length > 1 && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-7 text-muted-foreground hover:text-red-600"
+                                                            onClick={() => removeFormOption(idx)}
+                                                        >
+                                                            <Trash2 className="size-3" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <textarea
+                                                rows={2}
+                                                value={opt.reply_text}
+                                                onChange={(e) => updateOptionField(idx, 'reply_text', e.target.value)}
+                                                placeholder={`Bot reply for Step ${opt.id}...`}
+                                                className="w-full rounded border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                                required
+                                            />
+
+                                            {opt.action_type === 'followup' && (
+                                                <div className="space-y-2 pt-1.5 bg-amber-500/5 p-2.5 rounded-md border border-amber-500/20">
+                                                    <div className="space-y-1">
+                                                        <Label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                                            <CornerDownRight className="size-3" />
+                                                            Next Follow-up Question (What the bot asks customer next):
+                                                        </Label>
+                                                        <Input
+                                                            value={opt.followup_question || ''}
+                                                            onChange={(e) => updateOptionField(idx, 'followup_question', e.target.value)}
+                                                            placeholder="e.g. What type of website or software do you need? Please share your requirement."
+                                                            className="text-xs h-7 bg-background"
+                                                        />
+                                                    </div>
+
+                                                    <div className="space-y-1 pt-1.5 border-t border-amber-500/15">
+                                                        <Label className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                                            <CheckCircle2 className="size-3" />
+                                                            Automated Confirmation Reply (Sent after customer answers):
+                                                        </Label>
+                                                        <textarea
+                                                            rows={2}
+                                                            value={opt.followup_reply || ''}
+                                                            onChange={(e) => updateOptionField(idx, 'followup_reply', e.target.value)}
+                                                            placeholder="e.g. ✅ Thank you! We have received your response. Our team will review your requirement and contact you shortly."
+                                                            className="w-full rounded border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none"
+                                                        />
+                                                        <p className="text-[9px] text-muted-foreground">
+                                                            Once customer replies to the follow-up question, the bot immediately confirms receipt with this message.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
 
-                        <DialogFooter className="flex flex-row justify-end items-center gap-3 pt-3 sm:gap-3">
+                        <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center gap-2.5">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isSaving}
                                 onClick={() => setIsFormOpen(false)}
-                                className="text-xs px-4"
+                                className="text-xs px-4 h-8"
                             >
                                 Cancel
                             </Button>
@@ -1420,7 +1424,7 @@ export default function BotFlows({ flows = [] }: Props) {
                                 type="submit"
                                 size="sm"
                                 disabled={isSaving}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 px-4"
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 px-4 h-8 shadow-xs"
                             >
                                 {isSaving ? (
                                     <>
@@ -1441,15 +1445,15 @@ export default function BotFlows({ flows = [] }: Props) {
 
             {/* Delete Confirmation Modal */}
             <Dialog open={!!deletingFlow} onOpenChange={(open) => !open && setDeletingFlow(null)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-full bg-red-100 dark:bg-red-950/50 text-red-600">
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-md p-4 sm:p-5">
+                    <DialogHeader className="pr-10 text-left">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-full bg-red-100 dark:bg-red-950/50 text-red-600 shrink-0 mt-0.5">
                                 <Trash2 className="size-5" />
                             </div>
-                            <div>
+                            <div className="space-y-1 min-w-0">
                                 <DialogTitle className="text-base font-semibold">Delete Bot Flow?</DialogTitle>
-                                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                                <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
                                     Are you sure you want to remove <span className="font-semibold text-foreground">"{deletingFlow?.name}"</span>?
                                     Automated replies for its trigger keywords will stop.
                                 </DialogDescription>
@@ -1457,14 +1461,14 @@ export default function BotFlows({ flows = [] }: Props) {
                         </div>
                     </DialogHeader>
 
-                    <DialogFooter className="flex flex-row justify-end items-center gap-3 pt-3 sm:gap-3">
+                    <DialogFooter className="flex flex-row justify-end items-center gap-2.5 pt-3 sm:gap-2.5">
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             disabled={isDeleting}
                             onClick={() => setDeletingFlow(null)}
-                            className="text-xs px-4"
+                            className="text-xs px-4 h-8"
                         >
                             Cancel
                         </Button>
@@ -1474,7 +1478,7 @@ export default function BotFlows({ flows = [] }: Props) {
                             size="sm"
                             disabled={isDeleting}
                             onClick={handleConfirmDelete}
-                            className="text-xs gap-1.5 px-4"
+                            className="text-xs gap-1.5 px-4 h-8"
                         >
                             {isDeleting ? (
                                 <>
@@ -1494,18 +1498,18 @@ export default function BotFlows({ flows = [] }: Props) {
 
             {/* How It Works Walkthrough Dialog */}
             <Dialog open={showHowItWorksModal} onOpenChange={setShowHowItWorksModal}>
-                <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
                         <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <GitBranch className="size-5 text-[#47b672]" />
-                            How WhatsApp Bot Flows Work
+                            <GitBranch className="size-5 text-[#47b672] shrink-0" />
+                            <span>How WhatsApp Bot Flows Work</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs text-muted-foreground">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1">
                             A complete breakdown of automated menu bots, keywords, and human agent handoff.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 text-xs py-2">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs min-h-0">
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-2 font-bold text-foreground">
                                 <span className="size-5 rounded-full bg-[#47b672]/20 text-[#28804c] dark:text-[#52c480] flex items-center justify-center text-[10px] font-bold">1</span>
@@ -1552,7 +1556,7 @@ export default function BotFlows({ flows = [] }: Props) {
                         </div>
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center">
                         <Button
                             type="button"
                             onClick={() => setShowHowItWorksModal(false)}

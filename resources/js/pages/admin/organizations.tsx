@@ -275,7 +275,7 @@ export default function AdminOrganizations({
                 {/* Workspaces Master Table */}
                 <Card className="border-border/70 shadow-2xs overflow-hidden rounded-xl">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
+                        <table className="w-full min-w-[700px] text-left text-sm">
                             <thead className="bg-muted/40 border-b border-border text-[11px] uppercase font-bold text-muted-foreground tracking-wider">
                                 <tr>
                                     <th className="py-2.5 px-3">Workspace</th>
