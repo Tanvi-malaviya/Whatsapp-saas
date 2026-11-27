@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { TemplateFields, renderTemplateText, templateMediaFormat, type TemplateValues } from '@/components/template-fields';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
     MessageSquare,
