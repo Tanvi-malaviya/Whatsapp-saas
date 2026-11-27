@@ -197,10 +197,21 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
     const [newChatPhone, setNewChatPhone] = useState('');
     const [newChatName, setNewChatName] = useState('');
     const [newChatMsgType, setNewChatMsgType] = useState<'template' | 'text'>('template');
-    const [newChatTemplate, setNewChatTemplate] = useState(metaTemplates[0]?.name || '');
+    const [newChatTemplateKey, setNewChatTemplateKey] = useState(
+        metaTemplates[0] ? `${metaTemplates[0].name}__${metaTemplates[0].language || 'en'}` : ''
+    );
     const [newChatMessage, setNewChatMessage] = useState('Hello! Welcome to our WhatsApp service.');
     const [isStartingChat, setIsStartingChat] = useState(false);
     const [newChatStatus, setNewChatStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+    const selectedNewChatTemplate = useMemo(() => {
+        if (!newChatTemplateKey) return metaTemplates[0] || null;
+        const [tName, tLang] = newChatTemplateKey.split('__');
+        return metaTemplates.find((t: any) => t.name === tName && (t.language || 'en') === tLang)
+            || metaTemplates.find((t: any) => t.name === tName)
+            || metaTemplates[0]
+            || null;
+    }, [newChatTemplateKey, metaTemplates]);
 
     // Direct Template Send state for Active Chat
     const [showDirectTemplateModal, setShowDirectTemplateModal] = useState(false);
@@ -212,7 +223,12 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
     useEffect(() => {
         if (!newChatChannelId) { setMetaTemplates([]); return; }
-        api(`/channels/${newChatChannelId}/templates`).then(data => { setMetaTemplates(data.templates); setNewChatTemplate(data.templates[0]?.name ?? ''); setNewValues({ parameters: [] }); setNewHeaderFile(null); }).catch(error => setNewChatStatus({ success: false, message: error.message }));
+        api(`/channels/${newChatChannelId}/templates`).then(data => {
+            setMetaTemplates(data.templates);
+            setNewChatTemplateKey(data.templates[0] ? `${data.templates[0].name}__${data.templates[0].language || 'en'}` : '');
+            setNewValues({ parameters: [] });
+            setNewHeaderFile(null);
+        }).catch(error => setNewChatStatus({ success: false, message: error.message }));
     }, [newChatChannelId]);
     useEffect(() => {
         if (!selectedThread?.id) return;
@@ -433,11 +449,11 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                 body: templateRequestBody({
                     ...newValues,
                     consent_confirmed: consentConfirmed,
-                    template_language: metaTemplates.find(t => t.name === newChatTemplate)?.language,
+                    template_language: selectedNewChatTemplate?.language,
                     phone: newChatPhone,
                     name: newChatName,
                     type: newChatMsgType,
-                    template_name: newChatTemplate,
+                    template_name: selectedNewChatTemplate?.name,
                     message: newChatMessage,
                     channel_id: newChatChannelId,
                 }, newChatMsgType === 'template' ? newHeaderFile : null),
@@ -2130,21 +2146,28 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                 {metaTemplates.length > 0 ? (
                                                     <>
                                                         <select
-                                                            value={newChatTemplate}
-                                                            onChange={(e) => { setNewChatTemplate(e.target.value); setNewValues({ parameters: [] }); setNewHeaderFile(null); }}
+                                                            value={newChatTemplateKey}
+                                                            onChange={(e) => {
+                                                                setNewChatTemplateKey(e.target.value);
+                                                                setNewValues({ parameters: [] });
+                                                                setNewHeaderFile(null);
+                                                            }}
                                                             className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer"
                                                         >
-                                                            {metaTemplates.map((tpl: any) => (
-                                                                <option key={tpl.name + tpl.language} value={tpl.name}>
-                                                                    {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
-                                                                </option>
-                                                            ))}
+                                                            {metaTemplates.map((tpl: any) => {
+                                                                const key = `${tpl.name}__${tpl.language || 'en'}`;
+                                                                return (
+                                                                    <option key={key} value={key}>
+                                                                        {tpl.name} ({tpl.language?.toUpperCase() || 'EN'}) · {templateMediaFormat(tpl) ? `${templateMediaFormat(tpl).toLowerCase()} header` : 'No header'}
+                                                                    </option>
+                                                                );
+                                                            })}
                                                         </select>
                                                         <p className="text-[10px] text-muted-foreground">
                                                             Pre-approved templates deliver directly to the contact to initiate the conversation window.
                                                         </p>
                                                         <TemplateFields
-                                                            template={metaTemplates.find(t => t.name === newChatTemplate) ?? null}
+                                                            template={selectedNewChatTemplate}
                                                             value={newValues}
                                                             onChange={setNewValues}
                                                             mediaFile={newHeaderFile}
