@@ -30,7 +30,6 @@ import {
     XCircle,
     BarChart2,
     Wallet as WalletIcon,
-    Megaphone,
     Upload,
     Download,
     FileSpreadsheet,
@@ -122,6 +121,7 @@ interface CampaignsPageProps {
     };
     maxContactsLimit?: number;
     messagingLimits?: { tier: string; dailyLimit: number | null; localRemaining: number | null; unlimited: boolean; batchLimit: number; configuredBatchLimit: number; source: 'meta' | 'saved' | 'unknown'; checkedAt: string | null };
+    isAllChannels?: boolean;
 }
 
 export default function CampaignsList({
@@ -135,6 +135,7 @@ export default function CampaignsList({
     wallet,
     maxContactsLimit = 2000,
     messagingLimits,
+    isAllChannels = false,
 }: CampaignsPageProps) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
@@ -601,35 +602,28 @@ export default function CampaignsList({
                                     <Smartphone className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                                     <select
                                         aria-label="Sender number"
-                                        value={channel?.id ?? ''}
-                                        onChange={(e) => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })}
+                                        value={isAllChannels ? 'all' : (channel?.id ?? '')}
+                                        onChange={(e) => {
+                                            if (e.target.value === 'all') {
+                                                router.get('/campaigns', { channel_id: 'all' }, { preserveState: false });
+                                            } else if (e.target.value) {
+                                                router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false });
+                                            } else {
+                                                router.get('/campaigns', {}, { preserveState: false });
+                                            }
+                                        }}
                                         className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
                                     >
-                                        <option value="">Select number</option>
                                         {channels.map((c) => (
                                             <option value={c.id} key={c.id}>
                                                 {c.name} · {c.phone_number}
                                             </option>
                                         ))}
+                                        <option value="all">All Numbers (Consolidated)</option>
                                     </select>
                                 </div>
                             </div>
                         )}
-
-                        {/* WhatsApp Ads CTWA link */}
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                className="text-xs h-7.5 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold rounded-lg"
-                            >
-                                <Link href="/campaigns/ads">
-                                    <Megaphone className="size-3 text-purple-600 dark:text-purple-400" />
-                                    WhatsApp Ads (CTWA)
-                                </Link>
-                            </Button>
-                        </div>
                     </div>
                 </div>
 

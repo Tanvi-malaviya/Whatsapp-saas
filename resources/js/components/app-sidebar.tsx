@@ -213,24 +213,6 @@ export function AppSidebar() {
                         </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Click-to-WhatsApp Ads (CTWA) */}
-                    <SidebarMenuItem>
-                        <SidebarMenuButton
-                            asChild
-                            isActive={isActive('/campaigns/ads')}
-                            className={isActive('/campaigns/ads') ? activeClass : inactiveClass}
-                            tooltip="WhatsApp Ads (CTWA)"
-                        >
-                            <Link href="/campaigns/ads" prefetch className="flex items-center w-full">
-                                <Megaphone className="size-4 text-purple-600 dark:text-purple-400" />
-                                <span>WhatsApp Ads</span>
-                                <span className="ml-auto rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide group-data-[collapsible=icon]:hidden">
-                                    Ads
-                                </span>
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-
                     {/* Commerce & Catalog */}
                     <SidebarMenuItem>
                         <SidebarMenuButton

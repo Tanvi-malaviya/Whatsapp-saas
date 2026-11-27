@@ -136,8 +136,11 @@ class CampaignController extends Controller
         $org = $this->resolveOrg($request);
         TenantContext::set($org);
 
+        $channelId = $request->query('channel_id');
+        $isAllChannels = $channelId === 'all';
+
         $channel = WhatsAppChannel::where('status', 'connected')
-            ->when($request->filled('channel_id'), fn ($q) => $q->whereKey($request->query('channel_id')))
+            ->when($request->filled('channel_id') && ! $isAllChannels, fn ($q) => $q->whereKey($channelId))
             ->when(! $request->filled('channel_id'), fn ($q) => $q->where('organization_id', $org->id))
             ->orderByDesc('is_default')->first()
             ?? WhatsAppChannel::where('status', 'connected')->orderByDesc('is_default')->first();
@@ -201,13 +204,26 @@ class CampaignController extends Controller
             ->values()
             ->all();
 
-        // Fetch recent broadcast campaigns
-        $recentCampaigns = BroadcastCampaign::where('organization_id', $org->id)
+        // Fetch recent broadcast campaigns filtered by the selected channel
+        $recentCampaignsQuery = BroadcastCampaign::where('organization_id', $org->id);
+
+        if (! $isAllChannels && $channel) {
+            if ($channel->is_default) {
+                $recentCampaignsQuery->where(function ($q) use ($channel) {
+                    $q->where('channel_id', $channel->id)->orWhereNull('channel_id');
+                });
+            } else {
+                $recentCampaignsQuery->where('channel_id', $channel->id);
+            }
+        }
+
+        $recentCampaigns = $recentCampaignsQuery
             ->orderByDesc('created_at')
-            ->take(30)
+            ->take(50)
             ->get()
             ->map(fn ($c) => [
                 'id' => (string) $c->id,
+                'channelId' => (string) $c->channel_id,
                 'name' => $c->name,
                 'templateName' => $c->template_name,
                 'templateLanguage' => $c->template_language,
@@ -258,6 +274,7 @@ class CampaignController extends Controller
             'wallet' => $walletBalances,
             'maxContactsLimit' => $maxContactsLimit,
             'messagingLimits' => $messagingLimits,
+            'isAllChannels' => $isAllChannels,
             'channel' => $channel ? [
                 'id' => $channel->id,
                 'name' => $channel->name,
