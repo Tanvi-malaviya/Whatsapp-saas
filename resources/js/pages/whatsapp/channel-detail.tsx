@@ -121,10 +121,19 @@ export default function ChannelDetail({
     // Clean handle like @dukanhisab
     const cleanHandle = '@' + channel.name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // Formatted synced date/time
+    // Formatted synced date/time in IST
     const syncedTime = channel.webhook_verified_at 
-        ? new Date(channel.webhook_verified_at).toISOString().replace('T', ' ').substring(0, 19)
-        : '2026-10-27 11:40:38';
+        ? new Date(channel.webhook_verified_at).toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        })
+        : '26 Oct 2026, 11:40 AM';
 
     // Meta deep links
     const wabaId = channel.waba_id;

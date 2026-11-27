@@ -277,18 +277,18 @@ export default function AdminWallets({ organizations = [], transactions = [], st
 
                 {/* Tab 1: Client Wallets List */}
                 {activeTab === 'workspaces' && (
-                    <Card className="shadow-2xs border-border/70 overflow-hidden">
+                    <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
-                                        <th className="py-2.5 px-3">Client Workspace</th>
-                                        <th className="py-2.5 px-3">Owner Contact</th>
-                                        <th className="py-2.5 px-3">Paid Balance</th>
-                                        <th className="py-2.5 px-3">Promotional Balance</th>
-                                        <th className="py-2.5 px-3">Total Balance</th>
-                                        <th className="py-2.5 px-3">Last Transaction</th>
-                                        <th className="py-2.5 px-3 text-right">Actions</th>
+                                        <th className="py-2.5 px-3.5">Client Workspace</th>
+                                        <th className="py-2.5 px-3.5">Owner Contact</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Paid Balance</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Promotional Balance</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Total Balance</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Last Activity</th>
+                                        <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
@@ -301,55 +301,55 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                                     ) : (
                                         filteredOrganizations.map((org) => (
                                             <tr key={org.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 font-bold text-xs uppercase">
+                                                        <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 font-bold text-xs uppercase shrink-0">
                                                             {org.name.slice(0, 2)}
                                                         </div>
-                                                        <div>
-                                                            <div className="font-semibold text-foreground">{org.name}</div>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-foreground text-xs truncate max-w-[200px]">{org.name}</div>
                                                             <div className="text-[11px] text-muted-foreground">/{org.slug}</div>
                                                         </div>
                                                     </div>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5">
                                                     {org.owner ? (
                                                         <div>
-                                                            <div className="font-medium text-foreground">{org.owner.name}</div>
-                                                            <div className="text-[11px] text-muted-foreground">{org.owner.email}</div>
+                                                            <div className="font-medium text-foreground text-xs">{org.owner.name}</div>
+                                                            <div className="text-[11px] text-muted-foreground truncate max-w-[180px]">{org.owner.email}</div>
                                                         </div>
                                                     ) : (
                                                         <span className="text-muted-foreground">—</span>
                                                     )}
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                     <span className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                                                         {org.paid_balance_formatted}
                                                     </span>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                     <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
                                                         {org.promotional_balance_formatted}
                                                     </span>
                                                 </td>
 
-                                                <td className="py-3 px-3 font-bold tabular-nums text-foreground">
+                                                <td className="py-2.5 px-3.5 font-bold tabular-nums text-foreground whitespace-nowrap">
                                                     {org.total_balance_formatted}
                                                 </td>
 
-                                                <td className="py-3 px-3 text-[11px] text-muted-foreground">
-                                                    {org.last_transaction_at}
+                                                <td className="py-2.5 px-3.5 text-[11px] text-muted-foreground whitespace-nowrap">
+                                                    {org.last_transaction_at || 'No activity'}
                                                 </td>
 
-                                                <td className="py-3 px-3 text-right">
+                                                <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <Button
                                                             size="sm"
                                                             onClick={() => openCreditModalForOrg(org.id)}
-                                                            className="h-7 text-xs px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1"
+                                                            className="h-7 text-xs px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1 cursor-pointer shadow-2xs"
                                                         >
                                                             <Plus className="size-3" />
                                                             <span>Add Credit</span>
@@ -358,7 +358,7 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                                                             variant="outline"
                                                             size="sm"
                                                             onClick={() => router.post(`/admin/organizations/${org.id}/switch`)}
-                                                            className="h-7 text-xs px-2 rounded-lg text-muted-foreground hover:text-foreground"
+                                                            className="h-7 text-xs px-2 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
                                                             title="Switch into workspace"
                                                         >
                                                             <ExternalLink className="size-3" />
@@ -371,23 +371,23 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                                 </tbody>
                             </table>
                         </div>
-                    </Card>
+                    </div>
                 )}
 
                 {/* Tab 2: Global Transaction History */}
                 {activeTab === 'history' && (
-                    <Card className="shadow-2xs border-border/70 overflow-hidden">
+                    <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
-                                        <th className="py-2.5 px-3">Date & Time</th>
-                                        <th className="py-2.5 px-3">Client Workspace</th>
-                                        <th className="py-2.5 px-3">Type</th>
-                                        <th className="py-2.5 px-3">Wallet Type</th>
-                                        <th className="py-2.5 px-3">Amount</th>
-                                        <th className="py-2.5 px-3">Description / Note</th>
-                                        <th className="py-2.5 px-3">Ref ID</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Date & Time</th>
+                                        <th className="py-2.5 px-3.5">Client Workspace</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Type</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Wallet Type</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Amount</th>
+                                        <th className="py-2.5 px-3.5">Description / Note</th>
+                                        <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Ref ID</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
@@ -402,39 +402,57 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                                             const isCredit = !tx.type.includes('deduction');
                                             return (
                                                 <tr key={tx.id} className="hover:bg-muted/30 transition-colors">
-                                                    <td className="py-2.5 px-3 text-[11px] text-muted-foreground font-medium">
+                                                    <td className="py-2.5 px-3.5 whitespace-nowrap text-[11px] text-muted-foreground font-medium">
                                                         {tx.created_at}
                                                     </td>
-                                                    <td className="py-2.5 px-3 font-semibold text-foreground">
-                                                        {tx.organization_name}
+                                                    <td className="py-2.5 px-3.5">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs uppercase shrink-0">
+                                                                {(tx.organization_name || 'WS').slice(0, 2)}
+                                                            </div>
+                                                            <span className="font-semibold text-foreground text-xs whitespace-nowrap">
+                                                                {tx.organization_name}
+                                                            </span>
+                                                        </div>
                                                     </td>
-                                                    <td className="py-2.5 px-3">
-                                                        <Badge variant="outline" className="text-[10px] capitalize font-medium">
+                                                    <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                        <Badge variant="outline" className="text-[10px] capitalize font-medium px-2 py-0.5">
                                                             {tx.type.replace('_', ' ')}
                                                         </Badge>
                                                     </td>
-                                                    <td className="py-2.5 px-3">
+                                                    <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                         <Badge
                                                             variant="secondary"
-                                                            className={`text-[9px] uppercase font-bold ${
+                                                            className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full ${
                                                                 tx.balance_type === 'paid'
-                                                                    ? 'bg-emerald-500/10 text-emerald-600'
-                                                                    : 'bg-amber-500/10 text-amber-600'
+                                                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
                                                             }`}
                                                         >
                                                             {tx.balance_type}
                                                         </Badge>
                                                     </td>
-                                                    <td className="py-2.5 px-3 font-bold tabular-nums">
+                                                    <td className="py-2.5 px-3.5 font-bold tabular-nums whitespace-nowrap text-xs">
                                                         <span className={isCredit ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}>
                                                             {isCredit ? `+${tx.amount_formatted}` : `-${tx.amount_formatted}`}
                                                         </span>
                                                     </td>
-                                                    <td className="py-2.5 px-3 text-muted-foreground max-w-xs truncate">
+                                                    <td className="py-2.5 px-3.5 text-xs text-muted-foreground max-w-sm truncate">
                                                         {tx.description}
                                                     </td>
-                                                    <td className="py-2.5 px-3 text-[10px] text-muted-foreground font-mono">
-                                                        {tx.reference_id || '—'}
+                                                    <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                                                        {tx.reference_id ? (
+                                                            <span
+                                                                className="inline-block font-mono text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/60 select-all"
+                                                                title={tx.reference_id}
+                                                            >
+                                                                {tx.reference_id.length > 20
+                                                                    ? `${tx.reference_id.slice(0, 8)}...${tx.reference_id.slice(-6)}`
+                                                                    : tx.reference_id}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-muted-foreground text-xs">—</span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
@@ -443,7 +461,7 @@ export default function AdminWallets({ organizations = [], transactions = [], st
                                 </tbody>
                             </table>
                         </div>
-                    </Card>
+                    </div>
                 )}
 
                 {/* Credit Wallet Manually Modal */}

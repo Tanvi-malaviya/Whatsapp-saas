@@ -36,7 +36,7 @@ class FortifyServiceProvider extends ServiceProvider
             $allowed = match ($panel) {
                 'admin' => $user->isSuperAdmin(),
                 'agent' => $user->isB2BAgent() || $user->isSuperAdmin(),
-                default => ! $user->isB2BAgent() || $user->isSuperAdmin(), // Allow Super Admin to also authenticate from regular login
+                default => true, // Allow all valid users (clients, partners, admins) to log in from standard login and redirect appropriately
             };
             if (! $allowed) { return null; }
             $request->session()->forget('support_workspace_id');

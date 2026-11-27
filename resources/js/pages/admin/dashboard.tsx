@@ -283,23 +283,6 @@ export default function AdminDashboard({
                             Real-time platform telemetry, database integrity diagnostics, automated repairs, and billing rate controls.
                         </p>
                     </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            size="sm"
-                            variant={diagnostics.total_issues > 0 ? 'default' : 'outline'}
-                            onClick={handleRunAutoFix}
-                            disabled={isFixing}
-                            className={`h-8 px-3 text-xs font-semibold gap-1.5 cursor-pointer rounded-xl ${
-                                diagnostics.total_issues > 0
-                                    ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
-                                    : 'border-border/80 hover:bg-muted'
-                            }`}
-                        >
-                            <RefreshCw className={`size-3.5 ${isFixing ? 'animate-spin' : ''}`} />
-                            <span>{isFixing ? 'Fixing Issues...' : 'Run Auto Bug Fixes'}</span>
-                        </Button>
-                    </div>
                 </div>
 
                 {fixSuccessMessage && (
@@ -327,12 +310,12 @@ export default function AdminDashboard({
                                 <Icon className="size-3.5" />
                                 <span>{tab.label}</span>
                                 {tab.badge && (
-                                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${tab.badgeColor}`}>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab.badgeColor}`}>
                                         {tab.badge}
                                     </span>
                                 )}
                                 {typeof tab.count === 'number' && (
-                                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                                         isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
                                     }`}>
                                         {tab.count}
@@ -347,202 +330,187 @@ export default function AdminDashboard({
                 {activeTab === 'overview' && (
                     <div className="space-y-4 animate-in fade-in duration-150">
                         {/* Quick Command Direct Access Strip */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {/* Quick Command Direct Access Strip */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                             <Link
                                 href="/admin/subscriptions"
-                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-emerald-500/5 to-transparent hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all flex items-center justify-between shadow-2xs"
+                                className="group p-2.5 rounded-xl border border-border/80 bg-gradient-to-br from-emerald-500/5 to-transparent hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-all flex items-center justify-between shadow-2xs"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="size-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold">
-                                        <CreditCard className="size-4" />
+                                <div className="flex items-center gap-2.5">
+                                    <div className="size-7.5 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                                        <CreditCard className="size-3.5" />
                                     </div>
-                                    <div>
-                                        <div className="text-xs font-bold text-foreground group-hover:text-emerald-600 flex items-center gap-1">
+                                    <div className="min-w-0">
+                                        <div className="text-xs font-bold text-foreground group-hover:text-emerald-600 flex items-center gap-1 leading-tight">
                                             <span>Subscriptions & Clients</span>
                                             <ArrowUpRight className="size-3" />
                                         </div>
-                                        <div className="text-[11px] text-muted-foreground">
+                                        <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
                                             {financials.active_subscriptions} Active • {financials.total_revenue_formatted}
                                         </div>
                                     </div>
                                 </div>
-                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/25">
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/25 shrink-0">
                                     Plans
                                 </Badge>
                             </Link>
 
                             <Link
                                 href="/admin/wallets"
-                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 hover:bg-amber-500/10 transition-all flex items-center justify-between shadow-2xs"
+                                className="group p-2.5 rounded-xl border border-border/80 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 hover:bg-amber-500/10 transition-all flex items-center justify-between shadow-2xs"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="size-9 rounded-xl bg-amber-500/15 text-amber-600 flex items-center justify-center font-bold">
-                                        <Wallet className="size-4" />
+                                <div className="flex items-center gap-2.5">
+                                    <div className="size-7.5 rounded-lg bg-amber-500/15 text-amber-600 flex items-center justify-center font-bold shrink-0">
+                                        <Wallet className="size-3.5" />
                                     </div>
-                                    <div>
-                                        <div className="text-xs font-bold text-foreground group-hover:text-amber-600 flex items-center gap-1">
+                                    <div className="min-w-0">
+                                        <div className="text-xs font-bold text-foreground group-hover:text-amber-600 flex items-center gap-1 leading-tight">
                                             <span>Wallets & Manual Credits</span>
                                             <ArrowUpRight className="size-3" />
                                         </div>
-                                        <div className="text-[11px] text-muted-foreground">
+                                        <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
                                             Manual Deposit • {financials.total_wallet_paid_formatted} Paid
                                         </div>
                                     </div>
                                 </div>
-                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/25">
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 border-amber-500/25 shrink-0">
                                     Ledger
                                 </Badge>
                             </Link>
 
                             <Link
                                 href="/admin/analytics"
-                                className="group p-3.5 rounded-xl border border-border/80 bg-gradient-to-br from-sky-500/5 to-transparent hover:border-sky-500/40 hover:bg-sky-500/10 transition-all flex items-center justify-between shadow-2xs"
+                                className="group p-2.5 rounded-xl border border-border/80 bg-gradient-to-br from-sky-500/5 to-transparent hover:border-sky-500/40 hover:bg-sky-500/10 transition-all flex items-center justify-between shadow-2xs"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="size-9 rounded-xl bg-sky-500/15 text-sky-600 flex items-center justify-center font-bold">
-                                        <BarChart3 className="size-4" />
+                                <div className="flex items-center gap-2.5">
+                                    <div className="size-7.5 rounded-lg bg-sky-500/15 text-sky-600 flex items-center justify-center font-bold shrink-0">
+                                        <BarChart3 className="size-3.5" />
                                     </div>
-                                    <div>
-                                        <div className="text-xs font-bold text-foreground group-hover:text-sky-600 flex items-center gap-1">
+                                    <div className="min-w-0">
+                                        <div className="text-xs font-bold text-foreground group-hover:text-sky-600 flex items-center gap-1 leading-tight">
                                             <span>Daily Usage & Telemetry</span>
                                             <ArrowUpRight className="size-3" />
                                         </div>
-                                        <div className="text-[11px] text-muted-foreground">
+                                        <div className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
                                             {messagingAnalytics.delivery_rate}% Delivery • Day-by-Day
                                         </div>
                                     </div>
                                 </div>
-                                <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-500/25">
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 bg-sky-500/10 text-sky-600 border-sky-500/25 shrink-0">
                                     Telemetry
                                 </Badge>
                             </Link>
                         </div>
 
-                        {/* 4 Stat Cards */}
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl hover:border-primary/50 transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Workspaces</span>
+                        {/* Sleek, Compact Core Platform Metrics */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
                                     <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                                        <Building2 className="size-4" />
+                                        <Building2 className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-medium text-muted-foreground">Workspaces</span>
                                 </div>
-                                <div className="mt-2 flex items-baseline justify-between">
-                                    <span className="text-2xl font-bold tracking-tight text-foreground">{metrics.totalClients}</span>
-                                    <div className="text-[11px] font-medium text-muted-foreground space-x-1">
-                                        <span className="text-blue-600 font-semibold">{metrics.singleNumberClients} Single</span>
-                                        <span>•</span>
-                                        <span className="text-amber-600 font-semibold">{metrics.multiNumberClients} Multi</span>
-                                    </div>
-                                </div>
-                            </Card>
-
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl hover:border-emerald-500/50 transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">WhatsApp Channels</span>
-                                    <div className="size-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                                        <Smartphone className="size-4" />
-                                    </div>
-                                </div>
-                                <div className="mt-2 flex items-baseline justify-between">
-                                    <span className="text-2xl font-bold tracking-tight text-emerald-600">{metrics.totalChannels}</span>
-                                    <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                        {channelHealth.connected} Connected
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-base font-bold tabular-nums text-foreground">{metrics.totalClients}</span>
+                                    <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                                        ({metrics.singleNumberClients} single • {metrics.multiNumberClients} multi)
                                     </span>
                                 </div>
-                            </Card>
+                            </div>
 
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl hover:border-indigo-500/50 transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Registered Users</span>
-                                    <div className="size-7 rounded-lg bg-indigo-500/10 text-indigo-600 flex items-center justify-center">
-                                        <Users className="size-4" />
+                            <div className="flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
+                                        <Smartphone className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">WhatsApp Channels</span>
                                 </div>
-                                <div className="mt-2 flex items-baseline justify-between">
-                                    <span className="text-2xl font-bold tracking-tight text-foreground">{metrics.totalUsers}</span>
-                                    <span className="text-[11px] font-semibold text-indigo-600">
-                                        {partnerMetrics.total_b2b_agents} B2B Partners
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-base font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{metrics.totalChannels}</span>
+                                    <span className="text-[10px] text-emerald-600/80 font-medium hidden sm:inline">
+                                        ({channelHealth.connected} live)
                                     </span>
                                 </div>
-                            </Card>
+                            </div>
 
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl hover:border-teal-500/50 transition-all">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Messages Traffic</span>
-                                    <div className="size-7 rounded-lg bg-teal-500/10 text-teal-600 flex items-center justify-center">
-                                        <MessageSquare className="size-4" />
+                            <div className="flex items-center justify-between rounded-xl border border-indigo-500/20 bg-indigo-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-indigo-500/15 text-indigo-600 flex items-center justify-center">
+                                        <Users className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">Registered Users</span>
                                 </div>
-                                <div className="mt-2 flex items-baseline justify-between">
-                                    <span className="text-2xl font-bold tracking-tight text-foreground">{metrics.totalMessages}</span>
-                                    <span className="text-[11px] font-semibold text-teal-600">
-                                        {messagingAnalytics.delivery_rate}% Delivery
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-base font-bold tabular-nums text-indigo-600 dark:text-indigo-400">{metrics.totalUsers}</span>
+                                    <span className="text-[10px] text-indigo-600/80 font-medium hidden sm:inline">
+                                        ({partnerMetrics.total_b2b_agents} partners)
                                     </span>
                                 </div>
-                            </Card>
+                            </div>
+
+                            <div className="flex items-center justify-between rounded-xl border border-teal-500/20 bg-teal-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-teal-500/15 text-teal-600 flex items-center justify-center">
+                                        <MessageSquare className="size-3.5" />
+                                    </div>
+                                    <span className="text-xs font-semibold text-teal-700 dark:text-teal-400">Messages Traffic</span>
+                                </div>
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-base font-bold tabular-nums text-teal-600 dark:text-teal-400">{metrics.totalMessages}</span>
+                                    <span className="text-[10px] text-teal-600/80 font-medium hidden sm:inline">
+                                        ({messagingAnalytics.delivery_rate}%)
+                                    </span>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Financial Revenue Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Total Platform Revenue</span>
-                                    <div className="size-6 rounded-md bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                        {/* Sleek, Compact Financial & Revenue Strip */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center">
                                         <IndianRupee className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-medium text-muted-foreground">Total Revenue</span>
                                 </div>
-                                <div className="mt-1.5">
-                                    <div className="text-xl font-bold text-foreground">{financials.total_revenue_formatted}</div>
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                                        Sub: {financials.subscription_revenue_formatted} • Topup: {financials.recharge_revenue_formatted}
-                                    </div>
-                                </div>
-                            </Card>
+                                <span className="text-base font-bold tabular-nums text-foreground">{financials.total_revenue_formatted}</span>
+                            </div>
 
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Current Month Revenue</span>
-                                    <div className="size-6 rounded-md bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                            <div className="flex items-center justify-between rounded-xl border border-blue-500/20 bg-blue-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-blue-500/15 text-blue-600 flex items-center justify-center">
                                         <TrendingUp className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-400">This Month</span>
                                 </div>
-                                <div className="mt-1.5">
-                                    <div className="text-xl font-bold text-blue-600">{financials.monthly_revenue_formatted}</div>
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">Subscriptions & top-ups this month</div>
-                                </div>
-                            </Card>
+                                <span className="text-base font-bold tabular-nums text-blue-600 dark:text-blue-400">{financials.monthly_revenue_formatted}</span>
+                            </div>
 
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Active Subscriptions</span>
-                                    <div className="size-6 rounded-md bg-purple-500/10 text-purple-600 flex items-center justify-center">
+                            <div className="flex items-center justify-between rounded-xl border border-purple-500/20 bg-purple-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-purple-500/15 text-purple-600 flex items-center justify-center">
                                         <Zap className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-semibold text-purple-700 dark:text-purple-400">Active Plans</span>
                                 </div>
-                                <div className="mt-1.5">
-                                    <div className="text-xl font-bold text-purple-600">{financials.active_subscriptions}</div>
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                                        {financials.expired_subscriptions} Expired workspaces
-                                    </div>
+                                <div className="flex items-baseline gap-1.5">
+                                    <span className="text-base font-bold tabular-nums text-purple-600 dark:text-purple-400">{financials.active_subscriptions}</span>
+                                    {financials.expired_subscriptions > 0 && (
+                                        <span className="text-[10px] text-muted-foreground">({financials.expired_subscriptions} exp)</span>
+                                    )}
                                 </div>
-                            </Card>
+                            </div>
 
-                            <Card className="border-border/70 shadow-2xs p-3.5 rounded-xl">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-muted-foreground">Wallet Deposits</span>
-                                    <div className="size-6 rounded-md bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                            <div className="flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 shadow-2xs">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded-lg bg-amber-500/15 text-amber-600 flex items-center justify-center">
                                         <Wallet className="size-3.5" />
                                     </div>
+                                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Wallet Balance</span>
                                 </div>
-                                <div className="mt-1.5">
-                                    <div className="text-xl font-bold text-foreground">{financials.total_wallet_paid_formatted}</div>
-                                    <div className="text-[10px] text-muted-foreground mt-0.5">
-                                        Promo balance: {financials.total_wallet_promo_formatted}
-                                    </div>
-                                </div>
-                            </Card>
+                                <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{financials.total_wallet_paid_formatted}</span>
+                            </div>
                         </div>
 
                         {/* Messaging & Quality Rating Cards */}
@@ -813,22 +781,22 @@ export default function AdminDashboard({
 
                 {/* TAB 3: SUBSCRIPTION & WALLET PRICING PLANS */}
                 {activeTab === 'pricing' && (
-                    <div className="space-y-4 animate-in fade-in duration-150">
-                        <Card className="border-border/70 rounded-2xl shadow-2xs">
-                            <CardHeader className="p-4 sm:p-5 border-b border-border/60">
+                    <div className="space-y-3 animate-in fade-in duration-150">
+                        <Card className="border-border/70 rounded-xl shadow-2xs">
+                            <CardHeader className="py-2.5 px-4 sm:px-5 border-b border-border/60">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                     <div>
-                                        <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                                        <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
                                             <IndianRupee className="size-4 text-emerald-600" />
                                             <span>Subscription & Wallet Recharge Pricing Controls</span>
                                         </CardTitle>
                                         <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                                            Configure the mandatory ₹9,999 annual subscription fee, welcome wallet credit, minimum message purchase thresholds, and per-message Meta tariffs.
+                                            Configure mandatory annual subscription fee, welcome wallet credit, minimum message purchase thresholds, and per-message Meta tariffs.
                                         </CardDescription>
                                     </div>
 
                                     {pricingSavedToast && (
-                                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20">
+                                        <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
                                             <Check className="size-3.5" />
                                             Changes Saved!
                                         </span>
@@ -836,184 +804,215 @@ export default function AdminDashboard({
                                 </div>
                             </CardHeader>
 
-                            <CardContent className="p-4 sm:p-6">
-                                <form onSubmit={handleSavePricing} className="space-y-5">
-                                    {/* Annual Subscription Parameters */}
+                            <CardContent className="p-4 sm:p-5">
+                                <form onSubmit={handleSavePricing} className="space-y-4">
+                                    {/* Section 1: Annual SaaS License Parameters */}
                                     <div>
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
                                             <Zap className="size-3.5 text-primary" />
-                                            Annual SaaS License Parameters
-                                        </h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="annual_price" className="text-xs font-semibold">
-                                                    Annual Subscription Fee (₹ INR)
-                                                </Label>
+                                            <span className="tracking-wide uppercase text-[11px] text-muted-foreground">Annual SaaS License Parameters</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="annual_price" className="text-xs font-semibold text-foreground">
+                                                        Annual Subscription Fee
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹9,999/yr</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="annual_price"
                                                         type="number"
                                                         value={annualPrice}
                                                         onChange={(e) => setAnnualPrice(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="9999"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Default is ₹9,999/year per business workspace.</p>
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="validity_days" className="text-xs font-semibold">
-                                                    License Validity (Days)
-                                                </Label>
-                                                <Input
-                                                    id="validity_days"
-                                                    type="number"
-                                                    value={validityDays}
-                                                    onChange={(e) => setValidityDays(e.target.value)}
-                                                    className="h-9 text-xs rounded-xl"
-                                                    placeholder="365"
-                                                />
-                                                <p className="text-[11px] text-muted-foreground">Default: 365 calendar days.</p>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="validity_days" className="text-xs font-semibold text-foreground">
+                                                        License Validity Period
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: 365 calendar days</span>
+                                                </div>
+                                                <div className="relative">
+                                                    <Input
+                                                        id="validity_days"
+                                                        type="number"
+                                                        value={validityDays}
+                                                        onChange={(e) => setValidityDays(e.target.value)}
+                                                        className="h-8 px-2.5 pr-12 text-xs font-semibold rounded-lg bg-background"
+                                                        placeholder="365"
+                                                    />
+                                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground">Days</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Promotional Wallet Bonuses */}
-                                    <div className="pt-4 border-t border-border/60">
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                    <div className="border-t border-border/60" />
+
+                                    {/* Section 2: Promotional Wallet Credits & Bonuses */}
+                                    <div>
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
                                             <Wallet className="size-3.5 text-amber-500" />
-                                            Promotional Wallet Credits & Bonuses
-                                        </h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="welcome_bonus" className="text-xs font-semibold">
-                                                    Welcome Bonus Credit (₹ INR)
-                                                </Label>
+                                            <span className="tracking-wide uppercase text-[11px] text-muted-foreground">Promotional Wallet Credits & Bonuses</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="welcome_bonus" className="text-xs font-semibold text-foreground">
+                                                        Welcome Bonus Credit
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹500</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="welcome_bonus"
                                                         type="number"
                                                         value={welcomeBonus}
                                                         onChange={(e) => setWelcomeBonus(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="500"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Credited upon annual plan activation (Default: ₹500).</p>
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="referral_reward" className="text-xs font-semibold">
-                                                    B2B Referral Commission (₹ INR)
-                                                </Label>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="referral_reward" className="text-xs font-semibold text-foreground">
+                                                        B2B Referral Commission
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹500</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="referral_reward"
                                                         type="number"
                                                         value={referralReward}
                                                         onChange={(e) => setReferralReward(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="500"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Commission paid to partner on referred subscription.</p>
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="min_purchase" className="text-xs font-semibold">
-                                                    Min Recharge Quantity (Messages)
-                                                </Label>
-                                                <Input
-                                                    id="min_purchase"
-                                                    type="number"
-                                                    value={minPurchase}
-                                                    onChange={(e) => setMinPurchase(e.target.value)}
-                                                    className="h-9 text-xs rounded-xl"
-                                                    placeholder="200"
-                                                />
-                                                <p className="text-[11px] text-muted-foreground">Minimum message batch clients can buy (Min: 200).</p>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="min_purchase" className="text-xs font-semibold text-foreground">
+                                                        Min Recharge Quantity
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Min: 200 msgs</span>
+                                                </div>
+                                                <div className="relative">
+                                                    <Input
+                                                        id="min_purchase"
+                                                        type="number"
+                                                        value={minPurchase}
+                                                        onChange={(e) => setMinPurchase(e.target.value)}
+                                                        className="h-8 px-2.5 pr-12 text-xs font-semibold rounded-lg bg-background"
+                                                        placeholder="200"
+                                                    />
+                                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium text-muted-foreground">Msgs</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Per Message Meta Rates */}
-                                    <div className="pt-4 border-t border-border/60">
-                                        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                                    <div className="border-t border-border/60" />
+
+                                    {/* Section 3: WhatsApp Meta Message Tariffs */}
+                                    <div>
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-foreground mb-2.5">
                                             <Send className="size-3.5 text-emerald-600" />
-                                            WhatsApp Meta Message Tariffs (per message)
-                                        </h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="rate_marketing" className="text-xs font-semibold">
-                                                    Marketing Rate (₹ INR)
-                                                </Label>
+                                            <span className="tracking-wide uppercase text-[11px] text-muted-foreground">WhatsApp Meta Message Tariffs (Per Message)</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="rate_marketing" className="text-xs font-semibold text-foreground">
+                                                        Marketing Rate
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹0.88/msg</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="rate_marketing"
                                                         type="number"
                                                         step="0.01"
                                                         value={rateMarketing}
                                                         onChange={(e) => setRateMarketing(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="0.88"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Standard promotional rate (Default ₹0.88/msg).</p>
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="rate_utility" className="text-xs font-semibold">
-                                                    Utility Rate (₹ INR)
-                                                </Label>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="rate_utility" className="text-xs font-semibold text-foreground">
+                                                        Utility Rate
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹0.14/msg</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="rate_utility"
                                                         type="number"
                                                         step="0.01"
                                                         value={rateUtility}
                                                         onChange={(e) => setRateUtility(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="0.14"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Transactional notifications (Default ₹0.14/msg).</p>
                                             </div>
 
-                                            <div className="space-y-1.5">
-                                                <Label htmlFor="rate_auth" className="text-xs font-semibold">
-                                                    Authentication / OTP Rate (₹ INR)
-                                                </Label>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <Label htmlFor="rate_auth" className="text-xs font-semibold text-foreground">
+                                                        Authentication / OTP Rate
+                                                    </Label>
+                                                    <span className="text-[10px] text-muted-foreground">Default: ₹0.14/msg</span>
+                                                </div>
                                                 <div className="relative">
-                                                    <span className="absolute left-3 top-2.5 text-xs text-muted-foreground font-bold">₹</span>
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₹</span>
                                                     <Input
                                                         id="rate_auth"
                                                         type="number"
                                                         step="0.01"
                                                         value={rateAuth}
                                                         onChange={(e) => setRateAuth(e.target.value)}
-                                                        className="h-9 pl-7 text-xs rounded-xl"
+                                                        className="h-8 pl-6 pr-2.5 text-xs font-semibold rounded-lg bg-background"
                                                         placeholder="0.14"
                                                     />
                                                 </div>
-                                                <p className="text-[11px] text-muted-foreground">Verification codes & 2FA (Default ₹0.14/msg).</p>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="pt-3 flex justify-end">
+                                    {/* Action Bar */}
+                                    <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-border/60">
+                                        <span className="text-[11px] text-muted-foreground italic">
+                                            Changes take effect immediately across all client workspaces upon saving.
+                                        </span>
                                         <Button
                                             type="submit"
                                             disabled={isSavingPricing}
-                                            className="h-9 px-5 text-xs font-bold gap-2 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs"
+                                            size="sm"
+                                            className="h-8 px-4 text-xs font-bold gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-2xs w-full sm:w-auto"
                                         >
                                             <Save className="size-3.5" />
-                                            <span>{isSavingPricing ? 'Saving Settings...' : 'Save Pricing Plans'}</span>
+                                            <span>{isSavingPricing ? 'Saving...' : 'Save Pricing Plans'}</span>
                                         </Button>
                                     </div>
                                 </form>
@@ -1142,7 +1141,7 @@ export default function AdminDashboard({
                                                             <span className="size-1.5 rounded-full bg-emerald-500 shrink-0"></span>
                                                             <span className="truncate">{ch.phone_number || ch.name}</span>
                                                             {ch.is_default && (
-                                                                <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.2 rounded font-sans font-bold shrink-0">
+                                                                <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-sans font-bold shrink-0">
                                                                     DEFAULT
                                                                 </span>
                                                             )}

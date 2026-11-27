@@ -116,7 +116,8 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
     const handleQuickDays = (daysToAdd: number) => {
         const base = new Date();
         base.setDate(base.getDate() + daysToAdd);
-        setExpiryDate(base.toISOString().split('T')[0]);
+        const istDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(base);
+        setExpiryDate(istDate);
     };
 
     const handleSaveSubscription = (e: React.FormEvent) => {
@@ -188,18 +189,6 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                         <p className="text-xs text-muted-foreground mt-0.5">
                             Real-time tracking of who bought subscriptions, active licenses, expiry countdowns, renewals, and official invoices.
                         </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.reload()}
-                            className="h-8 px-3 text-xs gap-1.5 cursor-pointer rounded-xl border-border/80"
-                        >
-                            <RefreshCw className="size-3.5" />
-                            <span>Refresh</span>
-                        </Button>
                     </div>
                 </div>
 
@@ -334,19 +323,19 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                 </div>
 
                 {/* Subscriptions Table */}
-                <Card className="shadow-2xs border-border/70 overflow-hidden">
+                <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs">
                             <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                 <tr>
-                                    <th className="py-2.5 px-3">Client Workspace</th>
-                                    <th className="py-2.5 px-3">Owner Contact</th>
-                                    <th className="py-2.5 px-3">Current Plan</th>
-                                    <th className="py-2.5 px-3">Subscription Status</th>
-                                    <th className="py-2.5 px-3">Plan Price</th>
-                                    <th className="py-2.5 px-3">Expiry / Remaining</th>
-                                    <th className="py-2.5 px-3">Invoices</th>
-                                    <th className="py-2.5 px-3 text-right">Actions</th>
+                                    <th className="py-2.5 px-3.5">Client Workspace</th>
+                                    <th className="py-2.5 px-3.5">Owner Contact</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Current Plan</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Subscription Status</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Plan Price</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Expiry / Remaining</th>
+                                    <th className="py-2.5 px-3.5 whitespace-nowrap">Invoices</th>
+                                    <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/60">
@@ -360,16 +349,16 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                     filteredOrganizations.map((org) => {
                                         return (
                                             <tr key={org.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs uppercase">
+                                                        <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs uppercase shrink-0">
                                                             {org.name.slice(0, 2)}
                                                         </div>
-                                                        <div>
-                                                            <div className="font-semibold text-foreground flex items-center gap-1.5">
-                                                                <span>{org.name}</span>
+                                                        <div className="min-w-0">
+                                                            <div className="font-semibold text-foreground flex items-center gap-1.5 flex-wrap">
+                                                                <span className="truncate">{org.name}</span>
                                                                 {org.b2b_agent && (
-                                                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-amber-500/10 text-amber-600 border-amber-500/25">
+                                                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 bg-amber-500/10 text-amber-600 border-amber-500/25 shrink-0">
                                                                         via {org.b2b_agent.name}
                                                                     </Badge>
                                                                 )}
@@ -381,7 +370,7 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                                     </div>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5">
                                                     {org.owner ? (
                                                         <div>
                                                             <div className="font-medium text-foreground">{org.owner.name}</div>
@@ -392,8 +381,8 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                                     )}
                                                 </td>
 
-                                                <td className="py-3 px-3">
-                                                    <Badge variant="outline" className="text-[10px] font-semibold capitalize bg-primary/5 text-primary border-primary/20">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                    <Badge variant="outline" className="text-[10px] font-semibold capitalize bg-primary/5 text-primary border-primary/20 px-2 py-0.5">
                                                         {org.subscription_plan}
                                                     </Badge>
                                                     <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -401,37 +390,39 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                                     </div>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                     {org.is_expired || org.status === 'expired' ? (
-                                                        <Badge variant="destructive" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20 font-semibold">
+                                                        <Badge variant="destructive" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20 font-semibold px-2 py-0.5">
                                                             Expired
                                                         </Badge>
                                                     ) : org.is_expiring_soon ? (
-                                                        <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/25 font-semibold">
+                                                        <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/25 font-semibold px-2 py-0.5">
                                                             Expiring Soon
                                                         </Badge>
                                                     ) : (
-                                                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/25 font-semibold">
+                                                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 font-semibold px-2 py-0.5">
                                                             Active
                                                         </Badge>
                                                     )}
                                                 </td>
 
-                                                <td className="py-3 px-3 font-semibold text-foreground">
-                                                    {org.subscription_price_formatted}
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                    <span className="font-bold text-foreground">
+                                                        {org.subscription_price_formatted}
+                                                    </span>
                                                     <span className="text-[10px] font-normal text-muted-foreground block">
                                                         / year
                                                     </span>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                     <div className="font-medium text-foreground">
                                                         {org.subscription_expires_at_formatted}
                                                     </div>
                                                     <div className="text-[10px] mt-0.5">
                                                         {org.days_remaining !== null ? (
                                                             org.days_remaining > 0 ? (
-                                                                <span className={org.days_remaining <= 30 ? 'text-amber-600 font-semibold' : 'text-emerald-600'}>
+                                                                <span className={org.days_remaining <= 30 ? 'text-amber-600 font-semibold' : 'text-emerald-600 dark:text-emerald-400'}>
                                                                     {org.days_remaining} days left
                                                                 </span>
                                                             ) : (
@@ -445,13 +436,13 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                                     </div>
                                                 </td>
 
-                                                <td className="py-3 px-3">
+                                                <td className="py-2.5 px-3.5 whitespace-nowrap">
                                                     {org.invoices.length > 0 ? (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
                                                             onClick={() => openInvoicesModal(org)}
-                                                            className="h-6 text-[11px] px-1.5 text-primary hover:underline gap-1"
+                                                            className="h-6 text-[11px] px-2 text-primary hover:bg-primary/10 gap-1 rounded-md"
                                                         >
                                                             <Receipt className="size-3" />
                                                             <span>{org.invoices.length} Invoices</span>
@@ -461,15 +452,15 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                                                     )}
                                                 </td>
 
-                                                <td className="py-3 px-3 text-right">
+                                                <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={() => openEditModal(org)}
-                                                        className="h-7 text-xs px-2.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 gap-1"
+                                                        className="h-7 text-xs px-2.5 rounded-lg border-border/80 hover:border-primary/40 hover:bg-primary/5 hover:text-primary gap-1 font-medium cursor-pointer shadow-2xs"
                                                     >
-                                                        <SlidersHorizontal className="size-3" />
-                                                        <span>Renew / Plan</span>
+                                                        <SlidersHorizontal className="size-3 text-muted-foreground" />
+                                                        <span>Edit Plan</span>
                                                     </Button>
                                                 </td>
                                             </tr>
@@ -479,7 +470,7 @@ export default function AdminSubscriptions({ organizations = [], stats }: Props)
                             </tbody>
                         </table>
                     </div>
-                </Card>
+                </div>
 
                 {/* Edit / Renew Subscription Modal */}
                 <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

@@ -1,30 +1,26 @@
 import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
-    Briefcase,
     Building2,
     CheckCircle2,
     Copy,
     Check,
-    CreditCard,
     ExternalLink,
     Gift,
     Plus,
     Search,
     Send,
-    Shield,
     Sparkles,
     UserCheck,
-    Users,
-    Wallet,
+    Smartphone,
     X,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
-import AppLayout from '@/layouts/app-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import type { BreadcrumbItem } from '@/types';
 
 type Customer = {
     id: string;
@@ -68,15 +64,11 @@ type Props = {
     };
 };
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dashboard', href: '/dashboard' },
-    { title: 'B2B Partner Portal', href: '/agent/dashboard' },
-];
-
-export default function AgentDashboard({ agent, customers, stats, referral }: Props) {
+export default function AgentDashboard({ agent, customers = [], stats, referral }: Props) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired'>('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [copied, setCopied] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -128,277 +120,345 @@ export default function AgentDashboard({ agent, customers, stats, referral }: Pr
         return matchesSearch;
     });
 
+    const expiredCount = customers.filter((c) => c.status !== 'active').length;
+
     return (
         <>
             <Head title="B2B Partner & Reseller Portal" />
 
-            <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto w-full">
-                {/* Compact Action Toolbar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                        <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 text-[10px] uppercase font-bold">
-                            Verified Partner
-                        </Badge>
-                        <p className="text-xs text-muted-foreground">
-                            Manage assigned client workspaces, assist onboarding, and track referral commissions.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                        <Button
-                            onClick={() => setShowCreateModal(true)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 gap-1.5 cursor-pointer shadow-xs"
-                        >
-                            <Plus className="size-3.5" />
-                            Onboard New Client
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Metrics Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="border-border bg-card">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                                <span>Managed Clients</span>
-                                <Building2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-foreground">{stats.total_customers}</div>
-                            <p className="text-[11px] text-muted-foreground mt-1">
-                                {stats.active_customers} active annual subscriptions
+            <div className="space-y-4 w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 pb-12">
+                {/* Header Banner with Integrated Referral Bar */}
+                <div className="bg-card border border-border/70 rounded-2xl p-4 sm:p-5 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                                    B2B Partner & Reseller Portal
+                                </h1>
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-[10px] font-bold uppercase tracking-wider">
+                                    Verified Partner
+                                </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Manage assigned client workspaces, assist onboarding, and track referral commissions in real time.
                             </p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border bg-card">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                                <span>Successful Conversions</span>
-                                <UserCheck className="size-4 text-teal-600 dark:text-teal-400" />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-foreground">{stats.conversions}</div>
-                            <p className="text-[11px] text-muted-foreground mt-1">Annual plan activations</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border bg-card">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                                <span>Messages Dispatched</span>
-                                <Send className="size-4 text-emerald-600 dark:text-emerald-400" />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-foreground">{stats.total_messages_sent.toLocaleString()}</div>
-                            <p className="text-[11px] text-muted-foreground mt-1">Across managed workspaces</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border bg-card">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                                <span>Referral Rewards Earned</span>
-                                <Gift className="size-4 text-amber-500" />
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                                {stats.total_referral_rewards}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground mt-1">₹500 per annual conversion</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Partner Referral Banner */}
-                <Card className="border-border bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-transparent">
-                    <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="size-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
-                                <Sparkles className="size-4" />
-                            </div>
-                            <div>
-                                <div className="text-xs font-bold text-foreground flex items-center gap-2">
-                                    Your Partner Referral Link
-                                    <span className="font-mono text-[10px] text-muted-foreground">({agent.referral_code})</span>
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                    Share this link with prospective clients. When they sign up, they get automatically assigned to you.
-                                </div>
-                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                            <Input
-                                readOnly
-                                value={referral.referral_link}
-                                className="text-xs font-mono bg-muted/50 h-8 w-full sm:w-72"
-                            />
+                        <div className="flex items-center gap-2">
+                            <Button
+                                onClick={() => setShowCreateModal(true)}
+                                className="h-8.5 px-3.5 text-xs font-semibold gap-1.5 cursor-pointer rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs shrink-0"
+                            >
+                                <Plus className="size-3.5" />
+                                <span>Onboard New Client</span>
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Integrated Referral Link Strip */}
+                    <div className="mt-3.5 pt-3.5 border-t border-border/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Sparkles className="size-3.5 text-emerald-600 shrink-0" />
+                            <span className="font-semibold text-foreground">Partner Referral Link:</span>
+                            <span className="font-mono text-[10px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/60">
+                                {agent.referral_code}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                            <div className="relative flex-1 sm:w-96">
+                                <Input
+                                    readOnly
+                                    value={referral.referral_link}
+                                    className="h-7.5 text-xs font-mono bg-muted/30 pr-2 select-all"
+                                />
+                            </div>
                             <Button
                                 onClick={copyLink}
                                 variant="outline"
-                                className="h-8 px-3 gap-1 text-xs shrink-0 cursor-pointer"
+                                size="sm"
+                                className="h-7.5 px-3 gap-1 text-xs shrink-0 cursor-pointer rounded-lg border-border/80 hover:bg-muted"
                             >
                                 {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
-                                {copied ? 'Copied' : 'Copy'}
+                                <span>{copied ? 'Copied!' : 'Copy Link'}</span>
                             </Button>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </div>
 
-                {/* Managed Clients Directory */}
-                <Card className="border-border bg-card">
-                    <CardHeader className="pb-3 border-b border-border/50">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                            <div>
-                                <CardTitle className="text-sm font-semibold text-foreground">
-                                    Assigned Client Workspaces
-                                </CardTitle>
-                                <CardDescription className="text-xs">
-                                    Clients assigned to your partner account ({filteredCustomers.length})
-                                </CardDescription>
+                {/* Sleek, Compact KPI Metric Cards (Uniform bg-card styling) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {/* Card 1: Managed Clients */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                                <Building2 className="size-3.5" />
                             </div>
-
-                            <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <div className="relative flex-1 sm:w-60">
-                                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                        placeholder="Search clients..."
-                                        value={search}
-                                        onChange={(e) => setSearch(e.target.value)}
-                                        className="h-8 pl-8 text-xs"
-                                    />
-                                </div>
-
-                                <div className="flex items-center border border-border rounded-lg p-0.5 bg-muted/30">
-                                    <button
-                                        onClick={() => setStatusFilter('all')}
-                                        className={`px-2 py-1 text-[11px] rounded-md transition-colors ${
-                                            statusFilter === 'all' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'
-                                        }`}
-                                    >
-                                        All
-                                    </button>
-                                    <button
-                                        onClick={() => setStatusFilter('active')}
-                                        className={`px-2 py-1 text-[11px] rounded-md transition-colors ${
-                                            statusFilter === 'active' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'
-                                        }`}
-                                    >
-                                        Active
-                                    </button>
-                                </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Managed Clients</span>
+                                <span className="text-[10px] text-muted-foreground">{stats.active_customers} active plans</span>
                             </div>
                         </div>
-                    </CardHeader>
+                        <span className="text-base font-bold tabular-nums text-foreground">{stats.total_customers}</span>
+                    </div>
 
-                    <CardContent className="p-0">
-                        {filteredCustomers.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="bg-muted/40 text-muted-foreground border-b border-border/60">
-                                        <tr>
-                                            <th className="py-2.5 px-4 font-semibold">Business Workspace</th>
-                                            <th className="py-2.5 px-4 font-semibold">Owner Contact</th>
-                                            <th className="py-2.5 px-4 font-semibold">Status & Validity</th>
-                                            <th className="py-2.5 px-4 font-semibold">Numbers</th>
-                                            <th className="py-2.5 px-4 font-semibold">Wallet Balance</th>
-                                            <th className="py-2.5 px-4 font-semibold text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/60">
-                                        {filteredCustomers.map((c) => (
-                                            <tr key={c.id} className="hover:bg-muted/20 transition-colors">
-                                                <td className="py-3 px-4">
-                                                    <div className="font-semibold text-foreground">{c.name}</div>
-                                                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                                                        Created {c.created_at}
-                                                    </div>
-                                                </td>
-
-                                                <td className="py-3 px-4">
-                                                    <div className="font-medium text-foreground">{c.owner_name}</div>
-                                                    <div className="text-[10px] text-muted-foreground">{c.owner_email}</div>
-                                                </td>
-
-                                                <td className="py-3 px-4">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={`text-[9px] uppercase font-bold ${
-                                                                c.status === 'active'
-                                                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                                                    : 'border-amber-500/40 bg-amber-500/10 text-amber-600'
-                                                            }`}
-                                                        >
-                                                            {c.status}
-                                                        </Badge>
-                                                        <span className="text-[11px] text-muted-foreground">
-                                                            {c.subscription_expires_at ? `Exp: ${c.subscription_expires_at}` : 'Annual Plan'}
-                                                        </span>
-                                                    </div>
-                                                </td>
-
-                                                <td className="py-3 px-4">
-                                                    <span className="font-medium text-foreground">{c.channels_count}</span>
-                                                    <span className="text-muted-foreground text-[10px]"> / 1 connected</span>
-                                                </td>
-
-                                                <td className="py-3 px-4">
-                                                    <div className="font-bold text-foreground">{c.wallet_balance}</div>
-                                                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                                                        Bonus: {c.wallet_promo}
-                                                    </div>
-                                                </td>
-
-                                                <td className="py-3 px-4 text-right">
-                                                    <Button
-                                                        onClick={() => assistCustomer(c.id)}
-                                                        variant="outline"
-                                                        className="h-7 px-2.5 text-[11px] gap-1 hover:bg-emerald-500/10 hover:border-emerald-500/40 hover:text-emerald-600 cursor-pointer"
-                                                    >
-                                                        <ExternalLink className="size-3" />
-                                                        Assist Client
-                                                    </Button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    {/* Card 2: Conversions */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-teal-500/10 text-teal-600 flex items-center justify-center shrink-0">
+                                <UserCheck className="size-3.5" />
                             </div>
-                        ) : (
-                            <div className="text-center py-12 text-xs text-muted-foreground">
-                                <Building2 className="size-8 mx-auto text-muted-foreground/40 mb-2" />
-                                <p>No assigned clients found.</p>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Conversions</span>
+                                <span className="text-[10px] text-muted-foreground">Annual activations</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{stats.conversions}</span>
+                    </div>
+
+                    {/* Card 3: Messages Dispatched */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
+                                <Send className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Messages Sent</span>
+                                <span className="text-[10px] text-muted-foreground">Across workspaces</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{stats.total_messages_sent.toLocaleString()}</span>
+                    </div>
+
+                    {/* Card 4: Referral Rewards */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                                <Gift className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Partner Rewards</span>
+                                <span className="text-[10px] text-muted-foreground">₹500 / conversion</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{stats.total_referral_rewards}</span>
+                    </div>
+                </div>
+
+                {/* Unified Client Directory Card (Toolbar + Table / Empty State) */}
+                <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
+                    {/* Integrated Table Toolbar */}
+                    <div className="p-3 sm:px-4 border-b border-border/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-muted/20">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm font-bold text-foreground">Assigned Client Workspaces</h2>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-primary/10 text-primary">
+                                    {filteredCustomers.length}
+                                </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                                Clients linked to your partner account with live status, channel counts, and assist tools.
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            {/* Search */}
+                            <div className="relative flex-1 sm:w-56">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search clients..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="pl-8 h-7.5 text-xs bg-background"
+                                />
+                            </div>
+
+                            {/* Segmented Filter Pills */}
+                            <div className="inline-flex items-center gap-0.5 p-0.5 bg-muted/60 border border-border/60 rounded-lg shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setStatusFilter('all')}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                        statusFilter === 'all'
+                                            ? 'bg-background text-foreground shadow-xs'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                >
+                                    All ({customers.length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStatusFilter('active')}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                        statusFilter === 'active'
+                                            ? 'bg-emerald-600 text-white shadow-xs'
+                                            : 'text-emerald-600 hover:bg-emerald-500/10'
+                                    }`}
+                                >
+                                    Active ({stats.active_customers})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setStatusFilter('expired')}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
+                                        statusFilter === 'expired'
+                                            ? 'bg-rose-600 text-white shadow-xs'
+                                            : 'text-rose-600 hover:bg-rose-500/10'
+                                    }`}
+                                >
+                                    Expired ({expiredCount})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Table or Inviting Empty State */}
+                    {filteredCustomers.length === 0 ? (
+                        <div className="py-14 px-4 text-center">
+                            <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-2xs">
+                                <Building2 className="size-6" />
+                            </div>
+                            <h3 className="text-sm font-bold text-foreground">
+                                {customers.length === 0 ? 'No Client Workspaces Assigned Yet' : 'No Clients Matching Filter'}
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                                {customers.length === 0
+                                    ? 'Get started by onboarding your first client workspace directly, or share your referral link to earn commissions automatically.'
+                                    : 'No clients match your current search criteria. Try clearing the search or status filter.'}
+                            </p>
+                            {customers.length === 0 ? (
                                 <Button
                                     onClick={() => setShowCreateModal(true)}
-                                    variant="link"
-                                    className="text-xs text-emerald-600 mt-1 cursor-pointer"
+                                    className="mt-4 h-8 px-4 text-xs font-semibold gap-1.5 cursor-pointer rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
                                 >
-                                    Onboard your first client now
+                                    <Plus className="size-3.5" />
+                                    <span>Onboard Your First Client</span>
                                 </Button>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                            ) : (
+                                <Button
+                                    onClick={() => {
+                                        setSearch('');
+                                        setStatusFilter('all');
+                                    }}
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-4 h-7.5 text-xs rounded-lg cursor-pointer"
+                                >
+                                    Clear Filters
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead className="bg-muted/40 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
+                                    <tr>
+                                        <th className="py-2.5 px-3.5">Business Workspace</th>
+                                        <th className="py-2.5 px-3.5">Owner Contact</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Status & Plan</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">WhatsApp Numbers</th>
+                                        <th className="py-2.5 px-3.5 whitespace-nowrap">Wallet Balance</th>
+                                        <th className="py-2.5 px-3.5 text-right whitespace-nowrap">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/60">
+                                    {filteredCustomers.map((c) => (
+                                        <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                                            <td className="py-2.5 px-3.5">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex size-7.5 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 font-bold text-xs uppercase shrink-0">
+                                                        {c.name.slice(0, 2)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-semibold text-foreground text-xs truncate max-w-[200px]">
+                                                            {c.name}
+                                                        </div>
+                                                        <div className="text-[11px] text-muted-foreground">
+                                                            Joined {c.created_at}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <td className="py-2.5 px-3.5">
+                                                <div className="font-medium text-foreground text-xs">{c.owner_name}</div>
+                                                <div className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                                                    {c.owner_email}
+                                                </div>
+                                            </td>
+
+                                            <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                                                            c.status === 'active'
+                                                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                                : 'border-rose-500/30 bg-rose-500/10 text-rose-600'
+                                                        }`}
+                                                    >
+                                                        {c.status}
+                                                    </Badge>
+                                                    <span className="text-[11px] text-muted-foreground font-medium">
+                                                        {c.subscription_expires_at ? `Exp: ${c.subscription_expires_at}` : 'Annual Plan'}
+                                                    </span>
+                                                </div>
+                                            </td>
+
+                                            <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Smartphone className="size-3 text-muted-foreground" />
+                                                    <span className="font-bold tabular-nums text-foreground">{c.channels_count}</span>
+                                                    <span className="text-[11px] text-muted-foreground">/ 1 Number</span>
+                                                </div>
+                                            </td>
+
+                                            <td className="py-2.5 px-3.5 whitespace-nowrap">
+                                                <span className="font-bold tabular-nums text-foreground block">
+                                                    {c.wallet_balance}
+                                                </span>
+                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                                                    Bonus: {c.wallet_promo}
+                                                </span>
+                                            </td>
+
+                                            <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
+                                                <Button
+                                                    onClick={() => assistCustomer(c.id)}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-7 px-2.5 text-xs gap-1.5 rounded-lg border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-medium cursor-pointer shadow-2xs"
+                                                >
+                                                    <ExternalLink className="size-3" />
+                                                    <span>Assist Client</span>
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Onboard Customer Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-                    <div className="bg-card border border-border w-full max-w-md rounded-xl p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                    <div className="bg-card border border-border/80 w-full max-w-md rounded-2xl p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex items-center justify-between pb-3 border-b border-border/60">
                             <div className="flex items-center gap-2">
-                                <Plus className="size-4 text-emerald-600 dark:text-emerald-400" />
-                                <h3 className="text-sm font-bold text-foreground">Onboard Client Workspace</h3>
+                                <div className="size-7.5 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center font-bold">
+                                    <Plus className="size-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-foreground">Onboard Client Workspace</h3>
+                                    <p className="text-[11px] text-muted-foreground">Set up a new client account with annual SaaS plan.</p>
+                                </div>
                             </div>
                             <button
                                 onClick={() => setShowCreateModal(false)}
-                                className="text-muted-foreground hover:text-foreground text-xs"
+                                className="size-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                             >
                                 <X className="size-4" />
                             </button>
@@ -406,81 +466,106 @@ export default function AgentDashboard({ agent, customers, stats, referral }: Pr
 
                         <form onSubmit={handleCreateCustomer} className="space-y-3">
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Client Business Name</label>
+                                <Label htmlFor="business_name" className="text-xs font-semibold text-foreground">
+                                    Client Business Name
+                                </Label>
                                 <Input
+                                    id="business_name"
                                     required
                                     placeholder="e.g. Acme Retailers Pvt Ltd"
                                     value={formData.business_name}
                                     onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                                    className="h-8 text-xs"
+                                    className="h-8 text-xs bg-muted/30"
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Client Owner Name</label>
+                                <Label htmlFor="owner_name" className="text-xs font-semibold text-foreground">
+                                    Client Owner Full Name
+                                </Label>
                                 <Input
+                                    id="owner_name"
                                     required
                                     placeholder="e.g. Ramesh Patel"
                                     value={formData.owner_name}
                                     onChange={(e) => setFormData({ ...formData, owner_name: e.target.value })}
-                                    className="h-8 text-xs"
+                                    className="h-8 text-xs bg-muted/30"
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Client Login Email</label>
+                                <Label htmlFor="owner_email" className="text-xs font-semibold text-foreground">
+                                    Client Login Email
+                                </Label>
                                 <Input
+                                    id="owner_email"
                                     type="email"
                                     required
                                     placeholder="owner@acme.com"
                                     value={formData.owner_email}
                                     onChange={(e) => setFormData({ ...formData, owner_email: e.target.value })}
-                                    className="h-8 text-xs"
+                                    className="h-8 text-xs bg-muted/30"
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold text-foreground">Temporary Password</label>
-                                <Input
-                                    type="password"
-                                    required
-                                    minLength={8}
-                                    placeholder="Minimum 8 characters"
-                                    value={formData.owner_password}
-                                    onChange={(e) => setFormData({ ...formData, owner_password: e.target.value })}
-                                    className="h-8 text-xs"
-                                />
-                            </div>
-
-                            <div className="p-3 bg-muted/40 rounded-lg border border-border/60 space-y-1 text-xs">
-                                <div className="font-semibold text-foreground">Auto-Provisioned Package:</div>
-                                <div className="text-muted-foreground flex items-center gap-1.5">
-                                    <CheckCircle2 className="size-3 text-emerald-600" />
-                                    Annual Business Plan (365 Days)
-                                </div>
-                                <div className="text-muted-foreground flex items-center gap-1.5">
-                                    <CheckCircle2 className="size-3 text-emerald-600" />
-                                    ₹500 Welcome Bonus credited to Client
-                                </div>
-                                <div className="text-muted-foreground flex items-center gap-1.5">
-                                    <CheckCircle2 className="size-3 text-emerald-600" />
-                                    ₹500 Referral Reward credited to your Partner Wallet
+                                <Label htmlFor="owner_password" className="text-xs font-semibold text-foreground">
+                                    Temporary Password
+                                </Label>
+                                <div className="relative">
+                                    <Input
+                                        id="owner_password"
+                                        type={showPassword ? 'text' : 'password'}
+                                        required
+                                        minLength={8}
+                                        placeholder="Minimum 8 characters"
+                                        value={formData.owner_password}
+                                        onChange={(e) => setFormData({ ...formData, owner_password: e.target.value })}
+                                        className="h-8 text-xs bg-muted/30 pr-8"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
+                                        title={showPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                                    </button>
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-end gap-2 pt-2">
+                            {/* Auto-provision package overview */}
+                            <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/20 space-y-1 text-xs">
+                                <div className="font-semibold text-emerald-800 dark:text-emerald-300 text-[11px] uppercase tracking-wider">
+                                    Auto-Provisioned Package:
+                                </div>
+                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                    <span>Annual SaaS License (365 Days validity)</span>
+                                </div>
+                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                    <span>₹500 Welcome Bonus credited to Client Wallet</span>
+                                </div>
+                                <div className="text-muted-foreground flex items-center gap-1.5 text-[11px]">
+                                    <CheckCircle2 className="size-3 text-emerald-600 shrink-0" />
+                                    <span>₹500 Referral Commission credited to your Partner Ledger</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
                                 <Button
                                     type="button"
                                     variant="outline"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="h-8 text-xs"
+                                    className="h-8 text-xs rounded-lg cursor-pointer"
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     type="submit"
                                     disabled={isSubmitting}
-                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer shadow-2xs"
                                 >
                                     {isSubmitting ? 'Provisioning...' : 'Provision Client Workspace'}
                                 </Button>

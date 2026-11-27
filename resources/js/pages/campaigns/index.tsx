@@ -34,6 +34,8 @@ import {
     Upload,
     Download,
     FileSpreadsheet,
+    Smartphone,
+    ShieldCheck,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -141,6 +143,33 @@ export default function CampaignsList({
     const [isConnectPromptOpen, setIsConnectPromptOpen] = useState(false);
 
     const [campaignActionBusy, setCampaignActionBusy] = useState<string | null>(null);
+    const [campaignSearch, setCampaignSearch] = useState('');
+    const [campaignStatusFilter, setCampaignStatusFilter] = useState<'all' | 'completed' | 'scheduled'>('all');
+
+    const totalMessagesSent = useMemo(() => {
+        return recentCampaigns.reduce((acc, c) => acc + (c.successCount || 0), 0);
+    }, [recentCampaigns]);
+
+    const completedCampaignsCount = useMemo(() => {
+        return recentCampaigns.filter((c) => c.status === 'completed').length;
+    }, [recentCampaigns]);
+
+    const scheduledCampaignsCount = useMemo(() => {
+        return recentCampaigns.filter((c) => c.status === 'scheduled' || c.status === 'paused' || c.isPaused).length;
+    }, [recentCampaigns]);
+
+    const filteredCampaigns = useMemo(() => {
+        return recentCampaigns.filter((camp) => {
+            const matchesSearch =
+                camp.name.toLowerCase().includes(campaignSearch.toLowerCase()) ||
+                camp.templateName.toLowerCase().includes(campaignSearch.toLowerCase()) ||
+                (camp.category && camp.category.toLowerCase().includes(campaignSearch.toLowerCase()));
+            if (!matchesSearch) return false;
+            if (campaignStatusFilter === 'completed') return camp.status === 'completed';
+            if (campaignStatusFilter === 'scheduled') return camp.status === 'scheduled' || camp.status === 'paused' || camp.isPaused;
+            return true;
+        });
+    }, [recentCampaigns, campaignSearch, campaignStatusFilter]);
 
     // Broadcast Modal State
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -378,7 +407,8 @@ export default function CampaignsList({
     };
 
     const exportCampaignsExcel = () => {
-        const rows = recentCampaigns.map((c) => ({
+        const listToExport = filteredCampaigns.length > 0 ? filteredCampaigns : recentCampaigns;
+        const rows = listToExport.map((c) => ({
             'Campaign Name': c.name,
             'Template': c.templateName,
             'Language': c.templateLanguage,
@@ -491,50 +521,137 @@ export default function CampaignsList({
         <>
             <Head title="WhatsApp Broadcasts & Meta Campaigns - Sathwara InfoTech" />
 
-            <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-3.5 sm:p-5 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden">
-                {/* Compact Action Toolbar */}
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-border/60 pb-3.5">
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                        Broadcast official Meta-approved WhatsApp templates to your audience with live delivery tracking.
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                        <Badge variant="outline" className="text-[11px]">Batch: {maxContactsLimit.toLocaleString()} · Meta: {messagingLimits?.unlimited ? 'Unlimited' : messagingLimits?.dailyLimit ? `${messagingLimits.dailyLimit.toLocaleString()}/24h` : 'Not verified'}{messagingLimits?.source === 'saved' ? ' (saved)' : ''}</Badge>
-                        <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 h-9 rounded-lg text-xs shadow-2xs">
-                            <span className="text-[11px] text-muted-foreground font-medium">Sender:</span>
-                            <select
-                                aria-label="Sender number"
-                                value={channel?.id ?? ''}
-                                onChange={(e) => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })}
-                                className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
-                            >
-                                <option value="">Select number</option>
-                                {channels.map((c) => (
-                                    <option value={c.id} key={c.id}>
-                                        {c.name} · {c.phone_number}
-                                    </option>
-                                ))}
-                            </select>
+            <div className="space-y-4 w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 pb-12">
+                {/* Header Banner Card */}
+                <div className="bg-card border border-border/70 rounded-2xl p-4 sm:p-5 shadow-2xs">
+                    {/* Top Row: Title, Badge, and Primary Action */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <div className="flex items-center gap-2.5">
+                                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                                    WhatsApp Broadcasts &amp; Campaigns
+                                </h1>
+                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 text-[10px] font-bold uppercase tracking-wider shrink-0">
+                                    Meta Cloud API
+                                </Badge>
+                            </div>
+                            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                                Broadcast official Meta-approved templates to targeted contacts or segments with live delivery tracking.
+                            </p>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            asChild
-                            className="text-xs h-9 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold"
-                        >
-                            <Link href="/campaigns/ads">
-                                <Megaphone className="size-3.5" />
-                                WhatsApp Ads (CTWA)
-                            </Link>
-                        </Button>
+
                         <Button
                             size="sm"
                             onClick={handleNewCampaignClick}
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-9 text-xs font-semibold shadow-xs px-3.5"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 h-8.5 text-xs font-semibold shadow-xs px-4 rounded-lg cursor-pointer shrink-0 self-start sm:self-auto"
                         >
                             <Plus className="size-4" />
                             New Campaign
                         </Button>
+                    </div>
+
+                    {/* Integrated Channel & Quick Tools Bar */}
+                    <div className="mt-3.5 pt-3.5 border-t border-border/60 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+                        {/* Sender Number Selector */}
+                        {channels && channels.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-medium text-muted-foreground">Active WhatsApp Sender:</span>
+                                <div className="flex items-center gap-1.5 bg-muted/40 border border-border/80 px-2.5 h-7.5 rounded-lg text-xs">
+                                    <Smartphone className="size-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                    <select
+                                        aria-label="Sender number"
+                                        value={channel?.id ?? ''}
+                                        onChange={(e) => router.get('/campaigns', { channel_id: e.target.value }, { preserveState: false })}
+                                        className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
+                                    >
+                                        <option value="">Select number</option>
+                                        {channels.map((c) => (
+                                            <option value={c.id} key={c.id}>
+                                                {c.name} · {c.phone_number}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* WhatsApp Ads CTWA link */}
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                className="text-xs h-7.5 gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-500/10 font-semibold rounded-lg"
+                            >
+                                <Link href="/campaigns/ads">
+                                    <Megaphone className="size-3 text-purple-600 dark:text-purple-400" />
+                                    WhatsApp Ads (CTWA)
+                                </Link>
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4 KPI Overview Metric Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* Card 1: Total Campaigns */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                <Send className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Total Campaigns</span>
+                                <span className="text-[10px] text-muted-foreground">{completedCampaignsCount} completed</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{recentCampaigns.length}</span>
+                    </div>
+
+                    {/* Card 2: Messages Sent */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                                <CheckCircle2 className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Messages Sent</span>
+                                <span className="text-[10px] text-muted-foreground">Successful dispatches</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">{totalMessagesSent.toLocaleString()}</span>
+                    </div>
+
+                    {/* Card 3: Meta 24h Quota */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
+                                <ShieldCheck className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Meta 24h Quota</span>
+                                <span className="text-[10px] text-muted-foreground">{messagingLimits?.tier || 'Tier 1'} limit</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-foreground">
+                            {messagingLimits?.unlimited ? 'Unlimited' : `${messagingLimits?.dailyLimit?.toLocaleString() || '1,000'}/24h`}
+                        </span>
+                    </div>
+
+                    {/* Card 4: Wallet Balance */}
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-7.5 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                                <WalletIcon className="size-3.5" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-semibold text-foreground block leading-tight">Available Credits</span>
+                                <span className="text-[10px] text-muted-foreground">Wallet balance</span>
+                            </div>
+                        </div>
+                        <span className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                            {wallet?.total_balance_formatted || '₹500.00'}
+                        </span>
                     </div>
                 </div>
 
@@ -575,166 +692,252 @@ export default function CampaignsList({
 
                 {/* Recent Broadcast Campaigns History */}
                 {recentCampaigns.length > 0 && (
-                    <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-3 pt-3.5 px-4 sm:px-5">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                                    <Clock className="size-4 text-primary" />
-                                    Recent Broadcast Activity
-                                </CardTitle>
-                                <div className="flex items-center gap-2.5">
-                                    <span className="text-[11px] text-muted-foreground">
-                                        {recentCampaigns.length} campaigns dispatched
+                    <div className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-2xs">
+                        {/* Integrated Table Toolbar */}
+                        <div className="p-3 sm:px-4 border-b border-border/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-muted/20">
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                        <Clock className="size-3.5 text-primary" />
+                                        Recent Broadcast Activity
+                                    </h2>
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-primary/10 text-primary">
+                                        {filteredCampaigns.length}
                                     </span>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={exportCampaignsExcel}
-                                        className="h-7 text-[11px] gap-1.5 border-border"
-                                    >
-                                        <Download className="size-3.5 text-emerald-600" />
-                                        Export Excel
-                                    </Button>
                                 </div>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    Performance, delivery status, and read analytics for dispatched campaigns.
+                                </p>
                             </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
+
+                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                                {/* Search */}
+                                <div className="relative flex-1 sm:w-52">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search campaigns..."
+                                        value={campaignSearch}
+                                        onChange={(e) => setCampaignSearch(e.target.value)}
+                                        className="pl-8 h-7.5 text-xs bg-background"
+                                    />
+                                </div>
+
+                                {/* Segmented Filter Pills */}
+                                <div className="inline-flex items-center gap-0.5 p-0.5 bg-muted/60 border border-border/60 rounded-lg shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setCampaignStatusFilter('all')}
+                                        className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                                            campaignStatusFilter === 'all'
+                                                ? 'bg-background text-foreground shadow-2xs'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        All ({recentCampaigns.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCampaignStatusFilter('completed')}
+                                        className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                                            campaignStatusFilter === 'completed'
+                                                ? 'bg-background text-emerald-600 dark:text-emerald-400 shadow-2xs'
+                                                : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                    >
+                                        Completed ({completedCampaignsCount})
+                                    </button>
+                                    {scheduledCampaignsCount > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setCampaignStatusFilter('scheduled')}
+                                            className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                                                campaignStatusFilter === 'scheduled'
+                                                    ? 'bg-background text-amber-600 shadow-2xs'
+                                                    : 'text-muted-foreground hover:text-foreground'
+                                            }`}
+                                        >
+                                            Scheduled ({scheduledCampaignsCount})
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Export Excel */}
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={exportCampaignsExcel}
+                                    className="h-7.5 text-xs gap-1.5 border-border/80 rounded-lg shrink-0"
+                                >
+                                    <Download className="size-3 text-emerald-600" />
+                                    Export Excel
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Table */}
+                        {filteredCampaigns.length > 0 ? (
                             <div className="overflow-x-auto">
-                                <table className="w-full min-w-[680px] text-left text-xs">
-                                    <thead className="bg-muted/40 border-y border-border/70 text-[11px] uppercase tracking-wider text-muted-foreground">
+                                <table className="w-full min-w-[700px] text-left text-xs">
+                                    <thead className="bg-muted/40 border-b border-border/70 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                                         <tr>
                                             <th className="py-2.5 px-4 font-semibold">Campaign Name</th>
                                             <th className="py-2.5 px-4 font-semibold">Template &amp; Category</th>
-                                            <th className="py-2.5 px-4 font-semibold">Recipients</th>
-                                            <th className="py-2.5 px-4 font-semibold">Cost</th>
-                                            <th className="py-2.5 px-4 font-semibold">Status</th>
+                                            <th className="py-2.5 px-4 font-semibold text-center">Recipients</th>
+                                            <th className="py-2.5 px-4 font-semibold text-right">Cost</th>
+                                            <th className="py-2.5 px-4 font-semibold text-center">Status</th>
                                             <th className="py-2.5 px-4 font-semibold text-center">Actions</th>
-                                            <th className="py-2.5 px-4 font-semibold text-right">Date</th>
+                                            <th className="py-2.5 px-4 font-semibold text-right">Date &amp; Time</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border/50">
-                                        {recentCampaigns.map((camp) => (
-                                            <tr key={camp.id} className="hover:bg-muted/30 transition-colors">
-                                                <td className="py-2.5 px-4 font-medium text-foreground">
-                                                    <Link
-                                                        href={`/campaigns/${camp.id}/analytics`}
-                                                        className="font-semibold text-foreground hover:text-primary hover:underline text-left cursor-pointer"
-                                                        title="Click to view detailed campaign analytics"
-                                                    >
-                                                        {camp.name}
-                                                    </Link>
-                                                    {camp.scheduledAt && camp.status === 'scheduled' && <p className="mt-1 text-[10px] text-muted-foreground">Scheduled: {new Date(camp.scheduledAt).toLocaleString()}</p>}
-                                                </td>
-                                                <td className="py-2.5 px-4">
-                                                    <span className="font-mono text-[11px] text-foreground">{camp.templateName}</span>
-                                                    <div className="text-[10px] text-muted-foreground uppercase">{camp.category || 'MARKETING'} ({camp.templateLanguage})</div>
-                                                </td>
-                                                <td className="py-2.5 px-4 text-foreground font-semibold">
-                                                    {camp.successCount} / {camp.recipientsCount}
-                                                    {camp.failedCount > 0 && (
-                                                        <span className="text-destructive text-[10px] ml-1">
-                                                            ({camp.failedCount} failed)
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="py-2.5 px-4 font-medium text-foreground">
-                                                    {camp.costFormatted || `₹${((camp.recipientsCount * 0.88)).toFixed(2)}`}
-                                                </td>
-                                                <td className="py-2.5 px-4">
-                                                    <span
-                                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                                            camp.status === 'completed'
-                                                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                                                : camp.status === 'paused' || camp.status === 'scheduled'
-                                                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                                                : camp.status === 'cancelled'
-                                                                ? 'bg-muted text-muted-foreground'
-                                                                : camp.status === 'processing' || camp.status === 'queued'
-                                                                ? 'bg-blue-500/10 text-blue-600'
-                                                                : 'bg-destructive/10 text-destructive'
-                                                        }`}
-                                                    >
-                                                        <span
-                                                            className={`size-1.5 rounded-full ${
-                                                                camp.status === 'completed'
-                                                                    ? 'bg-emerald-500'
-                                                                    : camp.status === 'paused' || camp.status === 'scheduled'
-                                                                    ? 'bg-amber-500'
-                                                                    : camp.status === 'processing' || camp.status === 'queued'
-                                                                    ? 'bg-blue-500 animate-pulse'
-                                                                    : 'bg-destructive'
-                                                            }`}
-                                                        />
-                                                        {camp.isPaused ? 'Paused' : camp.status}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2.5 px-4 text-center">
-                                                    <div className="flex items-center justify-center gap-1.5">
-                                                        {/* Pause / Resume Controls */}
-                                                        {camp.status !== 'completed' && camp.status !== 'cancelled' && (
-                                                            <>
-                                                                {camp.isPaused || camp.status === 'paused' ? (
-                                                                    <Button
-                                                                        size="icon"
-                                                                        variant="ghost"
-                                                                        className="size-6 text-emerald-600 hover:bg-emerald-500/10"
-                                                                        title="Resume Campaign"
-                                                                        disabled={campaignActionBusy === camp.id}
-                                                                        onClick={() => handleResume(camp.id)}
-                                                                    >
-                                                                        <Play className="size-3" />
-                                                                    </Button>
-                                                                ) : (
-                                                                    <Button
-                                                                        size="icon"
-                                                                        variant="ghost"
-                                                                        className="size-6 text-amber-600 hover:bg-amber-500/10"
-                                                                        title="Pause Campaign"
-                                                                        disabled={campaignActionBusy === camp.id}
-                                                                        onClick={() => handlePause(camp.id)}
-                                                                    >
-                                                                        <Pause className="size-3" />
-                                                                    </Button>
-                                                                )}
+                                        {filteredCampaigns.map((camp) => {
+                                            const parts = camp.date.split(' ');
+                                            const hasTime = parts.length >= 3 && camp.date.includes(':');
+                                            const dateText = hasTime ? parts.slice(0, 3).join(' ') : camp.date;
+                                            const timeText = hasTime ? parts.slice(3).join(' ') : '';
 
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="size-6 text-destructive hover:bg-destructive/10"
-                                                                    title="Cancel & Refund Campaign"
-                                                                    disabled={campaignActionBusy === camp.id}
-                                                                    onClick={() => handleCancel(camp.id)}
-                                                                >
-                                                                    <XCircle className="size-3" />
-                                                                </Button>
-                                                            </>
-                                                        )}
-
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            asChild
-                                                            className="h-6.5 text-[11px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10 font-semibold cursor-pointer"
-                                                            title="View Delivery Performance, Read Rate & Replies"
+                                            return (
+                                                <tr key={camp.id} className="hover:bg-muted/30 transition-colors">
+                                                    <td className="py-2.5 px-4 font-medium text-foreground max-w-[240px]">
+                                                        <Link
+                                                            href={`/campaigns/${camp.id}/analytics`}
+                                                            className="font-semibold text-foreground hover:text-primary hover:underline text-left cursor-pointer line-clamp-1"
+                                                            title="Click to view detailed campaign analytics"
                                                         >
-                                                            <Link href={`/campaigns/${camp.id}/analytics`}>
-                                                                <BarChart2 className="size-3" />
-                                                                Analytics
-                                                            </Link>
-                                                        </Button>
-                                                    </div>
-                                                </td>
-                                                <td className="py-2.5 px-4 text-right text-[11px] text-muted-foreground font-mono">
-                                                    {camp.date}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                            {camp.name}
+                                                        </Link>
+                                                        {camp.scheduledAt && camp.status === 'scheduled' && (
+                                                            <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-600 font-medium">
+                                                                <Clock className="size-2.5" />
+                                                                <span>Scheduled: {new Date(camp.scheduledAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })}</span>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-4">
+                                                        <span className="font-mono text-[11px] font-medium text-foreground px-1.5 py-0.5 rounded bg-muted/60 border border-border/60">
+                                                            {camp.templateName}
+                                                        </span>
+                                                        <div className="text-[10px] text-muted-foreground uppercase font-medium mt-1">
+                                                            {camp.category || 'MARKETING'} ({camp.templateLanguage})
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2.5 px-4 text-center">
+                                                        <div className="inline-flex items-center gap-1 font-bold tabular-nums text-foreground">
+                                                            <span>{camp.successCount} / {camp.recipientsCount}</span>
+                                                            {camp.successCount === camp.recipientsCount && (
+                                                                <CheckCircle2 className="size-3 text-emerald-600" />
+                                                            )}
+                                                        </div>
+                                                        {camp.failedCount > 0 && (
+                                                            <div className="text-[10px] text-destructive font-medium">
+                                                                {camp.failedCount} failed
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-4 text-right font-bold tabular-nums text-foreground">
+                                                        {camp.costFormatted || `₹${((camp.recipientsCount * 0.88)).toFixed(2)}`}
+                                                    </td>
+                                                    <td className="py-2.5 px-4 text-center">
+                                                        <span
+                                                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                                                camp.status === 'completed'
+                                                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                                    : camp.status === 'paused' || camp.status === 'scheduled'
+                                                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                                                    : camp.status === 'cancelled'
+                                                                    ? 'bg-muted text-muted-foreground'
+                                                                    : camp.status === 'processing' || camp.status === 'queued'
+                                                                    ? 'bg-blue-500/10 text-blue-600'
+                                                                    : 'bg-destructive/10 text-destructive'
+                                                            }`}
+                                                        >
+                                                            <span
+                                                                className={`size-1.5 rounded-full ${
+                                                                    camp.status === 'completed'
+                                                                        ? 'bg-emerald-500'
+                                                                        : camp.status === 'paused' || camp.status === 'scheduled'
+                                                                        ? 'bg-amber-500'
+                                                                        : camp.status === 'processing' || camp.status === 'queued'
+                                                                        ? 'bg-blue-500 animate-pulse'
+                                                                        : 'bg-destructive'
+                                                                }`}
+                                                            />
+                                                            {camp.isPaused ? 'Paused' : camp.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-4 text-center">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            {/* Pause / Resume Controls */}
+                                                            {camp.status !== 'completed' && camp.status !== 'cancelled' && (
+                                                                <>
+                                                                    {camp.isPaused || camp.status === 'paused' ? (
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="size-6 text-emerald-600 hover:bg-emerald-500/10 cursor-pointer"
+                                                                            title="Resume Campaign"
+                                                                            disabled={campaignActionBusy === camp.id}
+                                                                            onClick={() => handleResume(camp.id)}
+                                                                        >
+                                                                            <Play className="size-3" />
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="size-6 text-amber-600 hover:bg-amber-500/10 cursor-pointer"
+                                                                            title="Pause Campaign"
+                                                                            disabled={campaignActionBusy === camp.id}
+                                                                            onClick={() => handlePause(camp.id)}
+                                                                        >
+                                                                            <Pause className="size-3" />
+                                                                        </Button>
+                                                                    )}
+
+                                                                    <Button
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="size-6 text-destructive hover:bg-destructive/10 cursor-pointer"
+                                                                        title="Cancel & Refund Campaign"
+                                                                        disabled={campaignActionBusy === camp.id}
+                                                                        onClick={() => handleCancel(camp.id)}
+                                                                    >
+                                                                        <XCircle className="size-3" />
+                                                                    </Button>
+                                                                </>
+                                                            )}
+
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                asChild
+                                                                className="h-6.5 text-[11px] gap-1 px-2 border-primary/30 text-primary hover:bg-primary/10 font-semibold cursor-pointer"
+                                                                title="View Delivery Performance, Read Rate & Replies"
+                                                            >
+                                                                <Link href={`/campaigns/${camp.id}/analytics`}>
+                                                                    <BarChart2 className="size-3" />
+                                                                    Analytics
+                                                                </Link>
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                                                        <div className="text-xs font-semibold text-foreground">{dateText}</div>
+                                                        {timeText && <div className="text-[10px] text-muted-foreground font-mono">{timeText}</div>}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
-                        </CardContent>
-                    </Card>
+                        ) : (
+                            <div className="p-8 text-center text-xs text-muted-foreground">
+                                No campaigns match your current search or filter.
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {/* Empty State when no campaigns have been launched yet */}
@@ -761,43 +964,41 @@ export default function CampaignsList({
                     </div>
                 )}
 
-                {/* Broadcast Guide & Quick Link Card */}
+                {/* Broadcast Guide & Quick Link Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-2 pt-3.5 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                                <FileText className="size-4 text-primary" />
+                    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-2.5">
+                        <div className="flex items-center gap-2">
+                            <div className="size-6.5 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                <FileText className="size-3.5" />
+                            </div>
+                            <h3 className="text-xs font-bold text-foreground">
                                 WhatsApp Templates Management
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 pb-3.5 text-xs text-muted-foreground space-y-2">
-                            <p>
-                                Templates are selected when you click <strong>New Campaign</strong>. To create new templates, submit them to Meta, or sync approved templates for your WhatsApp number:
-                            </p>
-                            <Button variant="outline" size="sm" asChild className="h-7 text-xs">
-                                <Link href="/templates">
-                                    Open Templates Management &rarr;
-                                </Link>
-                            </Button>
-                        </CardContent>
-                    </Card>
+                            </h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                            Templates are chosen when composing a <strong>New Campaign</strong>. To create new templates, submit them to Meta for approval, or sync approved templates:
+                        </p>
+                        <Button variant="outline" size="sm" asChild className="h-7 text-xs font-semibold rounded-lg mt-1">
+                            <Link href="/templates">
+                                Open Templates Management &rarr;
+                            </Link>
+                        </Button>
+                    </div>
 
-                    <Card className="border-border shadow-2xs">
-                        <CardHeader className="pb-2 pt-3.5 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-bold flex items-center gap-2">
-                                <Sparkles className="size-4 text-amber-500" />
+                    <div className="rounded-xl border border-border/70 bg-card p-4 shadow-2xs space-y-2.5">
+                        <div className="flex items-center gap-2">
+                            <div className="size-6.5 rounded-md bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                                <Sparkles className="size-3.5" />
+                            </div>
+                            <h3 className="text-xs font-bold text-foreground">
                                 Meta Broadcast Rules &amp; Compliance
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 pb-3.5 text-xs text-muted-foreground space-y-1.5">
-                            <p>
-                                • Marketing and Utility campaigns must use official Meta-approved templates.
-                            </p>
-                            <p>
-                                • Recipients must have opted in. High opt-out or block rates lower your Meta quality rating.
-                            </p>
-                        </CardContent>
-                    </Card>
+                            </h3>
+                        </div>
+                        <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4 leading-relaxed">
+                            <li>Marketing and Utility broadcasts must always use official Meta-approved templates.</li>
+                            <li>Recipients must have opted in. High block rates reduce your Meta messaging quality rating.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 

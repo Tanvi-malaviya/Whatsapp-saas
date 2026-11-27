@@ -93,7 +93,7 @@ export default function BotBuilder() {
         if (!previewInput.trim()) return;
 
         const userMsg = previewInput.trim();
-        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const now = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
         const updated = [...chatMessages, { sender: 'user' as const, text: userMsg, time: now }];
         setChatMessages(updated);
@@ -115,7 +115,7 @@ export default function BotBuilder() {
         setTimeout(() => {
             setChatMessages((prev) => [
                 ...prev,
-                { sender: 'bot', text: matchedReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+                { sender: 'bot', text: matchedReply, time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) },
             ]);
         }, 600);
     };

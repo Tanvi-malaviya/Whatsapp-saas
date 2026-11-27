@@ -154,7 +154,7 @@ class MetaWebhookController extends Controller
                 'organization_id' => $org->id, 'channel_phone_number_id' => $channel->phone_number_id, 'contact_phone' => $phone,
             ], ['channel_id' => $channel->id, 'contact_name' => $profile['profile']['name'] ?? $phone, 'status' => 'open', 'is_opted_in' => true]);
             $first = ! $conversation->messages()->where('direction', 'inbound')->exists();
-            $sentAt = isset($incoming['timestamp']) ? \Carbon\CarbonImmutable::createFromTimestamp((int) $incoming['timestamp']) : now();
+            $sentAt = isset($incoming['timestamp']) ? \Carbon\CarbonImmutable::createFromTimestamp((int) $incoming['timestamp'], config('app.timezone', 'Asia/Kolkata')) : now();
             $window = $sentAt->addHours(24);
             $conversation->update([
                 'channel_id' => $channel->id, 'last_message_at' => max($sentAt, $conversation->last_message_at ?? $sentAt),

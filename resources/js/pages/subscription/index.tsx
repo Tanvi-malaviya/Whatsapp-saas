@@ -133,7 +133,7 @@ export default function Subscription({
                                 <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                                     <span>
                                         {subscriptionExpiresAt
-                                            ? `Expires ${new Date(subscriptionExpiresAt).toLocaleDateString()}`
+                                            ? `Expires ${new Date(subscriptionExpiresAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}`
                                             : 'No subscription expiry date'}
                                     </span>
                                     {daysUntilExpiry !== null && (
