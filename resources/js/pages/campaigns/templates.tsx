@@ -320,6 +320,7 @@ export default function MessageTemplates({
         const formData = new FormData();
         formData.append('body', editBody.trim());
         formData.append('template_name', editingTemplate.name);
+        formData.append('header_format', editingTemplate.headerFormat || 'NONE');
         if (editHeader.trim()) formData.append('header', editHeader.trim());
         if (editFooter.trim()) formData.append('footer', editFooter.trim());
         if (editHeaderUrl.trim()) formData.append('header_url', editHeaderUrl.trim());
@@ -1067,10 +1068,10 @@ export default function MessageTemplates({
                     )}
 
                     <form onSubmit={handleUpdateTemplate} className="space-y-2.5 py-0.5">
-                        {/* Text Header for non-video templates */}
-                        {!(editingTemplate?.headerFormat === 'VIDEO' || editingTemplate?.name?.toLowerCase().includes('launch') || editingTemplate?.name?.toLowerCase().includes('video')) && (
+                        {/* Text Header for templates with TEXT header */}
+                        {editingTemplate?.headerFormat === 'TEXT' && (
                             <div className="space-y-1">
-                                <Label className="text-[11px] font-medium">Header (optional)</Label>
+                                <Label className="text-[11px] font-medium">Header (Text)</Label>
                                 <Input
                                     value={editHeader}
                                     onChange={(e) => setEditHeader(e.target.value)}
@@ -1081,8 +1082,8 @@ export default function MessageTemplates({
                             </div>
                         )}
 
-                        {/* Compact Video Header Section for Video Templates */}
-                        {(editingTemplate?.headerFormat === 'VIDEO' || editingTemplate?.name?.toLowerCase().includes('launch') || editingTemplate?.name?.toLowerCase().includes('video')) && (
+                        {/* Video Header Section for templates with VIDEO header in Meta */}
+                        {editingTemplate?.headerFormat === 'VIDEO' && (
                             <div className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2 text-xs">
                                 <div className="flex items-center justify-between">
                                     <span className="flex items-center gap-1.5 font-medium text-[11px] text-foreground">
@@ -1109,7 +1110,7 @@ export default function MessageTemplates({
                                     >
                                         <Upload className="size-3 text-[#47b672]" />
                                         <span className="truncate max-w-[200px]">
-                                            {editVideoFile ? editVideoFile.name : 'Upload MP4 File (< 16 MB)'}
+                                            {editVideoFile ? editVideoFile.name : 'Upload New MP4 Video (< 16 MB)'}
                                         </span>
                                     </label>
                                     {editVideoFile && (
@@ -1148,6 +1149,22 @@ export default function MessageTemplates({
                             </div>
                         )}
 
+                        {/* Informative notice for templates with NO header format in Meta */}
+                        {!editingTemplate?.headerFormat && (
+                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                                <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-semibold text-xs text-amber-800 dark:text-amber-300">Format: No Header (Text-Only Template)</p>
+                                    <p className="mt-0.5 leading-relaxed text-[11px]">
+                                        <strong>Meta Policy:</strong> Meta allows updating the body and footer text, but does NOT allow adding or changing header format (e.g. adding Video to a text-only template).
+                                    </p>
+                                    <p className="mt-1 text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                                        To send this message with a Video header, please use <strong>+ Create Template</strong> with Header Type = Video.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-1">
                             <div className="flex items-center justify-between">
                                 <Label className="text-[11px] font-medium">
@@ -1180,6 +1197,11 @@ export default function MessageTemplates({
                                 className="text-xs h-7.5"
                                 maxLength={60}
                             />
+                        </div>
+
+                        <div className="rounded-md bg-blue-500/10 border border-blue-500/20 p-2 text-[10px] text-blue-700 dark:text-blue-300 flex items-start gap-1.5">
+                            <Clock className="size-3.5 shrink-0 mt-0.5" />
+                            <span><strong>Meta WhatsApp Policy:</strong> Saving changes to an approved template submits it to Meta for review. Its status will temporarily change to <code>IN_REVIEW</code> until Meta re-approves it.</span>
                         </div>
 
                         <DialogFooter className="pt-2 flex items-center justify-end gap-2">

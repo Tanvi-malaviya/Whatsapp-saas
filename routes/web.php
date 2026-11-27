@@ -815,6 +815,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'header' => 'nullable|string|max:60',
             'footer' => 'nullable|string|max:60',
             'template_name' => 'nullable|string',
+            'header_format' => 'nullable|string',
             'header_url' => 'nullable|string',
             'video_file' => 'nullable|file|mimes:mp4,3gp|max:16384',
         ]);
@@ -832,49 +833,95 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
 
         $templateName = $validated['template_name'] ?? $id;
+        $headerFormat = strtoupper($request->input('header_format', 'NONE'));
         $meta = $channel->metadata ?? [];
-        $mediaUpdated = false;
 
-        // 1. Process Video File Upload directly to Meta Media API and public storage
-        if ($request->hasFile('video_file')) {
-            $file = $request->file('video_file');
+        // Check Meta Policy on Header Format
+        // If template format in Meta is not VIDEO, but user attempts to upload/change to video:
+        if ($request->hasFile('video_file') && $headerFormat !== 'VIDEO') {
+            return back()->withErrors([
+                'message' => "Meta Policy Error: Template '{$templateName}' was created without a Video Header. Meta does not permit changing header format of an approved template. To use Video, please click '+ Create Template' with Header Type set to Video."
+            ]);
+        }
 
-            try {
-                // Upload directly to Meta WhatsApp Media API
-                $metaResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
-                    ->timeout(60)
-                    ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName(), ['Content-Type' => $file->getMimeType()])
-                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/media", [
-                        'messaging_product' => 'whatsapp',
-                        'type' => $file->getMimeType(),
+        $components = [];
+
+        // 1. Process Video Header if template format is VIDEO in Meta
+        if ($headerFormat === 'VIDEO') {
+            $headerHandle = null;
+
+            if ($request->hasFile('video_file')) {
+                $file = $request->file('video_file');
+
+                // A. Save locally
+                $ext = $file->getClientOriginalExtension() ?: 'mp4';
+                $localPath = $file->storeAs('template_media', $templateName . '_' . time() . '.' . $ext, 'public');
+                $localUrl = url('storage/' . $localPath);
+                $meta['template_media_urls'][$templateName] = $localUrl;
+
+                // B. Upload to Meta Resumable Upload API for review handle
+                $appId = config('services.meta.app_id', env('META_APP_ID', '1079349601748656'));
+                $fileContents = file_get_contents($file->getRealPath());
+                $fileSize = strlen($fileContents);
+                $mimeType = $file->getMimeType() ?: 'video/mp4';
+
+                $sessionResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                    ->post("https://graph.facebook.com/v22.0/{$appId}/uploads", [
+                        'file_length' => $fileSize,
+                        'file_type' => $mimeType,
                     ]);
 
-                if ($metaResp->successful() && $metaResp->json('id')) {
-                    $meta['template_media_ids'][$templateName] = $metaResp->json('id');
-                } else {
-                    $err = $metaResp->json('error.error_data.details') ?? $metaResp->json('error.message') ?? 'Meta Media upload failed';
-                    return back()->withErrors(['message' => "Meta Media API Error: {$err}"]);
+                $uploadId = $sessionResp->json('id');
+                if ($uploadId) {
+                    $uploadResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                        ->withHeaders([
+                            'file_offset' => 0,
+                            'Content-Type' => 'application/octet-stream',
+                        ])
+                        ->withBody($fileContents, 'application/octet-stream')
+                        ->post("https://graph.facebook.com/v22.0/{$uploadId}");
+
+                    $headerHandle = $uploadResp->json('h');
                 }
-            } catch (\Throwable $e) {
-                return back()->withErrors(['message' => 'Could not upload video to Meta: ' . $e->getMessage()]);
+
+                // C. Upload to WhatsApp Media API for fast instant dispatch
+                $mediaResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                    ->attach('file', $fileContents, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
+                    ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/media", [
+                        'messaging_product' => 'whatsapp',
+                        'type' => $mimeType,
+                    ]);
+
+                if ($mediaResp->successful() && $mediaResp->json('id')) {
+                    $meta['template_media_ids'][$templateName] = $mediaResp->json('id');
+                }
+
+                $channel->update(['metadata' => $meta]);
+            } elseif (! empty($validated['header_url'])) {
+                $meta['template_media_urls'][$templateName] = trim($validated['header_url']);
+                unset($meta['template_media_ids'][$templateName]);
+                $channel->update(['metadata' => $meta]);
             }
 
-            // Also save locally in public storage
-            $localPath = $file->store('template_media', 'public');
-            $meta['template_media_urls'][$templateName] = url(\Illuminate\Support\Facades\Storage::url($localPath));
-            $mediaUpdated = true;
-        } elseif (! empty($validated['header_url'])) {
-            $meta['template_media_urls'][$templateName] = trim($validated['header_url']);
-            unset($meta['template_media_ids'][$templateName]);
-            $mediaUpdated = true;
+            $videoHeaderComp = [
+                'type' => 'HEADER',
+                'format' => 'VIDEO',
+            ];
+            if ($headerHandle) {
+                $videoHeaderComp['example'] = [
+                    'header_handle' => [$headerHandle],
+                ];
+            }
+            $components[] = $videoHeaderComp;
+        } elseif ($headerFormat === 'TEXT' && ! empty($validated['header'])) {
+            $components[] = [
+                'type' => 'HEADER',
+                'format' => 'TEXT',
+                'text' => $validated['header'],
+            ];
         }
 
-        if ($mediaUpdated) {
-            $channel->update(['metadata' => $meta]);
-            \Illuminate\Support\Facades\Cache::forget("meta_templates_{$channel->waba_id}");
-        }
-
-        // Parse body variables ({{1}}, {{2}}...)
+        // 2. Parse body variables ({{1}}, {{2}}...)
         preg_match_all('/\{\{(\d+)\}\}/', $validated['body'], $matches);
         $bodyComponent = [
             'type' => 'BODY',
@@ -888,16 +935,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ];
         }
 
-        $components = [$bodyComponent];
+        $components[] = $bodyComponent;
 
-        if (! empty($validated['header'])) {
-            $components[] = [
-                'type' => 'HEADER',
-                'format' => 'TEXT',
-                'text' => $validated['header'],
-            ];
-        }
-
+        // 3. Footer component
         if (! empty($validated['footer'])) {
             $components[] = [
                 'type' => 'FOOTER',
@@ -907,32 +947,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         try {
             $resp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
-                ->timeout(15)
+                ->timeout(20)
                 ->post("https://graph.facebook.com/v22.0/{$id}", [
                     'components' => $components,
                 ]);
 
             if ($resp->successful() || $resp->json('success') === true) {
                 \Illuminate\Support\Facades\Cache::forget("meta_templates_{$channel->waba_id}");
-                return back()->with('success', "Template updated successfully! Meta is reviewing the updated template.");
-            }
-
-            if ($mediaUpdated) {
-                // Media (video/image) was updated and saved successfully even if Meta blocks approved text modification
-                return back()->with('success', "Video header updated successfully for template '{$templateName}'! Messages will now send with your new video.");
+                return back()->with('success', "Template '{$templateName}' updated in Meta! Per Meta policy, its status is now IN_REVIEW while Meta re-approves it.");
             }
 
             $userMsg = $resp->json('error.error_user_msg');
-            if ($userMsg && str_contains($userMsg, 'only be edited if they have been rejected')) {
-                $errMsg = "Meta Policy: Approved templates cannot be modified directly in Meta to prevent disrupting live campaigns. To update this message, please create a new version (e.g. name_v2).";
-            } else {
-                $errMsg = $userMsg ?? $resp->json('error.message') ?? 'Meta rejected template update.';
-            }
-            return back()->withErrors(['message' => $errMsg]);
+            $errMsg = $userMsg ?? $resp->json('error.error_data.details') ?? $resp->json('error.message') ?? 'Meta rejected template update.';
+            return back()->withErrors(['message' => "Meta Policy Error: {$errMsg}"]);
         } catch (\Throwable $e) {
-            if ($mediaUpdated) {
-                return back()->with('success', "Video header updated successfully for template '{$templateName}'! Messages will now send with your new video.");
-            }
             return back()->withErrors(['message' => 'Connection error: ' . $e->getMessage()]);
         }
     })->name('templates.update');
