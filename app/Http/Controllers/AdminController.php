@@ -494,10 +494,15 @@ class AdminController extends Controller
             : ($validated['name'] . "'s Workspace");
         $slug = Str::slug($wsName) . '-' . rand(100, 999);
 
+        $validityDays = (int) PlatformSetting::read('subscription_validity_days', 365);
+        $annualPricePaise = (int) PlatformSetting::read('subscription_annual_price_paise', 999900);
+
         $orgData = [
             'name' => $wsName,
             'slug' => $slug,
-            'subscription_plan' => 'growth',
+            'subscription_plan' => 'annual',
+            'subscription_expires_at' => now()->addDays($validityDays),
+            'subscription_price_paise' => $annualPricePaise,
             'status' => 'active',
         ];
 
@@ -785,7 +790,11 @@ class AdminController extends Controller
         $thirtyDaysFromNow = now()->addDays(30);
 
         $organizations = Organization::withCount(['channels', 'users'])
-            ->with(['users:id,name,email'])
+            ->with([
+                'users:id,name,email,is_super_admin',
+                'channels:id,organization_id,name,phone_number',
+                'b2bAgent:id,name,email,referral_code',
+            ])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($org) use ($now, $thirtyDaysFromNow) {
@@ -816,12 +825,18 @@ class AdminController extends Controller
                         ])
                     : collect();
 
+                // Select primary owner: prefer non-superadmin with role Owner, then any with role Owner, then non-superadmin, then first
+                $ownerUser = $org->users->first(fn ($u) => ($u->pivot->role ?? '') === 'Owner' && !$u->is_super_admin)
+                    ?? $org->users->first(fn ($u) => ($u->pivot->role ?? '') === 'Owner')
+                    ?? $org->users->first(fn ($u) => !$u->is_super_admin)
+                    ?? $org->users->first();
+
                 return [
                     'id' => (string) $org->id,
                     'name' => $org->name,
                     'slug' => $org->slug,
                     'billing_email' => $org->billing_email,
-                    'subscription_plan' => $org->subscription_plan ?: 'starter',
+                    'subscription_plan' => 'Annual Business Plan',
                     'subscription_price_paise' => (int) ($org->subscription_price_paise ?: 999900),
                     'subscription_price_formatted' => '₹' . number_format(((int) ($org->subscription_price_paise ?: 999900)) / 100, 2),
                     'status' => $org->status ?: 'active',
@@ -832,15 +847,26 @@ class AdminController extends Controller
                     'is_expiring_soon' => $isExpiringSoon,
                     'channels_count' => (int) $org->channels_count,
                     'max_channels' => $org->getMaxChannels(),
-                    'owner' => $org->users->first() ? [
-                        'id' => $org->users->first()->id,
-                        'name' => $org->users->first()->name,
-                        'email' => $org->users->first()->email,
+                    'channels' => $org->channels->map(fn ($c) => [
+                        'id' => (string) $c->id,
+                        'name' => $c->name,
+                        'phone_number' => $c->phone_number,
+                    ])->values()->all(),
+                    'owner' => $ownerUser ? [
+                        'id' => $ownerUser->id,
+                        'name' => $ownerUser->name,
+                        'email' => $ownerUser->email,
                     ] : null,
+                    'users' => $org->users->map(fn ($u) => [
+                        'id' => $u->id,
+                        'name' => $u->name,
+                        'email' => $u->email,
+                    ])->values()->all(),
                     'b2b_agent' => $org->b2bAgent ? [
                         'id' => $org->b2bAgent->id,
                         'name' => $org->b2bAgent->name,
                         'email' => $org->b2bAgent->email,
+                        'referral_code' => $org->b2bAgent->referral_code ?? null,
                     ] : null,
                     'invoices' => $invoices,
                     'created_at' => $org->created_at ? $org->created_at->format('d M Y') : '—',

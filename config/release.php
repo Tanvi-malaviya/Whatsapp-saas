@@ -36,9 +36,5 @@ return [
                 'Setup Guidance & Customer Support',
             ],
         ],
-        'starter' => ['name' => 'Starter', 'amount_paise' => 99900, 'messages' => 5000, 'seats' => 2],
-        'growth' => ['name' => 'Growth', 'amount_paise' => 249900, 'messages' => 25000, 'seats' => 10],
-        'business_pro' => ['name' => 'Business Pro', 'amount_paise' => 499900, 'messages' => 100000, 'seats' => 50],
-        'enterprise' => ['name' => 'Enterprise', 'amount_paise' => null, 'messages' => 1000000, 'seats' => 999],
     ],
 ];

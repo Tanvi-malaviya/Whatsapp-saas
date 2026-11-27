@@ -37,12 +37,18 @@ class WorkspaceController extends Controller
 
         $user = $request->user();
 
+        $validityDays = (int) \App\Models\PlatformSetting::read('subscription_validity_days', 365);
+        $annualPricePaise = (int) \App\Models\PlatformSetting::read('subscription_annual_price_paise', 999900);
+
         $org = Organization::create([
             'name' => $validated['name'],
             'slug' => $slug,
             'billing_email' => $user->email,
             'timezone' => 'Asia/Kolkata',
             'currency' => 'INR',
+            'subscription_plan' => 'annual',
+            'subscription_expires_at' => now()->addDays($validityDays),
+            'subscription_price_paise' => $annualPricePaise,
             'status' => 'active',
         ]);
 

@@ -513,7 +513,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('campaigns/broadcast', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'broadcast'])->name('campaigns.broadcast');
     Route::post('campaigns/{id}/pause', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('campaigns/{id}/resume', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'resume'])->name('campaigns.resume');
+    Route::post('campaigns/{id}/send-now', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'sendNow'])->name('campaigns.send-now');
     Route::post('campaigns/{id}/cancel', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'cancel'])->name('campaigns.cancel');
+    Route::delete('campaigns/{id}', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'destroy'])->name('campaigns.destroy');
     Route::get('campaigns/{id}/analytics', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'analytics'])->name('campaigns.analytics');
     Route::get('campaigns/{id}/export', [\App\Modules\Campaigns\Http\Controllers\CampaignController::class, 'export'])->name('campaigns.export');
     Route::get('campaigns/ads', function (\Illuminate\Http\Request $request) {

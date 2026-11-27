@@ -17,11 +17,23 @@ import {
     Users,
     X,
     XCircle,
+    Trash2,
+    Zap,
+    Loader2,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 interface FailureReason {
     error: string;
@@ -241,6 +253,35 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
         });
     };
 
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [isSendingNow, setIsSendingNow] = useState(false);
+
+    const handleSendNow = async () => {
+        setIsSendingNow(true);
+        try {
+            await api(`/campaigns/${campaign.id}/send-now`, 'POST');
+            router.reload();
+        } catch (e) {
+            alert((e as Error).message);
+        } finally {
+            setIsSendingNow(false);
+        }
+    };
+
+    const confirmDelete = async () => {
+        setIsDeleting(true);
+        setDeleteError(null);
+        try {
+            await api(`/campaigns/${campaign.id}`, 'DELETE');
+            router.visit('/campaigns');
+        } catch (e) {
+            setDeleteError((e as Error).message);
+            setIsDeleting(false);
+        }
+    };
+
     const totalRecipientsRecorded =
         metrics.queued + metrics.sent + metrics.delivered + metrics.read + metrics.failed + metrics.cancelled;
     const totalBase = Math.max(metrics.total_selected, totalRecipientsRecorded, 1);
@@ -348,6 +389,28 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {(campaign.status === 'queued' || campaign.status === 'processing' || campaign.status === 'paused' || metrics.queued > 0) && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            onClick={handleSendNow}
+                            disabled={isSendingNow}
+                            className="h-8 text-xs gap-1.5 bg-sky-600 hover:bg-sky-700 text-white font-semibold cursor-pointer shadow-2xs"
+                        >
+                            {isSendingNow ? (
+                                <>
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                    <span>Sending Queued...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Zap className="size-3.5 fill-white" />
+                                    <span>Send Now ({metrics.queued > 0 ? metrics.queued : 'All'})</span>
+                                </>
+                            )}
+                        </Button>
+                    )}
                     <Button
                         type="button"
                         size="sm"
@@ -364,6 +427,19 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                             <Download className="size-3.5" />
                             Export CSV Report
                         </a>
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                            setDeleteError(null);
+                            setIsDeleteModalOpen(true);
+                        }}
+                        className="h-8 text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 cursor-pointer"
+                    >
+                        <Trash2 className="size-3.5" />
+                        <span>Delete Campaign</span>
                     </Button>
                 </div>
             </div>
@@ -746,6 +822,97 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                     )}
                 </CardContent>
             </Card>
+
+            {/* Delete Campaign Confirmation Modal Dialog */}
+            <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+                <DialogContent className="max-w-md p-5 gap-4">
+                    <DialogHeader className="pb-1">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-8 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0 border border-rose-500/20">
+                                <Trash2 className="size-4" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-base font-bold text-foreground">
+                                    Delete Broadcast Campaign
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground">
+                                    Confirm permanent removal of this campaign.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="space-y-3">
+                        <div className="rounded-lg bg-muted/60 border border-border/80 p-3 text-xs space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground font-medium">Campaign:</span>
+                                <span className="font-semibold text-foreground truncate max-w-[220px]">
+                                    {campaign.name}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground font-medium">Template:</span>
+                                <span className="font-mono text-foreground">
+                                    {campaign.template_name} ({campaign.template_language})
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground font-medium">Recipients & Status:</span>
+                                <span className="font-medium text-foreground capitalize">
+                                    {metrics.total_selected} contacts · {campaign.status}
+                                </span>
+                            </div>
+                            {campaign.cost_formatted && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Cost:</span>
+                                    <span className="font-semibold text-foreground">
+                                        {campaign.cost_formatted}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {['queued', 'scheduled', 'processing', 'paused'].includes(campaign.status) && (
+                            <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                                <CheckCheck className="size-4 shrink-0 mt-0.5 text-emerald-600" />
+                                <span>Any unsent queued messages will be automatically refunded back to your workspace wallet balance.</span>
+                            </div>
+                        )}
+
+                        <p className="text-xs text-destructive flex items-center gap-1.5 font-medium">
+                            <AlertCircle className="size-3.5 shrink-0" />
+                            <span>This action is permanent and cannot be undone.</span>
+                        </p>
+
+                        {deleteError && (
+                            <div className="rounded-md bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 font-medium">
+                                {deleteError}
+                            </div>
+                        )}
+
+                        <DialogFooter className="gap-2 pt-2 border-t border-border/70 mt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsDeleteModalOpen(false)}
+                                disabled={isDeleting}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={confirmDelete}
+                                disabled={isDeleting}
+                                className="gap-1.5"
+                            >
+                                <Trash2 className="size-3.5" />
+                                <span>{isDeleting ? 'Deleting...' : 'Yes, Delete Campaign'}</span>
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

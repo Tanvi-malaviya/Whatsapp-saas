@@ -491,8 +491,9 @@ class CampaignController extends Controller
                 return [$campaigns, $dispatches];
             });
 
+            @set_time_limit(300);
             foreach ($dispatches as $dispatch) {
-                if (count($dispatches) <= 10 && ! $dispatch['at']->isFuture()) {
+                if (count($dispatches) <= 200 && ! $dispatch['at']->isFuture()) {
                     try {
                         SendCampaignRecipient::dispatchSync($dispatch['id']);
                     } catch (\Throwable $e) {
@@ -588,6 +589,51 @@ class CampaignController extends Controller
         ]);
     }
 
+    public function sendNow(Request $request, string $id): JsonResponse
+    {
+        @set_time_limit(300);
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        if ($campaign->status === 'completed' || $campaign->status === 'cancelled') {
+            abort(422, 'Campaign is already finished or cancelled.');
+        }
+
+        $campaign->update([
+            'is_paused' => false,
+            'status' => 'processing',
+        ]);
+
+        $queuedRecipients = DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->id)
+            ->where('status', 'queued')
+            ->take(250)
+            ->get();
+
+        $processed = 0;
+        foreach ($queuedRecipients as $r) {
+            try {
+                SendCampaignRecipient::dispatchSync($r->id);
+                $processed++;
+            } catch (\Throwable $e) {
+                Log::error("Direct dispatchSync error for recipient {$r->id}: ".$e->getMessage());
+            }
+        }
+
+        $campaign->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Dispatched {$processed} queued messages immediately.",
+            'campaign' => [
+                'id' => $campaign->id,
+                'status' => $campaign->status,
+                'success_count' => $campaign->success_count,
+                'failed_count' => $campaign->failed_count,
+            ],
+        ]);
+    }
+
     public function cancel(Request $request, string $id): JsonResponse
     {
         $org = $this->resolveOrg($request);
@@ -626,6 +672,46 @@ class CampaignController extends Controller
                 'success' => true,
                 'message' => "Campaign cancelled. {$cancelledCount} unsent messages were cancelled and refunded to your wallet.",
                 'cancelled_count' => $cancelledCount,
+            ]);
+        });
+    }
+
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        $org = $this->resolveOrg($request);
+        $campaign = BroadcastCampaign::where('organization_id', $org->id)->findOrFail($id);
+
+        return DB::transaction(function () use ($campaign, $org) {
+            // If campaign has pending/queued messages, refund them to user wallet before deletion
+            if (in_array($campaign->status, ['queued', 'scheduled', 'processing', 'paused'])) {
+                $cancelledCount = DB::table('campaign_recipients')
+                    ->where('campaign_id', $campaign->id)
+                    ->where('status', 'queued')
+                    ->count();
+
+                if ($cancelledCount > 0 && $campaign->cost_paise > 0 && $campaign->recipients_count > 0) {
+                    $ratePerMsg = (int) round($campaign->cost_paise / $campaign->recipients_count);
+                    $refundPaise = $cancelledCount * $ratePerMsg;
+
+                    $this->walletService->refund(
+                        org: $org,
+                        amountPaise: $refundPaise,
+                        description: "Refund for {$cancelledCount} unsent messages from deleted campaign '{$campaign->name}'",
+                        referenceId: $campaign->id,
+                        metadata: ['campaign_id' => $campaign->id, 'deleted' => true, 'cancelled_count' => $cancelledCount]
+                    );
+                }
+            }
+
+            // Delete campaign recipients
+            DB::table('campaign_recipients')->where('campaign_id', $campaign->id)->delete();
+
+            // Delete the campaign
+            $campaign->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Campaign deleted successfully.',
             ]);
         });
     }
