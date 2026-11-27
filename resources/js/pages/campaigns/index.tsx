@@ -36,6 +36,8 @@ import {
     FileSpreadsheet,
     Smartphone,
     ShieldCheck,
+    Trash2,
+    Zap,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -227,16 +229,55 @@ export default function CampaignsList({
         }
     };
 
-    const handleCancel = async (id: string) => {
-        if (!confirm('Are you sure you want to cancel this campaign? Any unsent queued messages will be refunded to your wallet.')) return;
+    const handleSendNow = async (id: string) => {
         setCampaignActionBusy(id);
         try {
-            await api(`/campaigns/${id}/cancel`, 'POST');
+            await api(`/campaigns/${id}/send-now`, 'POST');
             router.reload();
         } catch (e) {
             alert((e as Error).message);
         } finally {
             setCampaignActionBusy(null);
+        }
+    };
+
+    // Delete campaign modal state
+    const [deleteCampaignTarget, setDeleteCampaignTarget] = useState<CampaignHistoryItem | null>(null);
+    const [isDeletingCampaign, setIsDeletingCampaign] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+
+    // Cancel campaign modal state
+    const [cancelCampaignTarget, setCancelCampaignTarget] = useState<CampaignHistoryItem | null>(null);
+    const [isCancellingCampaign, setIsCancellingCampaign] = useState(false);
+    const [cancelError, setCancelError] = useState<string | null>(null);
+
+    const confirmCancelCampaign = async () => {
+        if (!cancelCampaignTarget) return;
+        setIsCancellingCampaign(true);
+        setCancelError(null);
+        try {
+            await api(`/campaigns/${cancelCampaignTarget.id}/cancel`, 'POST');
+            setCancelCampaignTarget(null);
+            router.reload();
+        } catch (e) {
+            setCancelError((e as Error).message);
+        } finally {
+            setIsCancellingCampaign(false);
+        }
+    };
+
+    const confirmDeleteCampaign = async () => {
+        if (!deleteCampaignTarget) return;
+        setIsDeletingCampaign(true);
+        setDeleteError(null);
+        try {
+            await api(`/campaigns/${deleteCampaignTarget.id}`, 'DELETE');
+            setDeleteCampaignTarget(null);
+            router.reload();
+        } catch (e) {
+            setDeleteError((e as Error).message);
+        } finally {
+            setIsDeletingCampaign(false);
         }
     };
 
@@ -895,13 +936,34 @@ export default function CampaignsList({
                                                                         </Button>
                                                                     )}
 
+                                                                    {/* Send Now (Instant Dispatch for Queued / Processing / Paused) */}
+                                                                    {(camp.status === 'queued' || camp.status === 'processing' || camp.status === 'paused') && (
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="size-6 text-sky-600 hover:bg-sky-500/10 cursor-pointer"
+                                                                            title="Send Now (Dispatch Queued Messages Immediately)"
+                                                                            disabled={campaignActionBusy === camp.id}
+                                                                            onClick={() => handleSendNow(camp.id)}
+                                                                        >
+                                                                            {campaignActionBusy === camp.id ? (
+                                                                                <Loader2 className="size-3 animate-spin text-sky-600" />
+                                                                            ) : (
+                                                                                <Zap className="size-3 fill-sky-600 text-sky-600" />
+                                                                            )}
+                                                                        </Button>
+                                                                    )}
+
                                                                     <Button
                                                                         size="icon"
                                                                         variant="ghost"
                                                                         className="size-6 text-destructive hover:bg-destructive/10 cursor-pointer"
                                                                         title="Cancel & Refund Campaign"
                                                                         disabled={campaignActionBusy === camp.id}
-                                                                        onClick={() => handleCancel(camp.id)}
+                                                                        onClick={() => {
+                                                                            setCancelError(null);
+                                                                            setCancelCampaignTarget(camp);
+                                                                        }}
                                                                     >
                                                                         <XCircle className="size-3" />
                                                                     </Button>
@@ -919,6 +981,20 @@ export default function CampaignsList({
                                                                     <BarChart2 className="size-3" />
                                                                     Analytics
                                                                 </Link>
+                                                            </Button>
+
+                                                            <Button
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="size-6 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                                                                title="Delete Campaign"
+                                                                disabled={campaignActionBusy === camp.id}
+                                                                onClick={() => {
+                                                                    setDeleteError(null);
+                                                                    setDeleteCampaignTarget(camp);
+                                                                }}
+                                                            >
+                                                                <Trash2 className="size-3" />
                                                             </Button>
                                                         </div>
                                                     </td>
@@ -1363,6 +1439,171 @@ export default function CampaignsList({
                             </div>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Cancel Campaign Confirmation Modal Dialog */}
+            <Dialog open={!!cancelCampaignTarget} onOpenChange={(open) => !open && setCancelCampaignTarget(null)}>
+                <DialogContent className="max-w-md p-5 gap-4">
+                    <DialogHeader className="pb-1">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0 border border-amber-500/20">
+                                <XCircle className="size-4" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-base font-bold text-foreground">
+                                    Cancel Broadcast Campaign
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground">
+                                    Stop campaign dispatch & refund unsent messages.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    {cancelCampaignTarget && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg bg-muted/60 border border-border/80 p-3 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Campaign:</span>
+                                    <span className="font-semibold text-foreground truncate max-w-[220px]">
+                                        {cancelCampaignTarget.name}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Recipients & Status:</span>
+                                    <span className="font-medium text-foreground capitalize">
+                                        {cancelCampaignTarget.recipientsCount} contacts · {cancelCampaignTarget.status}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                                <ShieldCheck className="size-4 shrink-0 mt-0.5 text-emerald-600" />
+                                <span>Any unsent queued messages will be cancelled immediately and refunded to your wallet balance.</span>
+                            </div>
+
+                            {cancelError && (
+                                <div className="rounded-md bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 font-medium">
+                                    {cancelError}
+                                </div>
+                            )}
+
+                            <DialogFooter className="gap-2 pt-2 border-t border-border/70 mt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setCancelCampaignTarget(null)}
+                                    disabled={isCancellingCampaign}
+                                >
+                                    Keep Campaign
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={confirmCancelCampaign}
+                                    disabled={isCancellingCampaign}
+                                    className="gap-1.5"
+                                >
+                                    <XCircle className="size-3.5" />
+                                    <span>{isCancellingCampaign ? 'Cancelling...' : 'Yes, Cancel & Refund'}</span>
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Campaign Confirmation Modal Dialog */}
+            <Dialog open={!!deleteCampaignTarget} onOpenChange={(open) => !open && setDeleteCampaignTarget(null)}>
+                <DialogContent className="max-w-md p-5 gap-4">
+                    <DialogHeader className="pb-1">
+                        <div className="flex items-center gap-2.5">
+                            <div className="size-8 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0 border border-rose-500/20">
+                                <Trash2 className="size-4" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-base font-bold text-foreground">
+                                    Delete Broadcast Campaign
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-muted-foreground">
+                                    Confirm permanent removal of this campaign.
+                                </DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    {deleteCampaignTarget && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg bg-muted/60 border border-border/80 p-3 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Campaign:</span>
+                                    <span className="font-semibold text-foreground truncate max-w-[220px]">
+                                        {deleteCampaignTarget.name}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Template:</span>
+                                    <span className="font-mono text-foreground">
+                                        {deleteCampaignTarget.templateName} ({deleteCampaignTarget.templateLanguage})
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground font-medium">Recipients & Status:</span>
+                                    <span className="font-medium text-foreground capitalize">
+                                        {deleteCampaignTarget.recipientsCount} contacts · {deleteCampaignTarget.status}
+                                    </span>
+                                </div>
+                                {deleteCampaignTarget.costFormatted && (
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium">Cost:</span>
+                                        <span className="font-semibold text-foreground">
+                                            {deleteCampaignTarget.costFormatted}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {['queued', 'scheduled', 'processing', 'paused'].includes(deleteCampaignTarget.status) && (
+                                <div className="rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                                    <ShieldCheck className="size-4 shrink-0 mt-0.5 text-emerald-600" />
+                                    <span>Any unsent queued messages will be automatically refunded back to your workspace wallet balance.</span>
+                                </div>
+                            )}
+
+                            <p className="text-xs text-destructive flex items-center gap-1.5 font-medium">
+                                <AlertCircle className="size-3.5 shrink-0" />
+                                <span>This action is permanent and cannot be undone.</span>
+                            </p>
+
+                            {deleteError && (
+                                <div className="rounded-md bg-rose-50 border border-rose-200 p-2 text-xs text-rose-700 font-medium">
+                                    {deleteError}
+                                </div>
+                            )}
+
+                            <DialogFooter className="gap-2 pt-2 border-t border-border/70 mt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setDeleteCampaignTarget(null)}
+                                    disabled={isDeletingCampaign}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={confirmDeleteCampaign}
+                                    disabled={isDeletingCampaign}
+                                    className="gap-1.5"
+                                >
+                                    <Trash2 className="size-3.5" />
+                                    <span>{isDeletingCampaign ? 'Deleting...' : 'Yes, Delete Campaign'}</span>
+                                </Button>
+                            </DialogFooter>
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
         </>

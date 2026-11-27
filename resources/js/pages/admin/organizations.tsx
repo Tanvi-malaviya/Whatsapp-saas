@@ -141,7 +141,7 @@ export default function AdminOrganizations({
             `/admin/organizations/${selectedOrg.id}/limit`,
             {
                 max_channels: Number(formMaxChannels),
-                subscription_plan: formPlan,
+                subscription_plan: 'annual',
                 status: formStatus,
                 b2b_agent_id: formB2bAgentId,
             },
@@ -384,8 +384,8 @@ export default function AdminOrganizations({
                                                                     <span>Multi ({org.max_channels})</span>
                                                                 </span>
                                                             )}
-                                                            <span className="text-[10px] text-muted-foreground capitalize truncate">
-                                                                ({org.subscription_plan})
+                                                            <span className="text-[10px] text-muted-foreground truncate">
+                                                                (Annual)
                                                             </span>
                                                         </div>
 
@@ -580,36 +580,20 @@ export default function AdminOrganizations({
                                 </p>
                             </div>
 
-                            {/* Plan Tier & Status in 2-column grid */}
-                            <div className="grid grid-cols-2 gap-2.5">
-                                <div className="space-y-1">
-                                    <Label htmlFor="subscription_plan" className="text-xs font-semibold">
-                                        Plan Tier
-                                    </Label>
-                                    <Input
-                                        id="subscription_plan"
-                                        type="text"
-                                        value={formPlan}
-                                        onChange={(e) => setFormPlan(e.target.value)}
-                                        placeholder="starter, growth..."
-                                        className="h-8 text-xs"
-                                    />
-                                </div>
-
-                                <div className="space-y-1">
-                                    <Label htmlFor="status" className="text-xs font-semibold">
-                                        Status
-                                    </Label>
-                                    <select
-                                        id="status"
-                                        value={formStatus}
-                                        onChange={(e) => setFormStatus(e.target.value)}
-                                        className="w-full rounded-md border border-input bg-background px-2 h-8 text-xs font-medium shadow-2xs"
-                                    >
-                                        <option value="active">Active</option>
-                                        <option value="suspended">Suspended</option>
-                                    </select>
-                                </div>
+                            {/* Workspace Status */}
+                            <div className="space-y-1">
+                                <Label htmlFor="status" className="text-xs font-semibold">
+                                    Workspace Status
+                                </Label>
+                                <select
+                                    id="status"
+                                    value={formStatus}
+                                    onChange={(e) => setFormStatus(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-2 h-8 text-xs font-medium shadow-2xs"
+                                >
+                                    <option value="active">Active (Full Access)</option>
+                                    <option value="suspended">Suspended (Access Blocked)</option>
+                                </select>
                             </div>
 
                             {/* Assigned B2B Partner */}
