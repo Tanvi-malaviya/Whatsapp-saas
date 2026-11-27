@@ -117,8 +117,11 @@ export default function MessageTemplates({
 
     // Edit Template State
     const [editingTemplate, setEditingTemplate] = useState<TemplateItem | null>(null);
+    const [editHeaderType, setEditHeaderType] = useState<'NONE' | 'TEXT' | 'VIDEO' | 'IMAGE' | 'DOCUMENT'>('NONE');
     const [editHeader, setEditHeader] = useState('');
     const [editHeaderUrl, setEditHeaderUrl] = useState('');
+    const [editHeaderFile, setEditHeaderFile] = useState<File | null>(null);
+    const [editHeaderFileWarning, setEditHeaderFileWarning] = useState<string | null>(null);
     const [editVideoFile, setEditVideoFile] = useState<File | null>(null);
     const [videoSizeWarning, setVideoSizeWarning] = useState<string | null>(null);
     const [editBody, setEditBody] = useState('');
@@ -279,8 +282,12 @@ export default function MessageTemplates({
 
     const openEditModal = (tpl: TemplateItem) => {
         setEditingTemplate(tpl);
+        const format = (tpl.headerFormat ? tpl.headerFormat.toUpperCase() : (tpl.header ? 'TEXT' : 'NONE')) as 'NONE' | 'TEXT' | 'VIDEO' | 'IMAGE' | 'DOCUMENT';
+        setEditHeaderType(['NONE', 'TEXT', 'VIDEO', 'IMAGE', 'DOCUMENT'].includes(format) ? format : 'NONE');
         setEditHeader(tpl.header || tpl.headerText || '');
         setEditHeaderUrl(tpl.headerUrl || '');
+        setEditHeaderFile(null);
+        setEditHeaderFileWarning(null);
         setEditVideoFile(null);
         setVideoSizeWarning(null);
         setEditBody(tpl.body || tpl.bodyText || '');
@@ -288,30 +295,43 @@ export default function MessageTemplates({
         setEditError(null);
     };
 
-    const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleEditHeaderFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) {
-            setEditVideoFile(null);
-            setVideoSizeWarning(null);
+            setEditHeaderFile(null);
+            setEditHeaderFileWarning(null);
             return;
         }
 
         const sizeInMb = file.size / (1024 * 1024);
-        if (sizeInMb > 16) {
-            setVideoSizeWarning(`Warning: File size is ${sizeInMb.toFixed(1)} MB. Meta requires video to be strictly 16 MB or less. Please compress before uploading.`);
+        if (editHeaderType === 'VIDEO' && sizeInMb > 16) {
+            setEditHeaderFileWarning(`Warning: File size is ${sizeInMb.toFixed(1)} MB. Meta requires video to be strictly 16 MB or less.`);
+        } else if (editHeaderType === 'IMAGE' && sizeInMb > 5) {
+            setEditHeaderFileWarning(`Warning: Image is ${sizeInMb.toFixed(1)} MB. Recommended max is 5 MB.`);
         } else {
-            setVideoSizeWarning(null);
+            setEditHeaderFileWarning(null);
         }
-        setEditVideoFile(file);
+        setEditHeaderFile(file);
+    };
+
+    const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        handleEditHeaderFileChange(e);
     };
 
     const handleUpdateTemplate = (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingTemplate || !editBody.trim()) return;
 
-        if (editVideoFile && editVideoFile.size > 16 * 1024 * 1024) {
-            setEditError('Video file exceeds Meta\'s 16 MB limit. Please compress the video before uploading.');
-            return;
+        if (editHeaderFile) {
+            const sizeInMb = editHeaderFile.size / (1024 * 1024);
+            if (editHeaderType === 'VIDEO' && sizeInMb > 16) {
+                setEditError('Video file exceeds Meta\'s 16 MB limit. Please compress before uploading.');
+                return;
+            }
+            if (editHeaderType === 'IMAGE' && sizeInMb > 5) {
+                setEditError('Image file exceeds Meta\'s 5 MB limit.');
+                return;
+            }
         }
 
         setIsUpdating(true);
@@ -320,11 +340,19 @@ export default function MessageTemplates({
         const formData = new FormData();
         formData.append('body', editBody.trim());
         formData.append('template_name', editingTemplate.name);
-        formData.append('header_format', editingTemplate.headerFormat || 'NONE');
-        if (editHeader.trim()) formData.append('header', editHeader.trim());
+        formData.append('header_type', editHeaderType);
+        formData.append('header_format', editHeaderType);
+        if (editHeaderType === 'TEXT' && editHeader.trim()) {
+            formData.append('header', editHeader.trim());
+        }
         if (editFooter.trim()) formData.append('footer', editFooter.trim());
         if (editHeaderUrl.trim()) formData.append('header_url', editHeaderUrl.trim());
-        if (editVideoFile) formData.append('video_file', editVideoFile);
+        if (editHeaderFile) {
+            formData.append('header_file', editHeaderFile);
+            if (editHeaderType === 'VIDEO') {
+                formData.append('video_file', editHeaderFile);
+            }
+        }
         formData.append('_method', 'PUT');
 
         router.post(
@@ -336,9 +364,11 @@ export default function MessageTemplates({
                 onSuccess: () => {
                     setIsUpdating(false);
                     setEditingTemplate(null);
+                    setEditHeaderFile(null);
+                    setEditHeaderFileWarning(null);
                     setEditVideoFile(null);
                     setVideoSizeWarning(null);
-                    showToast(`Template "${editingTemplate.name}" updated successfully.`);
+                    showToast(`Template "${editingTemplate.name}" submitted to Meta for review.`);
                 },
                 onError: (errs: any) => {
                     setIsUpdating(false);
@@ -361,18 +391,19 @@ export default function MessageTemplates({
         if (!deletingTemplate) return;
 
         const targetName = deletingTemplate.name;
+        const targetId = deletingTemplate.id;
         setIsDeleting(true);
         setDeleteError(null);
 
-        router.delete(`/templates/${targetName}`, {
+        router.delete(`/templates/${targetName}?template_id=${targetId}`, {
             preserveScroll: true,
             onSuccess: () => {
                 setIsDeleting(false);
-                setTemplates((prev) => prev.filter((t) => t.name !== targetName));
-                if (selectedTemplate?.name === targetName) {
+                setTemplates((prev) => prev.filter((t) => t.id !== deletingTemplate.id && t.name !== targetName));
+                if (selectedTemplate?.id === deletingTemplate.id || selectedTemplate?.name === targetName) {
                     setSelectedTemplate(null);
                 }
-                showToast(`Template "${targetName}" deleted successfully.`);
+                showToast(`Template "${targetName}" deleted successfully from Meta.`);
                 setDeletingTemplate(null);
             },
             onError: (errs) => {
@@ -1068,10 +1099,33 @@ export default function MessageTemplates({
                     )}
 
                     <form onSubmit={handleUpdateTemplate} className="space-y-2.5 py-0.5">
-                        {/* Text Header for templates with TEXT header */}
-                        {editingTemplate?.headerFormat === 'TEXT' && (
+                        {/* Header Type / Media Sample Selector (like WhatsApp Manager) */}
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-[11px] font-medium">Header / Media Sample</Label>
+                                <span className="text-[10px] text-muted-foreground">Meta WhatsApp Manager</span>
+                            </div>
+                            <select
+                                value={editHeaderType}
+                                onChange={(e) => {
+                                    setEditHeaderType(e.target.value as any);
+                                    setEditHeaderFile(null);
+                                    setEditHeaderFileWarning(null);
+                                }}
+                                className="w-full rounded-md border border-input bg-background px-2.5 py-1 text-xs h-8 focus:outline-none"
+                            >
+                                <option value="NONE">None (Text Body Only)</option>
+                                <option value="VIDEO">🎬 Video (.mp4, max 16MB)</option>
+                                <option value="IMAGE">🖼️ Image (.jpg, .png)</option>
+                                <option value="DOCUMENT">📄 Document (.pdf)</option>
+                                <option value="TEXT">🔤 Text Header</option>
+                            </select>
+                        </div>
+
+                        {/* Text Header */}
+                        {editHeaderType === 'TEXT' && (
                             <div className="space-y-1">
-                                <Label className="text-[11px] font-medium">Header (Text)</Label>
+                                <Label className="text-[11px] font-medium">Header Title Text</Label>
                                 <Input
                                     value={editHeader}
                                     onChange={(e) => setEditHeader(e.target.value)}
@@ -1082,44 +1136,43 @@ export default function MessageTemplates({
                             </div>
                         )}
 
-                        {/* Video Header Section for templates with VIDEO header in Meta */}
-                        {editingTemplate?.headerFormat === 'VIDEO' && (
-                            <div className="rounded-lg border border-border/80 bg-muted/20 p-2.5 space-y-2 text-xs">
+                        {/* Video Header Section */}
+                        {editHeaderType === 'VIDEO' && (
+                            <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5 space-y-2 text-xs">
                                 <div className="flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5 font-medium text-[11px] text-foreground">
-                                        <Video className="size-3.5 text-[#47b672]" />
-                                        Video Header
+                                    <span className="flex items-center gap-1.5 font-medium text-[11px] text-purple-700 dark:text-purple-300">
+                                        <Video className="size-3.5" />
+                                        Video Media Sample
                                     </span>
-                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium">
                                         MP4 (&lt; 16 MB)
                                     </span>
                                 </div>
 
-                                {/* Option 1: Upload Video File */}
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="file"
                                         id="template-video-upload"
                                         accept="video/mp4,video/3gpp"
-                                        onChange={handleVideoFileChange}
+                                        onChange={handleEditHeaderFileChange}
                                         className="hidden"
                                     />
                                     <label
                                         htmlFor="template-video-upload"
-                                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-input hover:border-[#47b672] rounded cursor-pointer bg-background hover:bg-muted/30 transition-colors text-[11px] text-muted-foreground hover:text-foreground"
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-input hover:border-purple-500 rounded cursor-pointer bg-background hover:bg-muted/30 transition-colors text-[11px] text-muted-foreground hover:text-foreground"
                                     >
-                                        <Upload className="size-3 text-[#47b672]" />
+                                        <Upload className="size-3 text-purple-600" />
                                         <span className="truncate max-w-[200px]">
-                                            {editVideoFile ? editVideoFile.name : 'Upload New MP4 Video (< 16 MB)'}
+                                            {editHeaderFile ? editHeaderFile.name : 'Upload MP4 Video File (< 16 MB)'}
                                         </span>
                                     </label>
-                                    {editVideoFile && (
+                                    {editHeaderFile && (
                                         <button
                                             type="button"
                                             className="text-[10px] text-red-500 hover:underline px-1 cursor-pointer"
                                             onClick={() => {
-                                                setEditVideoFile(null);
-                                                setVideoSizeWarning(null);
+                                                setEditHeaderFile(null);
+                                                setEditHeaderFileWarning(null);
                                             }}
                                         >
                                             Clear
@@ -1127,16 +1180,15 @@ export default function MessageTemplates({
                                     )}
                                 </div>
 
-                                {videoSizeWarning ? (
-                                    <p className="text-[10px] text-red-500 font-medium">{videoSizeWarning}</p>
-                                ) : editVideoFile ? (
+                                {editHeaderFileWarning ? (
+                                    <p className="text-[10px] text-red-500 font-medium">{editHeaderFileWarning}</p>
+                                ) : editHeaderFile ? (
                                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                                         <Check className="size-3" />
-                                        {(editVideoFile.size / (1024 * 1024)).toFixed(1)} MB (Ready to upload)
+                                        {(editHeaderFile.size / (1024 * 1024)).toFixed(1)} MB (Ready for Meta Review)
                                     </p>
                                 ) : null}
 
-                                {/* Option 2: Public Video URL */}
                                 <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
                                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">OR URL:</span>
                                     <Input
@@ -1149,19 +1201,121 @@ export default function MessageTemplates({
                             </div>
                         )}
 
-                        {/* Informative notice for templates with NO header format in Meta */}
-                        {!editingTemplate?.headerFormat && (
-                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
-                                <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
-                                <div>
-                                    <p className="font-semibold text-xs text-amber-800 dark:text-amber-300">Format: No Header (Text-Only Template)</p>
-                                    <p className="mt-0.5 leading-relaxed text-[11px]">
-                                        <strong>Meta Policy:</strong> Meta allows updating the body and footer text, but does NOT allow adding or changing header format (e.g. adding Video to a text-only template).
-                                    </p>
-                                    <p className="mt-1 text-[11px] font-medium text-amber-900 dark:text-amber-100">
-                                        To send this message with a Video header, please use <strong>+ Create Template</strong> with Header Type = Video.
-                                    </p>
+                        {/* Image Header Section */}
+                        {editHeaderType === 'IMAGE' && (
+                            <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-2.5 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5 font-medium text-[11px] text-blue-700 dark:text-blue-300">
+                                        <Tag className="size-3.5" />
+                                        Image Media Sample
+                                    </span>
+                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                                        JPG, PNG (&lt; 5 MB)
+                                    </span>
                                 </div>
+
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        id="template-image-upload"
+                                        accept="image/jpeg,image/png"
+                                        onChange={handleEditHeaderFileChange}
+                                        className="hidden"
+                                    />
+                                    <label
+                                        htmlFor="template-image-upload"
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-input hover:border-blue-500 rounded cursor-pointer bg-background hover:bg-muted/30 transition-colors text-[11px] text-muted-foreground hover:text-foreground"
+                                    >
+                                        <Upload className="size-3 text-blue-600" />
+                                        <span className="truncate max-w-[200px]">
+                                            {editHeaderFile ? editHeaderFile.name : 'Upload JPG/PNG Image (< 5 MB)'}
+                                        </span>
+                                    </label>
+                                    {editHeaderFile && (
+                                        <button
+                                            type="button"
+                                            className="text-[10px] text-red-500 hover:underline px-1 cursor-pointer"
+                                            onClick={() => {
+                                                setEditHeaderFile(null);
+                                                setEditHeaderFileWarning(null);
+                                            }}
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+
+                                {editHeaderFileWarning ? (
+                                    <p className="text-[10px] text-red-500 font-medium">{editHeaderFileWarning}</p>
+                                ) : editHeaderFile ? (
+                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                        <Check className="size-3" />
+                                        {(editHeaderFile.size / (1024 * 1024)).toFixed(1)} MB (Ready for Meta Review)
+                                    </p>
+                                ) : null}
+
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-border/40">
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">OR URL:</span>
+                                    <Input
+                                        value={editHeaderUrl}
+                                        onChange={(e) => setEditHeaderUrl(e.target.value)}
+                                        placeholder="https://...image.jpg"
+                                        className="text-[11px] h-7 font-mono px-2"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Document Header Section */}
+                        {editHeaderType === 'DOCUMENT' && (
+                            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5 font-medium text-[11px] text-amber-700 dark:text-amber-300">
+                                        <FileText className="size-3.5" />
+                                        Document Media Sample
+                                    </span>
+                                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                                        PDF
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        id="template-doc-upload"
+                                        accept="application/pdf"
+                                        onChange={handleEditHeaderFileChange}
+                                        className="hidden"
+                                    />
+                                    <label
+                                        htmlFor="template-doc-upload"
+                                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 border border-dashed border-input hover:border-amber-500 rounded cursor-pointer bg-background hover:bg-muted/30 transition-colors text-[11px] text-muted-foreground hover:text-foreground"
+                                    >
+                                        <Upload className="size-3 text-amber-600" />
+                                        <span className="truncate max-w-[200px]">
+                                            {editHeaderFile ? editHeaderFile.name : 'Upload PDF Document'}
+                                        </span>
+                                    </label>
+                                    {editHeaderFile && (
+                                        <button
+                                            type="button"
+                                            className="text-[10px] text-red-500 hover:underline px-1 cursor-pointer"
+                                            onClick={() => {
+                                                setEditHeaderFile(null);
+                                                setEditHeaderFileWarning(null);
+                                            }}
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+
+                                {editHeaderFile && (
+                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                        <Check className="size-3" />
+                                        {(editHeaderFile.size / (1024 * 1024)).toFixed(1)} MB (Ready for Meta Review)
+                                    </p>
+                                )}
                             </div>
                         )}
 

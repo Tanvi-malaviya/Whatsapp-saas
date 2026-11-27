@@ -815,8 +815,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'header' => 'nullable|string|max:60',
             'footer' => 'nullable|string|max:60',
             'template_name' => 'nullable|string',
+            'header_type' => 'nullable|string',
             'header_format' => 'nullable|string',
             'header_url' => 'nullable|string',
+            'header_file' => 'nullable|file|max:16384',
             'video_file' => 'nullable|file|mimes:mp4,3gp|max:16384',
         ]);
 
@@ -833,37 +835,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
         }
 
         $templateName = $validated['template_name'] ?? $id;
-        $headerFormat = strtoupper($request->input('header_format', 'NONE'));
+        $headerType = strtoupper($request->input('header_type', $request->input('header_format', 'NONE')));
         $meta = $channel->metadata ?? [];
-
-        // Check Meta Policy on Header Format
-        // If template format in Meta is not VIDEO, but user attempts to upload/change to video:
-        if ($request->hasFile('video_file') && $headerFormat !== 'VIDEO') {
-            return back()->withErrors([
-                'message' => "Meta Policy Error: Template '{$templateName}' was created without a Video Header. Meta does not permit changing header format of an approved template. To use Video, please click '+ Create Template' with Header Type set to Video."
-            ]);
-        }
-
         $components = [];
+        $headerHandle = null;
 
-        // 1. Process Video Header if template format is VIDEO in Meta
-        if ($headerFormat === 'VIDEO') {
-            $headerHandle = null;
+        // 1. Process Media Header (VIDEO, IMAGE, DOCUMENT)
+        if (in_array($headerType, ['VIDEO', 'IMAGE', 'DOCUMENT'])) {
+            $uploadedFile = $request->file('header_file') ?? $request->file('video_file');
 
-            if ($request->hasFile('video_file')) {
-                $file = $request->file('video_file');
+            if ($uploadedFile && $uploadedFile->isValid()) {
+                $defaultMime = $headerType === 'VIDEO' ? 'video/mp4' : ($headerType === 'IMAGE' ? 'image/jpeg' : 'application/pdf');
+                $mimeType = $uploadedFile->getMimeType() ?: $defaultMime;
+                $ext = $uploadedFile->getClientOriginalExtension() ?: ($headerType === 'VIDEO' ? 'mp4' : ($headerType === 'IMAGE' ? 'jpg' : 'pdf'));
 
                 // A. Save locally
-                $ext = $file->getClientOriginalExtension() ?: 'mp4';
-                $localPath = $file->storeAs('template_media', $templateName . '_' . time() . '.' . $ext, 'public');
+                $localPath = $uploadedFile->storeAs('template_media', $templateName . '_' . time() . '.' . $ext, 'public');
                 $localUrl = url('storage/' . $localPath);
                 $meta['template_media_urls'][$templateName] = $localUrl;
 
                 // B. Upload to Meta Resumable Upload API for review handle
                 $appId = config('services.meta.app_id', env('META_APP_ID', '1079349601748656'));
-                $fileContents = file_get_contents($file->getRealPath());
+                $fileContents = file_get_contents($uploadedFile->getRealPath());
                 $fileSize = strlen($fileContents);
-                $mimeType = $file->getMimeType() ?: 'video/mp4';
 
                 $sessionResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
                     ->post("https://graph.facebook.com/v22.0/{$appId}/uploads", [
@@ -886,7 +880,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
                 // C. Upload to WhatsApp Media API for fast instant dispatch
                 $mediaResp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
-                    ->attach('file', $fileContents, $file->getClientOriginalName(), ['Content-Type' => $mimeType])
+                    ->attach('file', $fileContents, $uploadedFile->getClientOriginalName(), ['Content-Type' => $mimeType])
                     ->post("https://graph.facebook.com/v22.0/{$channel->phone_number_id}/media", [
                         'messaging_product' => 'whatsapp',
                         'type' => $mimeType,
@@ -903,17 +897,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 $channel->update(['metadata' => $meta]);
             }
 
-            $videoHeaderComp = [
+            $mediaHeaderComp = [
                 'type' => 'HEADER',
-                'format' => 'VIDEO',
+                'format' => $headerType,
             ];
             if ($headerHandle) {
-                $videoHeaderComp['example'] = [
+                $mediaHeaderComp['example'] = [
                     'header_handle' => [$headerHandle],
                 ];
+            } elseif (! empty($validated['header_url'])) {
+                $mediaHeaderComp['example'] = [
+                    'header_url' => [trim($validated['header_url'])],
+                ];
             }
-            $components[] = $videoHeaderComp;
-        } elseif ($headerFormat === 'TEXT' && ! empty($validated['header'])) {
+            $components[] = $mediaHeaderComp;
+        } elseif ($headerType === 'TEXT' && ! empty($validated['header'])) {
             $components[] = [
                 'type' => 'HEADER',
                 'format' => 'TEXT',
@@ -978,35 +976,63 @@ Route::middleware(['auth', 'verified'])->group(function () {
             return back()->withErrors(['message' => 'Connected WhatsApp Channel is required.']);
         }
 
-        $metaDeleted = false;
-        try {
-            $resp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
-                ->timeout(10)
-                ->delete("https://graph.facebook.com/v22.0/{$channel->waba_id}/message_templates?name={$name}");
+        $templateId = $request->query('template_id');
+        $deleted = false;
+        $errMsg = null;
 
-            if ($resp->successful() || $resp->json('success') === true) {
-                $metaDeleted = true;
+        // 1. If Meta numeric template ID (h_id) is provided, delete via h_id
+        if (! empty($templateId) && is_numeric($templateId)) {
+            try {
+                $resp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                    ->timeout(15)
+                    ->delete("https://graph.facebook.com/v22.0/{$channel->waba_id}/message_templates?h_id={$templateId}");
+
+                if ($resp->successful() || $resp->json('success') === true) {
+                    $deleted = true;
+                } else {
+                    $errMsg = $resp->json('error.error_user_msg') ?? $resp->json('error.message');
+                }
+            } catch (\Throwable $e) {
+                $errMsg = $e->getMessage();
             }
-        } catch (\Throwable $e) {
-            // Meta delete call finished
         }
 
-        // Always register in hidden_templates so it is instantly removed from the dashboard and campaigns
-        $meta = $channel->metadata ?? [];
-        $hidden = $meta['hidden_templates'] ?? [];
-        if (! in_array($name, $hidden)) {
-            $hidden[] = $name;
-            $meta['hidden_templates'] = array_values($hidden);
-            $channel->update(['metadata' => $meta]);
+        // 2. If not deleted yet, try deleting by template name
+        if (! $deleted) {
+            try {
+                $resp = \Illuminate\Support\Facades\Http::withToken($channel->access_token)
+                    ->timeout(15)
+                    ->delete("https://graph.facebook.com/v22.0/{$channel->waba_id}/message_templates?name={$name}");
+
+                if ($resp->successful() || $resp->json('success') === true) {
+                    $deleted = true;
+                } else {
+                    $errMsg = $resp->json('error.error_user_msg') ?? $resp->json('error.message') ?? $errMsg;
+                }
+            } catch (\Throwable $e) {
+                $errMsg = $errMsg ?? $e->getMessage();
+            }
         }
+
+        if (! $deleted) {
+            \Illuminate\Support\Facades\Log::error("Meta template deletion failed for '{$name}': {$errMsg}");
+            return back()->withErrors([
+                'message' => "Meta Deletion Error: Could not delete template '{$name}' from Meta. Reason: " . ($errMsg ?? 'Meta rejected template deletion. It may be locked by an active broadcast or recently sent campaign.')
+            ]);
+        }
+
+        // Clean up from channel metadata
+        $meta = $channel->metadata ?? [];
+        unset($meta['template_media_urls'][$name]);
+        unset($meta['template_media_ids'][$name]);
+        if (isset($meta['hidden_templates'])) {
+            $meta['hidden_templates'] = array_values(array_filter($meta['hidden_templates'], fn ($n) => $n !== $name));
+        }
+        $channel->update(['metadata' => $meta]);
 
         \Illuminate\Support\Facades\Cache::forget("meta_templates_{$channel->waba_id}");
 
-        $msg = $metaDeleted
-            ? "Template '{$name}' deleted successfully from Meta."
-            : "Template '{$name}' deleted and removed from your dashboard.";
-
-        return back()->with('success', $msg);
+        return back()->with('success', "Template '{$name}' has been completely deleted from Meta.");
     })->name('templates.destroy');
 
     // WhatsApp Analytics & Meta Template Costs
