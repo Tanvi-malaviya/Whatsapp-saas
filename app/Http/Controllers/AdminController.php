@@ -13,6 +13,7 @@ use App\Modules\MetaConnection\Models\WhatsAppChannel;
 use App\Services\SystemHealthService;
 use App\Shared\TenantContext;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -678,6 +680,16 @@ class AdminController extends Controller
             'meta_rate_marketing_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_marketing_paise', 88),
             'meta_rate_utility_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_utility_paise', 14),
             'meta_rate_authentication_paise' => (int) \App\Models\PlatformSetting::read('meta_rate_authentication_paise', 14),
+            // Mail & SMTP Configuration
+            'mail_mailer' => (string) \App\Models\PlatformSetting::read('mail_mailer', env('MAIL_MAILER', 'smtp')),
+            'mail_host' => (string) \App\Models\PlatformSetting::read('mail_host', env('MAIL_HOST', 'smtp.gmail.com')),
+            'mail_port' => (int) \App\Models\PlatformSetting::read('mail_port', env('MAIL_PORT', 465)),
+            'mail_scheme' => (string) \App\Models\PlatformSetting::read('mail_scheme', env('MAIL_SCHEME', 'smtps')),
+            'mail_encryption' => (string) \App\Models\PlatformSetting::read('mail_encryption', env('MAIL_ENCRYPTION', 'ssl')),
+            'mail_username' => (string) \App\Models\PlatformSetting::read('mail_username', env('MAIL_USERNAME', '')),
+            'mail_has_password' => !empty(\App\Models\PlatformSetting::read('mail_password', env('MAIL_PASSWORD', ''))),
+            'mail_from_address' => (string) \App\Models\PlatformSetting::read('mail_from_address', env('MAIL_FROM_ADDRESS', '')),
+            'mail_from_name' => (string) \App\Models\PlatformSetting::read('mail_from_name', env('MAIL_FROM_NAME', config('app.name'))),
         ]]);
     }
 
@@ -700,7 +712,24 @@ class AdminController extends Controller
             'meta_rate_marketing_paise' => 'nullable|integer|min:0',
             'meta_rate_utility_paise' => 'nullable|integer|min:0',
             'meta_rate_authentication_paise' => 'nullable|integer|min:0',
+            // Mail & SMTP settings
+            'mail_mailer' => 'nullable|string|in:smtp,log,sendmail',
+            'mail_host' => 'nullable|string|max:255',
+            'mail_port' => 'nullable|integer|min:1|max:65535',
+            'mail_scheme' => 'nullable|string|max:20',
+            'mail_encryption' => 'nullable|string|max:20',
+            'mail_username' => 'nullable|string|max:255',
+            'mail_password' => 'nullable|string|max:255',
+            'mail_from_address' => 'nullable|email|max:255',
+            'mail_from_name' => 'nullable|string|max:255',
         ]);
+
+        $mailKeys = [
+            'mail_mailer', 'mail_host', 'mail_port', 'mail_scheme',
+            'mail_encryption', 'mail_username', 'mail_password',
+            'mail_from_address', 'mail_from_name',
+        ];
+
         foreach ($data as $key => $value) {
             if ($value !== null && $value !== '') {
                 $isSystemKey = in_array($key, [
@@ -714,13 +743,92 @@ class AdminController extends Controller
                     'meta_rate_marketing_paise',
                     'meta_rate_utility_paise',
                     'meta_rate_authentication_paise',
-                ]) || str_starts_with($key, 'razorpay_');
+                ]) || str_starts_with($key, 'razorpay_') || in_array($key, $mailKeys);
 
                 \App\Models\PlatformSetting::write($isSystemKey ? $key : 'meta_'.$key, (string) $value);
             }
         }
+
+        // Sync Mail variables to .env file for queue workers and system compatibility
+        $mailEnvSync = [];
+        if (!empty($data['mail_mailer'])) $mailEnvSync['MAIL_MAILER'] = $data['mail_mailer'];
+        if (!empty($data['mail_host'])) $mailEnvSync['MAIL_HOST'] = $data['mail_host'];
+        if (!empty($data['mail_port'])) $mailEnvSync['MAIL_PORT'] = (string) $data['mail_port'];
+        if (isset($data['mail_scheme'])) $mailEnvSync['MAIL_SCHEME'] = $data['mail_scheme'] ?: 'null';
+        if (isset($data['mail_encryption'])) $mailEnvSync['MAIL_ENCRYPTION'] = $data['mail_encryption'] ?: 'null';
+        if (isset($data['mail_username'])) $mailEnvSync['MAIL_USERNAME'] = $data['mail_username'];
+        if (!empty($data['mail_password'])) $mailEnvSync['MAIL_PASSWORD'] = $data['mail_password'];
+        if (!empty($data['mail_from_address'])) $mailEnvSync['MAIL_FROM_ADDRESS'] = $data['mail_from_address'];
+        if (!empty($data['mail_from_name'])) $mailEnvSync['MAIL_FROM_NAME'] = $data['mail_from_name'];
+
+        if (!empty($mailEnvSync)) {
+            $this->updateEnvFile($mailEnvSync);
+        }
+
         \App\Modules\Foundation\Models\AuditLog::record('platform.settings.updated');
-        return back()->with('success', 'Platform settings saved successfully.');
+        return back()->with('success', 'Platform settings and SMTP configuration saved successfully.');
+    }
+
+    /**
+     * Send test email to verify SMTP configuration
+     */
+    public function sendTestEmail(Request $request): JsonResponse
+    {
+        $this->ensureSuperAdmin($request);
+
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+        ]);
+
+        $recipient = $validated['email'];
+
+        try {
+            Mail::raw(
+                "Hello!\n\nThis is a test email sent from the WhatsApp SaaS Super Admin Panel.\nYour SMTP Mail Server is configured correctly and functioning properly!\n\nTimestamp: " . now()->toDayDateTimeString() . "\nSystem: " . config('app.name'),
+                function ($message) use ($recipient) {
+                    $message->to($recipient)
+                        ->subject('✅ WhatsApp SaaS - SMTP Test Email Successful');
+                }
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => "Test email successfully sent to {$recipient}!",
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'SMTP Error: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Safely update .env file key-value pairs
+     */
+    protected function updateEnvFile(array $values): void
+    {
+        $envPath = base_path('.env');
+        if (! file_exists($envPath)) {
+            return;
+        }
+
+        $content = file_get_contents($envPath);
+
+        foreach ($values as $key => $value) {
+            $formattedValue = (str_contains($value, ' ') || str_contains($value, '#') || str_contains($value, '$'))
+                ? '"' . addcslashes($value, '"\\$') . '"'
+                : $value;
+
+            $pattern = "/^{$key}=.*/m";
+            if (preg_match($pattern, $content)) {
+                $content = preg_replace($pattern, "{$key}={$formattedValue}", $content);
+            } else {
+                $content .= PHP_EOL . "{$key}={$formattedValue}";
+            }
+        }
+
+        file_put_contents($envPath, $content);
     }
 
     /**
