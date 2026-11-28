@@ -83,6 +83,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('users/{id}/toggle-agent', [\App\Http\Controllers\AdminController::class, 'toggleAgent'])->name('users.toggle-agent');
             Route::get('settings', [\App\Http\Controllers\AdminController::class, 'settings'])->name('settings');
             Route::post('settings', [\App\Http\Controllers\AdminController::class, 'updateSettings'])->name('settings.update');
+            Route::post('settings/test-email', [\App\Http\Controllers\AdminController::class, 'sendTestEmail'])->name('settings.test-email');
             Route::post('diagnostics/autofix', [\App\Http\Controllers\AdminController::class, 'autoFixDiagnostics'])->name('diagnostics.autofix');
             Route::get('diagnostics', [\App\Http\Controllers\AdminController::class, 'diagnosticsReport'])->name('diagnostics.index');
         });
