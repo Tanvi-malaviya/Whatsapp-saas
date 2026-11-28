@@ -155,7 +155,32 @@ export default function AdminSettings({ settings }: Props) {
         settings.mail_from_name,
     ]);
 
-    const hasChanges = true;
+    const hasChanges =
+        appId !== (settings.app_id || '') ||
+        configId !== (settings.config_id || '') ||
+        verifyToken !== (settings.verify_token || '') ||
+        appSecret.trim() !== '' ||
+        openaiKey.trim() !== '' ||
+        razorpayKeyId.trim() !== '' ||
+        razorpaySecret.trim() !== '' ||
+        razorpayWebhook.trim() !== '' ||
+        annualPrice !== ((settings.subscription_annual_price_paise ?? 999900) / 100) ||
+        validityDays !== (settings.subscription_validity_days ?? 365) ||
+        welcomeBonus !== ((settings.welcome_bonus_paise ?? 50000) / 100) ||
+        referralReward !== ((settings.referral_reward_paise ?? 50000) / 100) ||
+        campaignMaxContacts !== (settings.campaign_max_contacts ?? 2000) ||
+        minMessages !== (settings.min_message_purchase_count ?? 500) ||
+        rateMarketing !== ((settings.meta_rate_marketing_paise ?? 88) / 100) ||
+        rateUtility !== ((settings.meta_rate_utility_paise ?? 14) / 100) ||
+        rateAuth !== ((settings.meta_rate_authentication_paise ?? 14) / 100) ||
+        mailMailer !== (settings.mail_mailer || 'smtp') ||
+        mailHost !== (settings.mail_host || 'smtp.gmail.com') ||
+        mailPort !== (settings.mail_port || 465) ||
+        mailScheme !== (settings.mail_scheme || 'smtps') ||
+        mailUsername !== (settings.mail_username || '') ||
+        mailPassword.trim() !== '' ||
+        mailFromAddress !== (settings.mail_from_address || '') ||
+        mailFromName !== (settings.mail_from_name || 'Sathwara Cloud API');
 
     const handleSaveSettings = () => {
         setIsSaving(true);
