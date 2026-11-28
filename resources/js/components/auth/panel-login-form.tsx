@@ -25,9 +25,9 @@ const panels = {
     },
     admin: {
         action: '/admin/login',
-        label: 'Sign in to admin',
+        label: 'Sign in to Master Admin',
         email: 'Administrator email',
-        color: 'bg-slate-900 hover:bg-slate-800 dark:bg-amber-400 dark:text-slate-950 dark:hover:bg-amber-300 focus-visible:ring-amber-500',
+        color: 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/25 focus-visible:ring-emerald-500',
     },
     agent: {
         action: '/agent/login',
@@ -126,10 +126,10 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
     return (
         <form
             onSubmit={handleSubmit}
-            className={cn('space-y-5', compact && 'space-y-3.5')}
+            className={cn('space-y-5', compact && 'space-y-3')}
         >
-            <div className={cn('space-y-2', compact && 'space-y-1.5')}>
-                <Label htmlFor={emailId}>{config.email}</Label>
+            <div className={cn('space-y-2', compact && 'space-y-1')}>
+                <Label htmlFor={emailId} className={cn(compact && 'text-xs')}>{config.email}</Label>
                 <Input
                     id={emailId}
                     name="email"
@@ -142,7 +142,7 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                     placeholder="you@company.com"
                     className={cn(
                         'h-12 bg-background text-base md:text-sm',
-                        compact && 'h-10 text-sm',
+                        compact && 'h-9.5 text-xs',
                     )}
                     aria-invalid={!!errors.email}
                     aria-describedby={
@@ -155,13 +155,13 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                     role="alert"
                 />
             </div>
-            <div className={cn('space-y-2', compact && 'space-y-1.5')}>
+            <div className={cn('space-y-2', compact && 'space-y-1')}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label htmlFor={passwordId}>Password</Label>
+                    <Label htmlFor={passwordId} className={cn(compact && 'text-xs')}>Password</Label>
                     {canResetPassword && (
                         <Link
                             href="/forgot-password"
-                            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                            className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                         >
                             Forgot password?
                         </Link>
@@ -177,7 +177,7 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                     placeholder="Enter your password"
                     className={cn(
                         'h-12 bg-background text-base md:text-sm',
-                        compact && 'h-10 text-sm',
+                        compact && 'h-9.5 text-xs',
                     )}
                     aria-invalid={!!errors.password}
                     aria-describedby={
@@ -192,7 +192,7 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                     role="alert"
                 />
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
                 <Checkbox
                     id={`${panel}-remember`}
                     name="remember"
@@ -201,7 +201,10 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                 />
                 <Label
                     htmlFor={`${panel}-remember`}
-                    className="cursor-pointer font-normal text-muted-foreground text-sm select-none"
+                    className={cn(
+                        "cursor-pointer font-normal text-muted-foreground text-sm select-none",
+                        compact && "text-xs"
+                    )}
                 >
                     Remember me
                 </Label>
@@ -211,7 +214,7 @@ export function PanelLoginForm({ panel, canResetPassword = false, compact = fals
                 disabled={processing}
                 className={cn(
                     'h-12 w-full gap-2 rounded-lg text-sm font-semibold text-white cursor-pointer transition-all',
-                    compact && 'h-10 text-sm',
+                    compact && 'h-9.5 text-xs',
                     config.color,
                 )}
                 data-test="login-button"
