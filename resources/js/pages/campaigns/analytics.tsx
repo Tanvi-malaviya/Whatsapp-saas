@@ -110,6 +110,11 @@ interface MetaErrorInfo {
 }
 
 const META_ERROR_GUIDE: Record<string, Omit<MetaErrorInfo, 'code'>> = {
+    '131042': {
+        title: 'Currency / Payment Method Issue',
+        explanation: 'WhatsApp Business account currency is not configured or payment method is missing in Meta Business Manager.',
+        action: 'Configure country & currency (INR) and add a payment method in Meta Business Manager.',
+    },
     '131049': {
         title: 'Healthy Ecosystem Engagement Cap',
         explanation: 'WhatsApp skipped delivery because this user recently received too many marketing messages without replying.',
@@ -345,7 +350,7 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
     ];
 
     return (
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 w-full min-w-0 overflow-x-hidden">
             <Head title={`${campaign.name} - Campaign Analytics`} />
 
             {/* Top Navigation & Header */}
@@ -445,25 +450,25 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
             </div>
 
             {/* Primary KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                <Card className="shadow-none">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 min-w-0">
+                <Card className="shadow-none min-w-0 overflow-hidden">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
-                            <span>Total Selected</span>
-                            <Users className="size-4 text-muted-foreground/70" />
+                            <span className="truncate">Total Selected</span>
+                            <Users className="size-4 text-muted-foreground/70 shrink-0" />
                         </div>
                         <div className="text-2xl font-bold text-foreground mt-1.5">{metrics.total_selected}</div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
                             {metrics.queued > 0 ? `${metrics.queued} still queued` : 'All recipients processed'}
                         </p>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-none border-sky-500/30 bg-sky-500/5">
+                <Card className="shadow-none border-sky-500/30 bg-sky-500/5 min-w-0 overflow-hidden">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between text-xs text-sky-700 dark:text-sky-300 font-medium">
-                            <span>Sent to WhatsApp</span>
-                            <Send className="size-4 text-sky-500" />
+                            <span className="truncate">Sent to WhatsApp</span>
+                            <Send className="size-4 text-sky-500 shrink-0" />
                         </div>
                         <div className="flex items-baseline gap-1.5 mt-1.5">
                             <span className="text-2xl font-bold text-sky-600 dark:text-sky-400">{metrics.sent_total}</span>
@@ -471,17 +476,17 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                 ({sentPctOfSelected}%)
                             </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
                             {metrics.sent > 0 ? `${metrics.sent} awaiting device receipt` : 'All sent have receipt'}
                         </p>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-none border-emerald-500/30 bg-emerald-500/5">
+                <Card className="shadow-none border-emerald-500/30 bg-emerald-500/5 min-w-0 overflow-hidden">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300 font-medium">
-                            <span>Delivered</span>
-                            <CheckCheck className="size-4 text-emerald-500" />
+                            <span className="truncate">Delivered</span>
+                            <CheckCheck className="size-4 text-emerald-500 shrink-0" />
                         </div>
                         <div className="flex items-baseline gap-1.5 mt-1.5">
                             <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
@@ -491,17 +496,17 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                 ({metrics.delivery_rate}%)
                             </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
                             Of {metrics.sent_total + metrics.failed} attempted messages
                         </p>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-none border-blue-500/30 bg-blue-500/5">
+                <Card className="shadow-none border-blue-500/30 bg-blue-500/5 min-w-0 overflow-hidden">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between text-xs text-blue-700 dark:text-blue-300 font-medium">
-                            <span>Read (Seen)</span>
-                            <CheckCircle2 className="size-4 text-blue-500" />
+                            <span className="truncate">Read (Seen)</span>
+                            <CheckCircle2 className="size-4 text-blue-500 shrink-0" />
                         </div>
                         <div className="flex items-baseline gap-1.5 mt-1.5">
                             <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{metrics.read}</span>
@@ -509,17 +514,17 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                 ({metrics.read_rate}%)
                             </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
                             Of {metrics.delivered_total} delivered messages
                         </p>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-none border-purple-500/30 bg-purple-500/5 col-span-2 md:col-span-1">
+                <Card className="shadow-none border-purple-500/30 bg-purple-500/5 col-span-2 md:col-span-1 min-w-0 overflow-hidden">
                     <CardContent className="p-4">
                         <div className="flex items-center justify-between text-xs text-purple-700 dark:text-purple-300 font-medium">
-                            <span>Customer Replies</span>
-                            <MessageSquare className="size-4 text-purple-500" />
+                            <span className="truncate">Customer Replies</span>
+                            <MessageSquare className="size-4 text-purple-500 shrink-0" />
                         </div>
                         <div className="flex items-baseline gap-1.5 mt-1.5">
                             <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">{metrics.replies}</span>
@@ -527,7 +532,7 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                 ({replyRate}%)
                             </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
                             Inbound replies since launch
                         </p>
                     </CardContent>
@@ -535,16 +540,16 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
             </div>
 
             {/* Funnel & Failure Analysis */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-w-0">
                 {/* Delivery Funnel + Cost */}
-                <Card className="lg:col-span-7 shadow-none">
+                <Card className="lg:col-span-7 shadow-none min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-base">Delivery &amp; Engagement Funnel</CardTitle>
                         <CardDescription className="text-xs">
                             How your {metrics.total_selected} selected contacts progressed from dispatch to read and reply.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 min-w-0">
                         <div className="space-y-3">
                             {funnelStages.map((stage) => (
                                 <div key={stage.label} className="space-y-1">
@@ -567,30 +572,30 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
 
                         {/* Secondary Cost & Status Strip */}
                         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
-                            <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
-                                <div className="text-[11px] text-muted-foreground">Queued / Pending</div>
+                            <div className="p-3 rounded-lg bg-muted/40 border border-border/60 min-w-0 overflow-hidden">
+                                <div className="text-[11px] text-muted-foreground truncate">Queued / Pending</div>
                                 <div className="text-base font-bold text-foreground mt-0.5">{metrics.queued}</div>
                             </div>
-                            <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">
-                                <div className="text-[11px] text-muted-foreground">Failed Messages</div>
+                            <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20 min-w-0 overflow-hidden">
+                                <div className="text-[11px] text-muted-foreground truncate">Failed Messages</div>
                                 <div className="text-base font-bold text-destructive mt-0.5">
                                     {metrics.failed}{' '}
                                     <span className="text-[11px] font-normal">({failRate}%)</span>
                                 </div>
                             </div>
-                            <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
-                                <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                    <IndianRupee className="size-3" />
-                                    Campaign Cost
+                            <div className="p-3 rounded-lg bg-muted/40 border border-border/60 min-w-0 overflow-hidden">
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+                                    <IndianRupee className="size-3 shrink-0" />
+                                    <span>Campaign Cost</span>
                                 </div>
                                 <div className="text-base font-bold text-foreground mt-0.5">{campaign.cost_formatted}</div>
-                                <div className="text-[10px] text-muted-foreground">{costPerDelivered} / delivered</div>
+                                <div className="text-[10px] text-muted-foreground truncate">{costPerDelivered} / delivered</div>
                             </div>
                         </div>
 
-                        <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground">
+                        <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground min-w-0">
                             <Info className="size-3.5 mt-0.5 shrink-0 text-primary" />
-                            <span>
+                            <span className="break-words">
                                 <strong>Sent (✓):</strong> Accepted by WhatsApp servers.{' '}
                                 <strong>Delivered (✓✓):</strong> Received on recipient&apos;s phone.{' '}
                                 <strong>Read (✓✓):</strong> Opened by recipient (requires read receipts enabled).
@@ -600,28 +605,28 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                 </Card>
 
                 {/* Failure Reasons Explained */}
-                <Card className="lg:col-span-5 shadow-none flex flex-col">
+                <Card className="lg:col-span-5 shadow-none flex flex-col min-w-0 overflow-hidden">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
-                            <AlertCircle className={`size-4 ${metrics.failed > 0 ? 'text-destructive' : 'text-emerald-500'}`} />
-                            Why Messages Failed ({metrics.failed})
+                            <AlertCircle className={`size-4 shrink-0 ${metrics.failed > 0 ? 'text-destructive' : 'text-emerald-500'}`} />
+                            <span className="truncate">Why Messages Failed ({metrics.failed})</span>
                         </CardTitle>
                         <CardDescription className="text-xs">
                             Plain-English breakdown of Meta delivery errors and recommended next steps.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex-1 space-y-3">
+                    <CardContent className="flex-1 space-y-3 min-w-0 overflow-hidden">
                         {metrics.failure_reasons && metrics.failure_reasons.length > 0 ? (
-                            <div className="space-y-2.5">
+                            <div className="space-y-2.5 min-w-0">
                                 {metrics.failure_reasons.map((fr, idx) => {
                                     const info = explainMetaError(fr.error);
                                     return (
                                         <div
                                             key={idx}
-                                            className="p-3 rounded-xl border border-destructive/20 bg-destructive/5 space-y-1.5"
+                                            className="p-3 rounded-xl border border-destructive/20 bg-destructive/5 space-y-1.5 min-w-0 overflow-hidden"
                                         >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="text-xs font-semibold text-destructive">
+                                            <div className="flex items-center justify-between gap-2 min-w-0">
+                                                <span className="text-xs font-semibold text-destructive break-words min-w-0">
                                                     {info.code ? `Meta #${info.code} · ` : ''}
                                                     {info.title}
                                                 </span>
@@ -629,8 +634,8 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                                     {fr.count} {fr.count === 1 ? 'msg' : 'msgs'}
                                                 </Badge>
                                             </div>
-                                            <p className="text-xs text-foreground/90 leading-relaxed">{info.explanation}</p>
-                                            <p className="text-[11px] text-muted-foreground">
+                                            <p className="text-xs text-foreground/90 leading-relaxed break-words break-all">{info.explanation}</p>
+                                            <p className="text-[11px] text-muted-foreground break-words">
                                                 <strong className="text-foreground">Tip:</strong> {info.action}
                                             </p>
                                         </div>
@@ -651,7 +656,7 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
             </div>
 
             {/* Searchable & Filterable Recipients Table */}
-            <Card className="shadow-none">
+            <Card className="shadow-none min-w-0 overflow-hidden">
                 <CardHeader className="pb-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -757,7 +762,7 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
                                                                 {errInfo.code ? `#${errInfo.code}: ` : ''}
                                                                 {errInfo.title}
                                                             </div>
-                                                            <div className="text-[11px] text-muted-foreground line-clamp-2">
+                                                            <div className="text-[11px] text-muted-foreground line-clamp-2 break-words break-all">
                                                                 {errInfo.explanation}
                                                             </div>
                                                         </div>

@@ -140,21 +140,6 @@ export function WorkspaceSwitcher() {
                             </DropdownMenuItem>
                         );
                     })}
-
-                    <DropdownMenuSeparator />
-
-                    {/* Create New Workspace Button */}
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setError('');
-                            setNewOrgName('');
-                            setIsCreateOpen(true);
-                        }}
-                        className="flex items-center gap-2 py-2 text-emerald-600 dark:text-emerald-400 font-medium cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                    >
-                        <Plus className="size-4" />
-                        <span className="text-xs font-semibold">Create New Workspace</span>
-                    </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
 

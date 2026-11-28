@@ -9,11 +9,9 @@ import {
     ShieldCheck,
     Sparkles,
     Send,
-    Bot,
     Sun,
     Moon,
     Zap,
-    CheckCheck,
     Building2,
 } from 'lucide-react';
 import InputError from '@/components/input-error';
@@ -58,9 +56,9 @@ export default function Register({ passwordRules }: Props) {
         <>
             <Head title="Create Workspace • Sathwara WhatsApp Cloud" />
 
-            <div className="relative h-screen w-full bg-background text-foreground flex flex-col lg:grid lg:grid-cols-12 overflow-y-auto lg:overflow-hidden select-none">
+            <div className="relative min-h-screen lg:h-screen w-full bg-background text-foreground flex flex-col lg:grid lg:grid-cols-12 lg:overflow-hidden select-none">
                 {/* LEFT COLUMN: Clean & Compact Register Form (5 cols on lg) */}
-                <div className="flex-1 lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-6 sm:p-8 xl:p-10 z-10">
+                <div className="flex-1 lg:col-span-5 xl:col-span-5 flex flex-col justify-between p-5 sm:p-6 lg:p-7 z-10 h-full overflow-y-auto lg:overflow-hidden">
                     {/* Header: Brand & Theme Toggle */}
                     <div className="flex items-center justify-between">
                         <Link
@@ -98,9 +96,9 @@ export default function Register({ passwordRules }: Props) {
                     </div>
 
                     {/* Centered Compact Form */}
-                    <div className="w-full max-w-[360px] mx-auto my-auto py-2">
+                    <div className="w-full max-w-[420px] mx-auto my-auto py-3">
                         {/* Title Header */}
-                        <div className="mb-4 text-left">
+                        <div className="mb-3.5 text-left">
                             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 mb-2">
                                 <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 Official Meta Cloud v22.0
@@ -122,51 +120,51 @@ export default function Register({ passwordRules }: Props) {
                         >
                             {({ processing, errors }) => (
                                 <>
-                                    {/* Name */}
-                                    <div className="space-y-1">
-                                        <Label
-                                            htmlFor="name"
-                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
-                                        >
-                                            <User className="size-3 text-emerald-600 dark:text-emerald-400" />
-                                            Full Name
-                                        </Label>
-                                        <Input
-                                            id="name"
-                                            type="text"
-                                            name="name"
-                                            required
-                                            autoFocus
-                                            tabIndex={1}
-                                            autoComplete="name"
-                                            placeholder="e.g. Bhavesh Sathwara"
-                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
-                                        />
-                                        <InputError message={errors.name} />
-                                    </div>
+                                    {/* Name & Workspace in 2 cols */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        {/* Name */}
+                                        <div className="space-y-1">
+                                            <Label
+                                                htmlFor="name"
+                                                className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                                            >
+                                                <User className="size-3 text-emerald-600 dark:text-emerald-400" />
+                                                Full Name
+                                            </Label>
+                                            <Input
+                                                id="name"
+                                                type="text"
+                                                name="name"
+                                                required
+                                                autoFocus
+                                                tabIndex={1}
+                                                autoComplete="name"
+                                                placeholder="e.g. Bhavesh"
+                                                className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                            />
+                                            <InputError message={errors.name} />
+                                        </div>
 
-                                    {/* Workspace Name */}
-                                    <div className="space-y-1">
-                                        <Label
-                                            htmlFor="workspace_name"
-                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between"
-                                        >
-                                            <span className="flex items-center gap-1.5">
+                                        {/* Workspace Name */}
+                                        <div className="space-y-1">
+                                            <Label
+                                                htmlFor="workspace_name"
+                                                className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                                            >
                                                 <Building2 className="size-3 text-emerald-600 dark:text-emerald-400" />
-                                                Workspace / Company Name
-                                            </span>
-                                            <span className="text-[10px] text-muted-foreground font-normal">Business Name</span>
-                                        </Label>
-                                        <Input
-                                            id="workspace_name"
-                                            type="text"
-                                            name="workspace_name"
-                                            tabIndex={2}
-                                            autoComplete="organization"
-                                            placeholder="e.g. Sathwara Global, Acme Store"
-                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
-                                        />
-                                        <InputError message={errors.workspace_name} />
+                                                Workspace Name
+                                            </Label>
+                                            <Input
+                                                id="workspace_name"
+                                                type="text"
+                                                name="workspace_name"
+                                                tabIndex={2}
+                                                autoComplete="organization"
+                                                placeholder="e.g. Sathwara Global"
+                                                className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                            />
+                                            <InputError message={errors.workspace_name} />
+                                        </div>
                                     </div>
 
                                     {/* Email */}
@@ -191,48 +189,51 @@ export default function Register({ passwordRules }: Props) {
                                         <InputError message={errors.email} />
                                     </div>
 
-                                    {/* Password */}
-                                    <div className="space-y-1">
-                                        <Label
-                                            htmlFor="password"
-                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
-                                        >
-                                            <Lock className="size-3 text-emerald-600 dark:text-emerald-400" />
-                                            Password
-                                        </Label>
-                                        <PasswordInput
-                                            id="password"
-                                            name="password"
-                                            required
-                                            tabIndex={4}
-                                            autoComplete="new-password"
-                                            placeholder="••••••••••••"
-                                            passwordrules={passwordRules}
-                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
-                                        />
-                                        <InputError message={errors.password} />
-                                    </div>
+                                    {/* Password & Confirm in 2 cols */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        {/* Password */}
+                                        <div className="space-y-1">
+                                            <Label
+                                                htmlFor="password"
+                                                className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                                            >
+                                                <Lock className="size-3 text-emerald-600 dark:text-emerald-400" />
+                                                Password
+                                            </Label>
+                                            <PasswordInput
+                                                id="password"
+                                                name="password"
+                                                required
+                                                tabIndex={4}
+                                                autoComplete="new-password"
+                                                placeholder="••••••••••••"
+                                                passwordrules={passwordRules}
+                                                className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                            />
+                                            <InputError message={errors.password} />
+                                        </div>
 
-                                    {/* Confirm Password */}
-                                    <div className="space-y-1">
-                                        <Label
-                                            htmlFor="password_confirmation"
-                                            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
-                                        >
-                                            <Lock className="size-3 text-emerald-600 dark:text-emerald-400" />
-                                            Confirm Password
-                                        </Label>
-                                        <PasswordInput
-                                            id="password_confirmation"
-                                            name="password_confirmation"
-                                            required
-                                            tabIndex={5}
-                                            autoComplete="new-password"
-                                            placeholder="Repeat password"
-                                            passwordrules={passwordRules}
-                                            className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
-                                        />
-                                        <InputError message={errors.password_confirmation} />
+                                        {/* Confirm Password */}
+                                        <div className="space-y-1">
+                                            <Label
+                                                htmlFor="password_confirmation"
+                                                className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                                            >
+                                                <Lock className="size-3 text-emerald-600 dark:text-emerald-400" />
+                                                Confirm Password
+                                            </Label>
+                                            <PasswordInput
+                                                id="password_confirmation"
+                                                name="password_confirmation"
+                                                required
+                                                tabIndex={5}
+                                                autoComplete="new-password"
+                                                placeholder="Repeat password"
+                                                passwordrules={passwordRules}
+                                                className="h-9 rounded-lg border-border bg-card/80 text-xs focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500 transition-all shadow-2xs"
+                                            />
+                                            <InputError message={errors.password_confirmation} />
+                                        </div>
                                     </div>
 
                                     {/* Referral Code (Optional) */}
@@ -259,11 +260,11 @@ export default function Register({ passwordRules }: Props) {
                                         />
                                     </div>
 
-                                    {/* Create Workspace Button (WhatsApp Signature Green Theme) */}
+                                    {/* Create Workspace Button */}
                                     <Button
                                         type="submit"
                                         className="group h-10 w-full rounded-lg bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/25 transition-all duration-200 active:scale-[0.99] flex items-center justify-center gap-1.5 cursor-pointer mt-1"
-                                        tabIndex={5}
+                                        tabIndex={7}
                                         disabled={processing}
                                         data-test="register-user-button"
                                     >
@@ -281,11 +282,11 @@ export default function Register({ passwordRules }: Props) {
                                     </Button>
 
                                     {/* Sign In Link */}
-                                    <div className="pt-2 text-center text-xs text-muted-foreground">
+                                    <div className="pt-1.5 text-center text-xs text-muted-foreground">
                                         Already have an account?{' '}
                                         <Link
                                             href={login()}
-                                            tabIndex={6}
+                                            tabIndex={8}
                                             className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
                                         >
                                             Sign in
@@ -315,7 +316,7 @@ export default function Register({ passwordRules }: Props) {
                 </div>
 
                 {/* RIGHT COLUMN: Interactive Live Showcase in WhatsApp Emerald & Slate Theme (7 cols on lg) */}
-                <div className="hidden lg:col-span-7 xl:col-span-7 lg:flex relative overflow-hidden bg-gradient-to-br from-[#041315] via-[#061d1e] to-[#040f13] p-8 xl:p-12 text-white flex-col justify-between">
+                <div className="hidden lg:col-span-7 xl:col-span-7 lg:flex relative overflow-hidden bg-gradient-to-br from-[#041315] via-[#061d1e] to-[#040f13] p-6 xl:p-10 text-white flex-col justify-between h-full">
                     {/* Glowing WhatsApp Auroras */}
                     <div className="pointer-events-none absolute -top-24 -right-24 size-[420px] rounded-full bg-emerald-500/20 blur-[110px] animate-pulse-glow" />
                     <div className="pointer-events-none absolute -bottom-24 -left-24 size-[420px] rounded-full bg-teal-600/15 blur-[120px] animate-pulse-glow" />
@@ -333,23 +334,23 @@ export default function Register({ passwordRules }: Props) {
                         </span>
                     </div>
 
-                    {/* Middle: Interactive Cards */}
-                    <div className="relative z-10 my-auto py-6 space-y-4 max-w-xl">
+                    {/* Middle: Clean Single Interactive Card */}
+                    <div className="relative z-10 my-auto py-4 space-y-4 max-w-lg">
                         <div className="space-y-1.5">
                             <h2 className="text-2xl xl:text-3xl font-extrabold tracking-tight text-white leading-tight">
                                 Automate WhatsApp Communications.
                             </h2>
                             <p className="text-xs xl:text-sm text-emerald-100/70">
-                                Send broadcasts with verified templates, deploy 24/7 automated menus, and manage multi-agent chats in one unified workspace.
+                                Send broadcasts with verified templates, deploy 24/7 automated flows, and manage customer chats in one unified workspace.
                             </p>
                         </div>
 
-                        {/* Interactive Card 1: Live Animated Broadcast Dispatch */}
-                        <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/30 p-4 backdrop-blur-xl shadow-xl space-y-2.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:shadow-emerald-500/10">
+                        {/* Interactive Card: Live Animated Broadcast Dispatch */}
+                        <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/30 p-4.5 backdrop-blur-xl shadow-xl space-y-3 transition-all duration-300 hover:border-emerald-500/40">
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className="size-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                                        <Send className="size-3.5" />
+                                <div className="flex items-center gap-2.5">
+                                    <div className="size-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                                        <Send className="size-4" />
                                     </div>
                                     <div>
                                         <h4 className="text-xs font-bold text-white">
@@ -367,7 +368,7 @@ export default function Register({ passwordRules }: Props) {
                             </div>
 
                             {/* Animated Progress Bar */}
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                                 <div className="flex items-center justify-between text-[11px] text-emerald-100/80">
                                     <span>Sending to Contacts</span>
                                     <span className="font-bold text-emerald-300 font-mono">
@@ -380,67 +381,18 @@ export default function Register({ passwordRules }: Props) {
                             </div>
 
                             {/* Mini KPIs */}
-                            <div className="grid grid-cols-3 gap-2 pt-0.5">
-                                <div className="rounded-lg bg-white/5 p-1.5 text-center border border-white/5">
+                            <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/10">
+                                <div className="rounded-lg bg-white/5 p-2 text-center border border-white/5">
                                     <div className="text-[9px] text-white/60">Delivered</div>
                                     <div className="text-xs font-bold text-white">99.1%</div>
                                 </div>
-                                <div className="rounded-lg bg-emerald-500/10 p-1.5 text-center border border-emerald-500/20">
+                                <div className="rounded-lg bg-emerald-500/10 p-2 text-center border border-emerald-500/20">
                                     <div className="text-[9px] text-emerald-300">Open Rate</div>
                                     <div className="text-xs font-bold text-emerald-400">98.2%</div>
                                 </div>
-                                <div className="rounded-lg bg-white/5 p-1.5 text-center border border-white/5">
+                                <div className="rounded-lg bg-white/5 p-2 text-center border border-white/5">
                                     <div className="text-[9px] text-white/60">Avg Response</div>
                                     <div className="text-xs font-bold text-teal-300">14s</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Interactive Card 2: WhatsApp Live Chat & AI Bot Simulator */}
-                        <div className="rounded-xl border border-emerald-500/25 bg-emerald-950/30 p-4 backdrop-blur-xl shadow-xl space-y-2.5 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-500/40">
-                            <div className="flex items-center justify-between pb-1 border-b border-white/10">
-                                <div className="flex items-center gap-1.5">
-                                    <div className="size-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                        <Bot className="size-3" />
-                                    </div>
-                                    <span className="text-xs font-bold text-white">
-                                        WhatsApp Live Chat & Bot Flow
-                                    </span>
-                                </div>
-                                <span className="text-[10px] text-emerald-300/70 font-mono">
-                                    Instant 24/7
-                                </span>
-                            </div>
-
-                            {/* Chat Messages */}
-                            <div className="space-y-2 text-xs">
-                                {/* Customer Bubble */}
-                                <div className="flex items-start gap-2">
-                                    <div className="size-5 rounded-full bg-white/10 text-white/80 flex items-center justify-center text-[9px] font-bold shrink-0">
-                                        C
-                                    </div>
-                                    <div className="rounded-xl rounded-tl-xs bg-white/10 border border-white/10 px-3 py-1.5 text-white/90 text-[11px] max-w-[85%]">
-                                        Hi! Can I test the WhatsApp Cloud API demo?
-                                    </div>
-                                </div>
-
-                                {/* Bot Bubble with WhatsApp Green Accent & Double Checkmark */}
-                                <div className="flex items-start gap-2 justify-end">
-                                    <div className="rounded-xl rounded-tr-xs bg-emerald-900/60 border border-emerald-500/30 px-3 py-2 text-emerald-100 text-[11px] max-w-[85%] space-y-1 shadow-md">
-                                        <div className="flex items-center justify-between text-[10px] font-semibold text-emerald-300">
-                                            <span className="flex items-center gap-1">
-                                                <Sparkles className="size-2.5" />
-                                                Sathwara AI Bot
-                                            </span>
-                                            <CheckCheck className="size-3 text-sky-400" />
-                                        </div>
-                                        <p>
-                                            👋 Welcome! Here are our starter plans & instant setup wizard. An agent will also connect with you in this chat!
-                                        </p>
-                                    </div>
-                                    <div className="size-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-                                        <AppLogoIcon className="size-3 text-emerald-400" />
-                                    </div>
                                 </div>
                             </div>
                         </div>
