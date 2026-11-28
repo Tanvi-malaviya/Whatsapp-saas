@@ -153,6 +153,8 @@ class DashboardController extends Controller
             'recentConversations' => $conversations,
             'metaTemplates' => $metaTemplates,
             'botFlows' => $botFlows,
+            'isSubscriptionActive' => (bool) $org?->isSubscriptionActive(),
+            'subscriptionStatus' => $org ? $org->subscriptionStatus() : 'pending',
         ]);
     }
 }

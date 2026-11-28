@@ -20,10 +20,18 @@ import {
     Sparkles,
     ChevronRight,
     Send,
+    CreditCard,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Channel = {
     id: string;
@@ -51,6 +59,7 @@ type Props = {
     maxChannels?: number;
     channelsCount?: number;
     canAddMore?: boolean;
+    isSubscriptionActive?: boolean;
 };
 
 export default function WhatsAppConnect({
@@ -62,6 +71,7 @@ export default function WhatsAppConnect({
     maxChannels = 1,
     channelsCount = 0,
     canAddMore = true,
+    isSubscriptionActive = true,
 }: Props) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current;
@@ -69,8 +79,17 @@ export default function WhatsAppConnect({
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [syncingChannelId, setSyncingChannelId] = useState<string | null>(null);
     const [syncNotice, setSyncNotice] = useState<string | null>(null);
+    const [isPaywallOpen, setIsPaywallOpen] = useState(false);
 
     const { launch: launchDirectMetaWizard, busy: isConnecting } = useMetaSignup({ appId: metaAppId, graphVersion, onError: setSyncNotice });
+
+    const handleConnectClick = () => {
+        if (!isSubscriptionActive) {
+            setIsPaywallOpen(true);
+            return;
+        }
+        launchDirectMetaWizard();
+    };
 
     // Synchronize an active channel directly from Meta
     const handleSyncActiveChannel = async (channelId: string) => {
@@ -154,7 +173,7 @@ export default function WhatsAppConnect({
                             type="button"
                             size="sm"
                             disabled={isConnecting || !canAddMore}
-                            onClick={launchDirectMetaWizard}
+                            onClick={handleConnectClick}
                             className="h-9 px-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold rounded-xl gap-2 shadow-md shadow-emerald-500/20 cursor-pointer"
                         >
                             <Plus className="size-4" />
@@ -209,7 +228,7 @@ export default function WhatsAppConnect({
                             <Button
                                 size="sm"
                                 disabled={isConnecting || !canAddMore}
-                                onClick={launchDirectMetaWizard}
+                                onClick={handleConnectClick}
                                 className="h-9 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-semibold rounded-xl gap-2 shadow-md shadow-emerald-500/20 cursor-pointer"
                             >
                                 <Plus className="size-4" />
@@ -396,6 +415,41 @@ export default function WhatsAppConnect({
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Subscription Required Paywall Modal */}
+                <Dialog open={isPaywallOpen} onOpenChange={setIsPaywallOpen}>
+                    <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md p-6 text-center">
+                        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 mb-3">
+                            <CreditCard className="size-6" />
+                        </div>
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-bold text-center">Subscription Plan Required</DialogTitle>
+                            <DialogDescription className="text-xs text-muted-foreground pt-1.5 text-center leading-relaxed">
+                                Please purchase or activate an annual subscription plan before connecting your official WhatsApp business number.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="pt-4 flex flex-col sm:flex-row gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsPaywallOpen(false)}
+                                className="flex-1 text-xs h-9 cursor-pointer"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                asChild
+                                size="sm"
+                                className="flex-1 text-xs h-9 bg-[#47b672] hover:bg-[#3ca062] text-white font-semibold cursor-pointer"
+                            >
+                                <Link href="/subscription">
+                                    Purchase Plan
+                                </Link>
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </>
     );

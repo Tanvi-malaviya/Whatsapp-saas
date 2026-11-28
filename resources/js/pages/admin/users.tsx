@@ -295,7 +295,7 @@ export default function AdminUsers({ users = [] }: Props) {
                 </div>
 
                 {/* Sleek, Compact Stat Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-card px-3.5 py-2.5 shadow-2xs">
                         <div className="flex items-center gap-2">
                             <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -437,7 +437,7 @@ export default function AdminUsers({ users = [] }: Props) {
                 {/* Users Table */}
                 <Card className="border-border/70 shadow-2xs overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full min-w-[650px] text-left text-xs">
                             <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                 <tr>
                                     <th className="py-2.5 px-3">User Profile</th>

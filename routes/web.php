@@ -248,6 +248,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // CRM & Segments
     Route::get('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'index'])->name('contacts.index');
     Route::post('contacts', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'store'])->name('contacts.store');
+    Route::post('contacts/labels', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'saveLabel'])->name('contacts.labels.store');
+    Route::post('contacts/labels/delete', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'deleteLabel'])->name('contacts.labels.delete');
+    Route::delete('contacts/labels', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'deleteLabel'])->name('contacts.labels.destroy');
     Route::post('contacts/bulk', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'bulk'])->name('contacts.bulk');
     Route::put('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'update'])->name('contacts.update');
     Route::delete('contacts/{id}', [\App\Modules\Crm\Http\Controllers\ContactController::class, 'destroy'])->name('contacts.destroy');
@@ -1112,6 +1115,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'stage' => 'required|string',
             'deal_value' => 'nullable|numeric|min:0',
             'followup_date' => 'nullable|string',
+            'lead_source' => 'nullable|string',
         ]);
 
         $conv = \App\Modules\Crm\Models\Contact::findOrFail($validated['conversation_id']);
@@ -1119,8 +1123,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         if (isset($validated['deal_value'])) {
             $updateData['deal_value'] = $validated['deal_value'];
         }
-        if (!empty($validated['followup_date'])) {
-            $updateData['followup_date'] = \Carbon\Carbon::parse($validated['followup_date']);
+        if (array_key_exists('followup_date', $validated)) {
+            $updateData['followup_date'] = !empty($validated['followup_date']) ? \Carbon\Carbon::parse($validated['followup_date']) : null;
+        }
+        if (!empty($validated['lead_source'])) {
+            $updateData['lead_source'] = $validated['lead_source'];
         }
 
         $conv->update($updateData);
@@ -1165,7 +1172,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 'pipeline_stage' => $validated['stage'],
                 'deal_value' => $validated['deal_value'] ?? 0,
                 'followup_date' => !empty($validated['followup_date']) ? \Carbon\Carbon::parse($validated['followup_date']) : null,
-                'lead_source' => $validated['lead_source'] ?? 'Direct WhatsApp',
+                'lead_source' => $validated['lead_source'] ?? 'WhatsApp Inbound',
                 'city' => $validated['city'] ?? null,
                 'email' => $validated['email'] ?? null,
                 'is_opted_in' => true,

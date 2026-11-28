@@ -459,18 +459,20 @@ export default function ContactSegments({
                             </div>
 
                             {/* Bottom Row: Last Broadcast & Actions */}
-                            <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
-                                <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-border/50 text-xs">
+                                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
                                     <Clock className="size-3 text-muted-foreground/70 shrink-0" />
-                                    <span>Broadcast: <span className="font-medium text-foreground">{seg.lastBroadcast}</span></span>
+                                    <span className="truncate">
+                                        Broadcast: <span className="font-medium text-foreground">{seg.lastBroadcast}</span>
+                                    </span>
                                 </div>
 
-                                <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="flex items-center gap-1.5 shrink-0 justify-end w-full sm:w-auto">
                                     {!seg.isSystem && (
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md"
+                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md shrink-0"
                                             onClick={() => setDeletingSegment(seg)}
                                             title="Delete custom segment"
                                         >
@@ -481,7 +483,7 @@ export default function ContactSegments({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 px-2.5 text-xs border-border/80 hover:bg-muted text-foreground/80 hover:text-foreground gap-1 rounded-md"
+                                        className="h-7 px-2.5 text-xs border-border/80 hover:bg-muted text-foreground/80 hover:text-foreground gap-1 rounded-md flex-1 sm:flex-none justify-center"
                                         onClick={() => handleOpenPreview(seg)}
                                         title="View contacts in this segment"
                                     >
@@ -494,7 +496,7 @@ export default function ContactSegments({
                                         size="sm"
                                         disabled={seg.count === 0}
                                         onClick={() => handleOpenBroadcast(seg)}
-                                        className="h-7 px-3 text-xs bg-[#47b672] hover:bg-[#3ca062] text-white disabled:opacity-50 gap-1 cursor-pointer rounded-md font-medium shadow-2xs"
+                                        className="h-7 px-3 text-xs bg-[#47b672] hover:bg-[#3ca062] text-white disabled:opacity-50 gap-1 cursor-pointer rounded-md font-medium shadow-2xs flex-1 sm:flex-none justify-center"
                                     >
                                         <Send className="size-3" />
                                         <span>Broadcast</span>
@@ -514,34 +516,35 @@ export default function ContactSegments({
 
             {/* Launch In-Page Broadcast Modal */}
             <Dialog open={!!broadcastingSegment} onOpenChange={(open) => !open && setBroadcastingSegment(null)}>
-                <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <div className="flex items-center justify-between pr-4">
-                            <div className="flex items-center gap-2">
-                                <Send className="size-5 text-[#47b672]" />
-                                <div>
-                                    <DialogTitle className="text-base font-semibold">
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pr-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <Send className="size-5 text-[#47b672] shrink-0" />
+                                <div className="min-w-0">
+                                    <DialogTitle className="text-sm sm:text-base font-semibold truncate">
                                         Broadcast to "{broadcastingSegment?.name}"
                                     </DialogTitle>
-                                    <DialogDescription className="text-xs text-muted-foreground">
+                                    <DialogDescription className="text-xs text-muted-foreground truncate">
                                         Send verified WhatsApp template message to contacts in this segment.
                                     </DialogDescription>
                                 </div>
                             </div>
-                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 self-start sm:self-auto shrink-0">
                                 {isLoadingBroadcastContacts ? 'Loading...' : `${broadcastContacts.length} Contacts`}
                             </Badge>
                         </div>
                     </DialogHeader>
 
                     {broadcastError && (
-                        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
+                        <div className="mx-4 mt-3 flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 text-xs">
                             <AlertCircle className="size-4 shrink-0" />
                             <span>{broadcastError}</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleSendBroadcast} className="space-y-4 py-1">
+                    <form onSubmit={handleSendBroadcast} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-0">
                         <div className="space-y-1">
                             <Label className="text-xs font-medium">Campaign Name</Label>
                             <Input
@@ -647,15 +650,16 @@ export default function ContactSegments({
                                 )}
                             </span>
                         </div>
+                        </div>
 
-                        <DialogFooter className="pt-2 border-t flex items-center justify-between sm:justify-between">
+                        <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row items-center justify-between sm:justify-between">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isSendingBroadcast}
                                 onClick={() => setBroadcastingSegment(null)}
-                                className="text-xs"
+                                className="h-8 text-xs px-3"
                             >
                                 Cancel
                             </Button>
@@ -663,17 +667,17 @@ export default function ContactSegments({
                                 type="submit"
                                 size="sm"
                                 disabled={isSendingBroadcast || isLoadingBroadcastContacts || broadcastContacts.length === 0 || !selectedTemplate}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5"
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 h-8 px-3"
                             >
                                 {isSendingBroadcast ? (
                                     <>
                                         <Loader2 className="size-3.5 animate-spin" />
-                                        <span>Dispatching Broadcast...</span>
+                                        <span>Dispatching...</span>
                                     </>
                                 ) : (
                                     <>
                                         <Send className="size-3.5" />
-                                        <span>Send WhatsApp Broadcast</span>
+                                        <span>Send Broadcast</span>
                                     </>
                                 )}
                             </Button>
@@ -684,27 +688,27 @@ export default function ContactSegments({
 
             {/* View Contacts in Segment Dialog */}
             <Dialog open={!!previewSegment} onOpenChange={(open) => !open && setPreviewSegment(null)}>
-                <DialogContent className="sm:max-w-xl">
-                    <DialogHeader>
-                        <div className="flex items-center justify-between gap-3 pr-4">
-                            <div className="flex items-center gap-2">
-                                <Users className="size-5 text-[#47b672]" />
-                                <div>
-                                    <DialogTitle className="text-base font-semibold">
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <div className="flex items-center justify-between gap-3 pr-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <Users className="size-5 text-[#47b672] shrink-0" />
+                                <div className="min-w-0">
+                                    <DialogTitle className="text-sm sm:text-base font-semibold truncate">
                                         {previewSegment?.name}
                                     </DialogTitle>
-                                    <DialogDescription className="text-xs text-muted-foreground">
+                                    <DialogDescription className="text-xs text-muted-foreground truncate">
                                         Rule: {previewSegment?.criteria}
                                     </DialogDescription>
                                 </div>
                             </div>
-                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 shrink-0">
                                 {previewContacts.length} Contacts
                             </Badge>
                         </div>
                     </DialogHeader>
 
-                    <div className="max-h-[360px] overflow-y-auto py-2">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-5 py-2 min-h-0">
                         {isLoadingPreview ? (
                             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
                                 <Loader2 className="size-6 animate-spin text-[#47b672]" />
@@ -751,13 +755,13 @@ export default function ContactSegments({
                         )}
                     </div>
 
-                    <DialogFooter className="flex items-center justify-between sm:justify-between pt-2 border-t">
+                    <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row items-center justify-between sm:justify-between">
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => setPreviewSegment(null)}
-                            className="text-xs"
+                            className="h-8 text-xs px-3"
                         >
                             Close
                         </Button>
@@ -771,10 +775,10 @@ export default function ContactSegments({
                                     setPreviewSegment(null);
                                     handleOpenBroadcast(target);
                                 }}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 cursor-pointer"
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 h-8 px-3 cursor-pointer"
                             >
                                 <Send className="size-3" />
-                                <span>Broadcast to this Segment</span>
+                                <span>Broadcast</span>
                             </Button>
                         )}
                     </DialogFooter>
@@ -783,18 +787,19 @@ export default function ContactSegments({
 
             {/* Create Segment Dialog */}
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Plus className="size-4 text-[#47b672]" />
-                            Create Real Audience Segment
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <DialogTitle className="text-sm sm:text-base font-semibold flex items-center gap-2 leading-snug">
+                            <Plus className="size-4 text-[#47b672] shrink-0" />
+                            <span>Create Real Audience Segment</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Define matching criteria to group real contacts for targeted campaigns.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleCreateSegment} className="space-y-3.5 py-2">
+                    <form onSubmit={handleCreateSegment} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 min-h-0">
                         <div className="space-y-1">
                             <Label className="text-xs font-medium">Segment Name *</Label>
                             <Input
@@ -879,15 +884,16 @@ export default function ContactSegments({
                                 className="text-xs"
                             />
                         </div>
+                        </div>
 
-                        <DialogFooter className="pt-2">
+                        <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center gap-2.5">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isCreating}
                                 onClick={() => setIsCreateOpen(false)}
-                                className="text-xs"
+                                className="h-8 text-xs px-3"
                             >
                                 Cancel
                             </Button>
@@ -895,7 +901,7 @@ export default function ContactSegments({
                                 type="submit"
                                 size="sm"
                                 disabled={isCreating}
-                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5"
+                                className="bg-[#47b672] hover:bg-[#3ca062] text-white text-xs gap-1.5 h-8 px-3"
                             >
                                 {isCreating ? (
                                     <>
@@ -916,15 +922,15 @@ export default function ContactSegments({
 
             {/* Delete Confirmation Dialog */}
             <Dialog open={!!deletingSegment} onOpenChange={(open) => !open && setDeletingSegment(null)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <div className="flex items-center gap-3">
-                            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400">
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-md p-4 sm:p-5">
+                    <DialogHeader className="pr-8 text-left">
+                        <div className="flex items-start gap-3">
+                            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400 mt-0.5">
                                 <AlertTriangle className="size-5" />
                             </div>
-                            <div>
+                            <div className="space-y-1 min-w-0">
                                 <DialogTitle className="text-base font-semibold">Delete Segment?</DialogTitle>
-                                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                                <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
                                     Are you sure you want to remove <span className="font-semibold text-foreground">"{deletingSegment?.name}"</span>?
                                     Your actual contacts in the CRM will not be deleted.
                                 </DialogDescription>
@@ -932,14 +938,14 @@ export default function ContactSegments({
                         </div>
                     </DialogHeader>
 
-                    <DialogFooter className="flex flex-row justify-end items-center gap-3 pt-3 sm:gap-3">
+                    <DialogFooter className="flex flex-row justify-end items-center gap-2.5 pt-3 sm:gap-2.5">
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             disabled={isDeleting}
                             onClick={() => setDeletingSegment(null)}
-                            className="text-xs px-4"
+                            className="h-8 text-xs px-3"
                         >
                             Cancel
                         </Button>
@@ -949,7 +955,7 @@ export default function ContactSegments({
                             size="sm"
                             disabled={isDeleting}
                             onClick={handleConfirmDelete}
-                            className="text-xs gap-1.5 px-4"
+                            className="h-8 text-xs gap-1.5 px-3"
                         >
                             {isDeleting ? (
                                 <>

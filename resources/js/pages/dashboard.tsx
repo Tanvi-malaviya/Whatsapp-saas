@@ -22,11 +22,20 @@ import {
     Activity,
     ArrowUpRight,
     Layers,
+    CreditCard,
+    Crown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { dashboard } from '@/routes';
 
 interface DashboardProps {
@@ -84,6 +93,8 @@ interface DashboardProps {
         status: string;
         description: string;
     }>;
+    isSubscriptionActive?: boolean;
+    subscriptionStatus?: string;
 }
 
 export default function Dashboard({
@@ -102,6 +113,8 @@ export default function Dashboard({
     recentConversations = [],
     metaTemplates = [],
     botFlows = [],
+    isSubscriptionActive = false,
+    subscriptionStatus = 'pending',
 }: DashboardProps) {
     const { tenant } = usePage().props as any;
     const currentOrg = tenant?.current || {
@@ -111,6 +124,7 @@ export default function Dashboard({
         timezone: 'Asia/Kolkata',
     };
 
+    const [showPlanModal, setShowPlanModal] = useState(!isSubscriptionActive || subscriptionStatus === 'pending');
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const defaultPhone = channel?.phone ? channel.phone.replace(/[^0-9]/g, '') : '916352709531';
     const [qrPhone, setQrPhone] = useState(defaultPhone);
@@ -605,6 +619,78 @@ export default function Dashboard({
                     </div>
                 </div>
             </div>
+
+            {/* Purchase Plan Popup Modal (Shown when subscription is pending) */}
+            <Dialog open={showPlanModal} onOpenChange={setShowPlanModal}>
+                <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg p-6">
+                    <DialogHeader className="text-center sm:text-left">
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                                <Crown className="size-5" />
+                            </div>
+                            <Badge variant="outline" className="text-[10px] font-bold border-amber-500/30 text-amber-600 uppercase tracking-wider">
+                                Welcome Offer
+                            </Badge>
+                        </div>
+                        <DialogTitle className="text-lg font-bold text-foreground">
+                            Activate Your WhatsApp Business Plan
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground pt-1 leading-relaxed">
+                            Unlock official Meta WhatsApp Cloud API connectivity, unlimited inbound customer chats, automated bot flows, and high-volume broadcasts for your business.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="my-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-2.5">
+                        <div className="flex items-baseline justify-between">
+                            <span className="text-xs font-bold text-foreground uppercase tracking-wider">Annual Business Plan</span>
+                            <div className="text-right">
+                                <span className="text-xl font-extrabold text-foreground">₹9,999</span>
+                                <span className="text-[11px] text-muted-foreground"> / year</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-foreground/90 pt-1">
+                            <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                                <span>Meta Cloud API Integration</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                                <span>Unlimited Inbound Chats</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                                <span>Broadcasts &amp; CSV Uploads</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <CheckCircle2 className="size-3.5 text-emerald-600 shrink-0" />
+                                <span>AI Bot &amp; Flow Builder</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowPlanModal(false)}
+                            className="flex-1 h-9 text-xs font-medium cursor-pointer"
+                        >
+                            Explore Dashboard First
+                        </Button>
+                        <Button
+                            asChild
+                            size="sm"
+                            className="flex-1 h-9 text-xs bg-[#47b672] hover:bg-[#3ca062] text-white font-semibold cursor-pointer shadow-xs gap-1.5"
+                        >
+                            <Link href="/subscription">
+                                <CreditCard className="size-3.5" />
+                                Purchase Plan Now
+                            </Link>
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

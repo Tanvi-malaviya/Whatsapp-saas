@@ -194,7 +194,7 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                         </h2>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full min-w-[750px] text-left text-xs">
                             <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                 <tr>
                                     <th className="py-2.5 px-3.5 whitespace-nowrap">Date</th>
@@ -257,7 +257,7 @@ export default function AdminAnalytics({ kpis, dailyUsage = [], topOrganizations
                             </h2>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[600px] text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-border/70 text-muted-foreground uppercase tracking-wider text-[10px] font-semibold">
                                     <tr>
                                         <th className="py-2 px-3.5 whitespace-nowrap">Rank</th>

@@ -43,6 +43,7 @@ import { usePage } from '@inertiajs/react';
 
 interface PageHeaderMeta {
     title: string;
+    shortTitle?: string;
     icon: LucideIcon;
     iconClass?: string;
 }
@@ -51,32 +52,32 @@ function resolvePageHeaderMeta(url: string): PageHeaderMeta | null {
     const path = url.split('?')[0].replace(/\/$/, '') || '/';
 
     const exactMap: Record<string, PageHeaderMeta> = {
-        '/dashboard': { title: 'Dashboard', icon: LayoutGrid, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/inbox': { title: 'Shared Inbox', icon: MessageSquare, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/chat/stages': { title: 'Chat Lead Stages', icon: CheckSquare, iconClass: 'text-blue-600 dark:text-blue-400' },
-        '/whatsapp/connect': { title: 'WhatsApp Channels', icon: Radio, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/channels': { title: 'WhatsApp Channels', icon: Radio, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/campaigns': { title: 'WhatsApp Broadcasts & Campaigns', icon: Send, iconClass: 'text-primary' },
-        '/templates': { title: 'Meta Message Templates', icon: FileText, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/campaigns/ads': { title: 'WhatsApp Ads (CTWA)', icon: Megaphone, iconClass: 'text-purple-600 dark:text-purple-400' },
-        '/commerce': { title: 'WhatsApp Commerce & Catalog', icon: ShoppingBag, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/flows': { title: 'WhatsApp Bot', icon: GitBranch, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/auto-responder': { title: 'WhatsApp Auto Responder', icon: Zap, iconClass: 'text-amber-500' },
-        '/ai-agent': { title: 'WhatsApp AI Agent', icon: Sparkles, iconClass: 'text-purple-600 dark:text-purple-400' },
-        '/bot': { title: 'WhatsApp Bot', icon: GitBranch, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/contacts': { title: 'Contacts & CRM Directory', icon: Users, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/segments': { title: 'Contact Segments', icon: Layers, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/crm/pipeline': { title: 'CRM Lead Pipeline', icon: Kanban, iconClass: 'text-indigo-600 dark:text-indigo-400' },
-        '/reports': { title: 'Analytics & Meta Costs', icon: BarChart3, iconClass: 'text-blue-600 dark:text-blue-400' },
-        '/analytics/meta-costs': { title: 'Analytics & Meta Costs', icon: BarChart3, iconClass: 'text-blue-600 dark:text-blue-400' },
-        '/insights/system-logs': { title: 'System & Webhook Logs', icon: Terminal, iconClass: 'text-cyan-600 dark:text-cyan-400' },
-        '/chat/history': { title: 'Message History', icon: History, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/agent/dashboard': { title: 'Partner Portal', icon: Briefcase, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/agent': { title: 'Partner Portal', icon: Briefcase, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/subscription': { title: 'Subscription', icon: CreditCard, iconClass: 'text-primary' },
-        '/wallet': { title: 'Messaging Wallet', icon: Wallet, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/developers': { title: 'API & Developer Docs', icon: Code2, iconClass: 'text-emerald-600 dark:text-emerald-400' },
-        '/help': { title: 'Help & Knowledge Center', icon: HelpCircle, iconClass: 'text-primary' },
+        '/dashboard': { title: 'Dashboard', shortTitle: 'Dashboard', icon: LayoutGrid, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/inbox': { title: 'Shared Inbox', shortTitle: 'Inbox', icon: MessageSquare, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/chat/stages': { title: 'Chat Lead Stages', shortTitle: 'Stages', icon: CheckSquare, iconClass: 'text-blue-600 dark:text-blue-400' },
+        '/whatsapp/connect': { title: 'WhatsApp Channels', shortTitle: 'Channels', icon: Radio, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/channels': { title: 'WhatsApp Channels', shortTitle: 'Channels', icon: Radio, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/campaigns': { title: 'WhatsApp Broadcasts & Campaigns', shortTitle: 'Broadcasts', icon: Send, iconClass: 'text-primary' },
+        '/templates': { title: 'Meta Message Templates', shortTitle: 'Templates', icon: FileText, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/campaigns/ads': { title: 'WhatsApp Ads (CTWA)', shortTitle: 'Ads', icon: Megaphone, iconClass: 'text-purple-600 dark:text-purple-400' },
+        '/commerce': { title: 'WhatsApp Commerce & Catalog', shortTitle: 'Commerce', icon: ShoppingBag, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/flows': { title: 'WhatsApp Bot', shortTitle: 'Bot', icon: GitBranch, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/auto-responder': { title: 'WhatsApp Auto Responder', shortTitle: 'Responder', icon: Zap, iconClass: 'text-amber-500' },
+        '/ai-agent': { title: 'WhatsApp AI Agent', shortTitle: 'AI Agent', icon: Sparkles, iconClass: 'text-purple-600 dark:text-purple-400' },
+        '/bot': { title: 'WhatsApp Bot', shortTitle: 'Bot', icon: GitBranch, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/contacts': { title: 'Contacts & CRM Directory', shortTitle: 'Contacts', icon: Users, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/segments': { title: 'Contact Segments', shortTitle: 'Segments', icon: Layers, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/crm/pipeline': { title: 'CRM Lead Pipeline', shortTitle: 'Pipeline', icon: Kanban, iconClass: 'text-indigo-600 dark:text-indigo-400' },
+        '/reports': { title: 'Analytics & Meta Costs', shortTitle: 'Analytics', icon: BarChart3, iconClass: 'text-blue-600 dark:text-blue-400' },
+        '/analytics/meta-costs': { title: 'Analytics & Meta Costs', shortTitle: 'Analytics', icon: BarChart3, iconClass: 'text-blue-600 dark:text-blue-400' },
+        '/insights/system-logs': { title: 'System & Webhook Logs', shortTitle: 'Logs', icon: Terminal, iconClass: 'text-cyan-600 dark:text-cyan-400' },
+        '/chat/history': { title: 'Message History', shortTitle: 'History', icon: History, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/agent/dashboard': { title: 'Partner Portal', shortTitle: 'Partner', icon: Briefcase, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/agent': { title: 'Partner Portal', shortTitle: 'Partner', icon: Briefcase, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/subscription': { title: 'Subscription', shortTitle: 'Plan', icon: CreditCard, iconClass: 'text-primary' },
+        '/wallet': { title: 'Messaging Wallet', shortTitle: 'Wallet', icon: Wallet, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/developers': { title: 'API & Developer Docs', shortTitle: 'Developers', icon: Code2, iconClass: 'text-emerald-600 dark:text-emerald-400' },
+        '/help': { title: 'Help & Knowledge Center', shortTitle: 'Help', icon: HelpCircle, iconClass: 'text-primary' },
     };
 
     if (exactMap[path]) {
@@ -126,26 +127,27 @@ export function AppSidebarHeader({
     };
 
     return (
-        <header className="flex h-14 sm:h-16 shrink-0 items-center justify-between gap-2 sm:gap-3 border-b border-sidebar-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-3 sm:px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-5 sticky top-0 z-20 min-w-0">
-            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+        <header className="flex h-14 sm:h-16 shrink-0 items-center justify-between gap-1.5 sm:gap-3 border-b border-sidebar-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-2.5 sm:px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 md:px-5 sticky top-0 z-20 min-w-0">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-3">
                 <SidebarTrigger className="-ml-1 shrink-0" />
                 <div className="h-4 w-px bg-border/70 shrink-0 hidden sm:block" />
                 {breadcrumbs.length > 1 || !pageMeta ? (
                     <Breadcrumbs breadcrumbs={breadcrumbs} />
                 ) : (
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
                         {PageIcon && (
                             <div className="hidden sm:flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/70 border border-border/60">
                                 <PageIcon className={`size-4 ${pageMeta.iconClass ?? 'text-primary'}`} />
                             </div>
                         )}
-                        <h1 className="truncate text-sm sm:text-base font-bold tracking-tight text-foreground">
-                            {pageMeta.title}
+                        <h1 className="text-sm sm:text-base font-bold tracking-tight text-foreground truncate min-w-0">
+                            <span className="hidden sm:inline">{pageMeta.title}</span>
+                            <span className="sm:hidden">{pageMeta.shortTitle || pageMeta.title}</span>
                         </h1>
                     </div>
                 )}
             </div>
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2.5">
                 <WhatsAppStatusPill
                     isConnected={whatsapp?.isConnected ?? false}
                     count={whatsapp?.count ?? (whatsapp?.isConnected ? 1 : 0)}
@@ -157,14 +159,14 @@ export function AppSidebarHeader({
                 <button
                     type="button"
                     onClick={toggleTheme}
-                    className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-all cursor-pointer shadow-2xs"
+                    className="flex size-7 sm:size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-all cursor-pointer shadow-2xs shrink-0"
                     title={resolvedAppearance === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                     aria-label="Toggle theme"
                 >
                     {resolvedAppearance === 'dark' ? (
-                        <Sun className="size-4 text-amber-400" />
+                        <Sun className="size-3.5 sm:size-4 text-amber-400" />
                     ) : (
-                        <Moon className="size-4 text-slate-700" />
+                        <Moon className="size-3.5 sm:size-4 text-slate-700" />
                     )}
                 </button>
 
@@ -173,10 +175,10 @@ export function AppSidebarHeader({
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 transition-all focus:outline-none cursor-pointer"
+                                className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-primary/40 transition-all focus:outline-none cursor-pointer shrink-0"
                                 title={`${auth.user.name} - Profile & Logout`}
                             >
-                                <Avatar className="size-8 overflow-hidden rounded-full border border-border">
+                                <Avatar className="size-7 sm:size-8 overflow-hidden rounded-full border border-border">
                                     <AvatarImage src={auth.user.avatar} alt={auth.user.name} />
                                     <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
                                         {getInitials(auth.user.name)}

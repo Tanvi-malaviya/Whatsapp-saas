@@ -49,13 +49,26 @@ function DialogContent({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  const hasCustomMaxWidth =
+    typeof className === "string" &&
+    (className.includes("max-w-") || className.includes("sm:max-w-"));
+  const hasCustomPadding =
+    typeof className === "string" &&
+    (className.includes("p-0") || className.includes("p-") || className.includes("sm:p-"));
+  const hasCustomGap =
+    typeof className === "string" &&
+    (className.includes("gap-0") || className.includes("gap-") || className.includes("sm:gap-"));
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto overflow-x-hidden translate-x-[-50%] translate-y-[-50%] rounded-lg border shadow-lg duration-200",
+          !hasCustomGap && "gap-4",
+          !hasCustomPadding && "p-4 sm:p-6",
+          !hasCustomMaxWidth && "sm:max-w-lg",
           className
         )}
         {...props}
@@ -74,7 +87,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn("flex flex-col gap-1.5 text-left pr-8 sm:pr-10", className)}
       {...props}
     />
   )

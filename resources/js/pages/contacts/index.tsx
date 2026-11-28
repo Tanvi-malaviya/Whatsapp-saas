@@ -14,6 +14,8 @@ import {
     Pencil,
     Trash2,
     GitMerge,
+    Tag,
+    Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,19 +37,41 @@ type Contact = {
     email: string;
     city: string;
     stage: 'New' | 'Contacted' | 'Interested' | 'Won';
+    label?: string;
     consent: 'opted_in' | 'opted_out';
 };
 
-export default function ContactsList({ initialContacts = [] }: { initialContacts?: Contact[] }) {
+const SUGGESTED_LABELS = ['VIP', 'Wholesale', 'Retail', 'New Lead', 'Follow-up', 'Urgent', 'High Value', 'Support'];
+
+export default function ContactsList({
+    initialContacts = [],
+    initialLabels = [],
+}: {
+    initialContacts?: Contact[];
+    initialLabels?: string[];
+}) {
     const [contacts, setContacts] = useState<Contact[]>(initialContacts);
+    const [masterLabels, setMasterLabels] = useState<string[]>(
+        initialLabels.length > 0 ? initialLabels : SUGGESTED_LABELS
+    );
 
     useEffect(() => {
         setContacts(initialContacts);
     }, [initialContacts]);
 
+    useEffect(() => {
+        if (initialLabels.length > 0) {
+            setMasterLabels(initialLabels);
+        }
+    }, [initialLabels]);
+
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedLabel, setSelectedLabel] = useState<string>('ALL');
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
+    const [isManageLabelsOpen, setIsManageLabelsOpen] = useState(false);
+    const [newLabelInput, setNewLabelInput] = useState('');
+    const [isSavingLabel, setIsSavingLabel] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 
     // Add Form State
@@ -56,6 +80,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const [email, setEmail] = useState('');
     const [city, setCity] = useState('');
     const [stage, setStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
+    const [label, setLabel] = useState('');
     const [optIn, setOptIn] = useState(true);
 
     // Edit Form State
@@ -65,7 +90,66 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
     const [editCity, setEditCity] = useState('');
     const [editEmail, setEditEmail] = useState('');
     const [editStage, setEditStage] = useState<'New' | 'Contacted' | 'Interested' | 'Won'>('New');
+    const [editLabel, setEditLabel] = useState('');
     const [editOptIn, setEditOptIn] = useState(true);
+
+    const handleCreateMasterLabel = (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        const trimmed = newLabelInput.trim();
+        if (!trimmed) return;
+        if (!masterLabels.some((l) => l.toLowerCase() === trimmed.toLowerCase())) {
+            setMasterLabels((prev) => [...prev, trimmed].sort());
+        }
+        setIsSavingLabel(true);
+        router.post(
+            '/contacts/labels',
+            { name: trimmed },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => {
+                    setIsSavingLabel(false);
+                    setNewLabelInput('');
+                    showToast(`Label "${trimmed}" added!`);
+                },
+                onError: () => setIsSavingLabel(false),
+            }
+        );
+    };
+
+    const handleDeleteMasterLabel = (labelName: string) => {
+        // 1. Remove from masterLabels state
+        setMasterLabels((prev) => prev.filter((l) => l.toLowerCase() !== labelName.toLowerCase()));
+
+        // 2. Remove this label from all contacts in local React state so availableLabels updates instantly
+        setContacts((prev) =>
+            prev.map((c) => {
+                if (!c.label) return c;
+                const remaining = c.label
+                    .split(',')
+                    .map((l) => l.trim())
+                    .filter((l) => l.toLowerCase() !== labelName.toLowerCase());
+                return { ...c, label: remaining.join(', ') };
+            })
+        );
+
+        // 3. Reset filter if currently filtering by this deleted label
+        if (selectedLabel.toLowerCase() === labelName.toLowerCase()) {
+            setSelectedLabel('ALL');
+        }
+
+        // 4. Send POST request to backend to persist deletion in organization metadata & contacts
+        router.post(
+            '/contacts/labels/delete',
+            { name: labelName },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => showToast(`Label "${labelName}" deleted!`),
+                onError: (err) => console.error('Failed to delete label', err),
+            }
+        );
+    };
 
     // Delete Confirmation Modal State
     const [deletingContact, setDeletingContact] = useState<Contact | null>(null);
@@ -158,7 +242,9 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
 
             for (const line of dataLines) {
                 const parts = line.split(',').map((p) => p.trim());
-                if (parts.length >= 2 && parts[1].length >= 8) {
+                if (parts.length >= 3 && parts[1].length >= 8) {
+                    parsedContacts.push({ name: parts[0] || 'Customer', phone: parts[1], label: parts[2] || undefined });
+                } else if (parts.length >= 2 && parts[1].length >= 8) {
                     parsedContacts.push({ name: parts[0] || 'Customer', phone: parts[1] });
                 } else if (parts.length === 1 && parts[0].length >= 8) {
                     parsedContacts.push({ name: 'Contact ' + parts[0], phone: parts[0] });
@@ -213,6 +299,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
             email: email.trim(),
             city: city.trim(),
             stage,
+            label: label.trim(),
             opt_in: optIn,
         }, {
             preserveScroll: true,
@@ -224,6 +311,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                 setEmail('');
                 setCity('');
                 setStage('New');
+                setLabel('');
                 setOptIn(true);
                 showToast(`Contact "${name.trim()}" saved successfully!`);
             },
@@ -243,6 +331,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
         setEditCity(contact.city === '—' ? '' : contact.city);
         setEditEmail(contact.email === '—' ? '' : contact.email);
         setEditStage(contact.stage);
+        setEditLabel(contact.label || '');
         setEditOptIn(contact.consent === 'opted_in');
     };
 
@@ -266,6 +355,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
         const newCity = editCity.trim() || '—';
         const newEmail = editEmail.trim() || '—';
         const newStage = editStage;
+        const newLabel = editLabel.trim();
         const newConsent: 'opted_in' | 'opted_out' = editOptIn ? 'opted_in' : 'opted_out';
 
         // Immediate state update for instant UI response in table
@@ -279,6 +369,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                           city: newCity,
                           email: newEmail,
                           stage: newStage,
+                          label: newLabel,
                           consent: newConsent,
                       }
                     : c
@@ -294,6 +385,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                 city: editCity.trim(),
                 email: editEmail.trim(),
                 stage: newStage,
+                label: newLabel,
                 opt_in: editOptIn,
             },
             {
@@ -339,18 +431,51 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
         });
     };
 
-    const filtered = contacts.filter(
-        (c) =>
-            c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    // Collect unique labels from all contacts & master labels
+    const availableLabels = Array.from(
+        new Set([
+            ...masterLabels,
+            ...contacts.flatMap((c) => (c.label ? c.label.split(',').map((l) => l.trim()) : [])),
+        ].filter(Boolean))
+    ).sort();
+
+    const filtered = contacts.filter((c) => {
+        const query = searchTerm.toLowerCase();
+        const matchesSearch =
+            c.name.toLowerCase().includes(query) ||
             c.phone.includes(searchTerm) ||
-            c.city.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+            c.city.toLowerCase().includes(query) ||
+            (c.label && c.label.toLowerCase().includes(query));
+
+        const matchesLabel =
+            selectedLabel === 'ALL' ||
+            (c.label &&
+                c.label
+                    .split(',')
+                    .map((l) => l.trim().toLowerCase())
+                    .includes(selectedLabel.toLowerCase()));
+
+        return matchesSearch && matchesLabel;
+    });
+
+    // When searching, sort matching contacts so exact/direct matches come first at the very top
+    const sortedFiltered = React.useMemo(() => {
+        if (!searchTerm.trim()) return filtered;
+        const q = searchTerm.toLowerCase().trim();
+        return [...filtered].sort((a, b) => {
+            const aStarts = (a.name || '').toLowerCase().startsWith(q) || (a.phone || '').startsWith(q);
+            const bStarts = (b.name || '').toLowerCase().startsWith(q) || (b.phone || '').startsWith(q);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return 0;
+        });
+    }, [filtered, searchTerm]);
 
     return (
         <>
             <Head title="Contacts & CRM Directory" />
 
-            <div className="flex flex-1 flex-col gap-5 p-4 sm:p-6">
+            <div className="flex flex-1 flex-col gap-4 sm:gap-5 p-4 sm:p-6">
                 {/* Compact Action Toolbar */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-3.5">
                     <p className="text-xs sm:text-sm text-muted-foreground">
@@ -363,6 +488,15 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 <Check className="size-4" /> {toastMessage}
                             </span>
                         )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 h-9 text-xs border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                            onClick={() => setIsManageLabelsOpen(true)}
+                        >
+                            <Tag className="size-3.5" />
+                            Manage Labels
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
@@ -393,20 +527,93 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                 </div>
 
                 {/* Filter & Search Bar */}
-                <div className="flex items-center gap-3">
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Search contacts by name, city, or +91 number..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-xs focus:outline-none"
-                        />
+                <div className="space-y-2.5">
+                    <div className="flex items-center gap-3">
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                            <input
+                                type="text"
+                                placeholder="Search contacts by name, city, tag, or +91 number..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-xs focus:outline-none"
+                            />
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                            {filtered.length} Contacts
+                        </Badge>
                     </div>
-                    <Badge variant="secondary" className="text-xs">
-                        {filtered.length} Contacts
-                    </Badge>
+
+                    {/* Quick Label / Tag Filter Bar */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1 mr-1">
+                            <Filter className="size-3 text-indigo-500" />
+                            Filter by Label:
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsManageLabelsOpen(true)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 border border-dashed border-indigo-500/40 cursor-pointer transition-colors"
+                        >
+                            <Plus className="size-3" />
+                            Add Label
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setSelectedLabel('ALL')}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                                selectedLabel === 'ALL'
+                                    ? 'bg-primary text-primary-foreground shadow-xs'
+                                    : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50'
+                            }`}
+                        >
+                            All ({contacts.length})
+                        </button>
+
+                        {availableLabels.map((tag) => {
+                            const count = contacts.filter((c) =>
+                                c.label?.split(',').map((l) => l.trim().toLowerCase()).includes(tag.toLowerCase())
+                            ).length;
+                            const isSelected = selectedLabel.toLowerCase() === tag.toLowerCase();
+
+                            return (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => setSelectedLabel(isSelected ? 'ALL' : tag)}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                                        isSelected
+                                            ? 'bg-indigo-600 text-white shadow-xs border border-indigo-600'
+                                            : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/20 border border-indigo-500/25'
+                                    }`}
+                                >
+                                    <Tag className="size-3" />
+                                    <span>{tag}</span>
+                                    <span
+                                        className={`text-[10px] px-1 py-0.2 rounded-full ${
+                                            isSelected
+                                                ? 'bg-white/20 text-white'
+                                                : 'bg-indigo-500/20 text-indigo-800 dark:text-indigo-300'
+                                        }`}
+                                    >
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+
+                        {selectedLabel !== 'ALL' && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedLabel('ALL')}
+                                className="text-[11px] text-muted-foreground hover:text-red-600 underline ml-2 transition-colors cursor-pointer"
+                            >
+                                Clear Filter
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Contacts Data Table */}
@@ -420,11 +627,11 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 No Contacts Found
                             </h3>
                             <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
-                                {searchTerm
-                                    ? 'No contacts match your search query.'
+                                {searchTerm || selectedLabel !== 'ALL'
+                                    ? 'No contacts match your filter criteria.'
                                     : 'Contacts are automatically captured when customers message you on WhatsApp, or you can add contacts manually.'}
                             </p>
-                            {!searchTerm && (
+                            {!searchTerm && selectedLabel === 'ALL' && (
                                 <Button
                                     onClick={() => setIsAddOpen(true)}
                                     className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold gap-1.5 h-9 px-4 shadow-xs"
@@ -436,11 +643,12 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
+                            <table className="w-full min-w-[780px] text-left text-xs">
                                 <thead className="bg-muted/50 border-b border-sidebar-border/60 uppercase font-semibold text-muted-foreground text-[10px]">
                                     <tr>
                                         <th className="p-3.5">Name</th>
                                         <th className="p-3.5">WhatsApp Number</th>
+                                        <th className="p-3.5">Labels / Tags</th>
                                         <th className="p-3.5">Email</th>
                                         <th className="p-3.5">City</th>
                                         <th className="p-3.5">Lead Stage</th>
@@ -449,13 +657,50 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border/40">
-                                    {filtered.map((contact) => (
+                                    {sortedFiltered.map((contact) => (
                                         <tr key={contact.id} className="hover:bg-muted/20 transition-colors">
                                             <td className="p-3.5 font-semibold text-foreground">
                                                 {contact.name}
                                             </td>
                                             <td className="p-3.5 font-mono text-muted-foreground">
                                                 {contact.phone}
+                                            </td>
+                                            <td className="p-3.5">
+                                                {contact.label ? (
+                                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                                        {contact.label.split(',').map((l, i) => {
+                                                            const tag = l.trim();
+                                                            if (!tag) return null;
+                                                            const isCurrentFilter = selectedLabel.toLowerCase() === tag.toLowerCase();
+                                                            return (
+                                                                <button
+                                                                    key={i}
+                                                                    type="button"
+                                                                    onClick={() => setSelectedLabel(isCurrentFilter ? 'ALL' : tag)}
+                                                                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer ${
+                                                                        isCurrentFilter
+                                                                            ? 'bg-indigo-600 text-white shadow-2xs'
+                                                                            : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25'
+                                                                    }`}
+                                                                    title={`Click to filter by ${tag}`}
+                                                                >
+                                                                    <Tag className="size-2.5" />
+                                                                    <span>{tag}</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditModal(contact)}
+                                                        className="text-[11px] text-muted-foreground/50 hover:text-indigo-600 transition-colors flex items-center gap-1 cursor-pointer"
+                                                        title="Add label to this contact"
+                                                    >
+                                                        <Plus className="size-3" />
+                                                        <span>Add Tag</span>
+                                                    </button>
+                                                )}
                                             </td>
                                             <td className="p-3.5 text-muted-foreground">
                                                 {contact.email}
@@ -512,100 +757,208 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
 
             {/* Modal 1: Add Contact Dialog */}
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <Plus className="size-4 text-emerald-600" />
-                            Add New WhatsApp Contact
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-[425px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2 leading-snug">
+                            <Plus className="size-4 text-emerald-600 shrink-0" />
+                            <span className="truncate">Add New WhatsApp Contact</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Add a customer number. Numbers will be normalized to standard E.164 (+91).
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleAddContact} className="space-y-3.5 py-2">
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">Full Name *</label>
-                            <input
-                                type="text"
-                                required
-                                placeholder="e.g. Rahul Patel"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">WhatsApp Number *</label>
-                            <input
-                                type="text"
-                                required
-                                placeholder="e.g. 9825012345 or +919825012345"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                            <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
+                    <form onSubmit={handleAddContact} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 min-h-0">
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold">City (optional)</label>
+                                <label className="text-xs font-semibold">Full Name *</label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Ahmedabad"
-                                    value={city}
-                                    onChange={(e) => setCity(e.target.value)}
+                                    required
+                                    placeholder="e.g. Rahul Patel"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">WhatsApp Number *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. 9825012345 or +919825012345"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">City (optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Ahmedabad"
+                                        value={city}
+                                        onChange={(e) => setCity(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">Lead Stage</label>
+                                    <select
+                                        value={stage}
+                                        onChange={(e) => setStage(e.target.value as any)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    >
+                                        <option value="New">New</option>
+                                        <option value="Contacted">Contacted</option>
+                                        <option value="Interested">Interested</option>
+                                        <option value="Won">Won</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Email (optional)</label>
+                                <input
+                                    type="email"
+                                    placeholder="e.g. rahul@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
                                 />
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Lead Stage</label>
+
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold flex items-center gap-1.5">
+                                        <Tag className="size-3.5 text-indigo-600" />
+                                        <span>Label / Tags</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsManageLabelsOpen(true)}
+                                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                        <Plus className="size-3" />
+                                        Manage Labels
+                                    </button>
+                                </div>
+
+                                {/* Label Dropdown Selector */}
                                 <select
-                                    value={stage}
-                                    onChange={(e) => setStage(e.target.value as any)}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    value=""
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (!val) return;
+                                        if (val === '__CREATE_NEW__') {
+                                            setIsManageLabelsOpen(true);
+                                            return;
+                                        }
+                                        const current = label ? label.split(',').map((s) => s.trim()).filter(Boolean) : [];
+                                        if (!current.some((c) => c.toLowerCase() === val.toLowerCase())) {
+                                            setLabel([...current, val].join(', '));
+                                        }
+                                    }}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                                 >
-                                    <option value="New">New</option>
-                                    <option value="Contacted">Contacted</option>
-                                    <option value="Interested">Interested</option>
-                                    <option value="Won">Won</option>
+                                    <option value="">-- Select Label / Tag --</option>
+                                    {availableLabels.map((lbl) => (
+                                        <option key={lbl} value={lbl}>
+                                            {lbl}
+                                        </option>
+                                    ))}
+                                    <option value="__CREATE_NEW__">+ Create / Manage Labels...</option>
                                 </select>
+
+                                {/* Selected Label Chips */}
+                                {label ? (
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                        {label.split(',').map((tag, idx) => {
+                                            const trimmed = tag.trim();
+                                            if (!trimmed) return null;
+                                            return (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-600 text-white shadow-2xs"
+                                                >
+                                                    <Tag className="size-2.5" />
+                                                    <span>{trimmed}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = label.split(',').map((s) => s.trim()).filter(Boolean);
+                                                            setLabel(current.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()).join(', '));
+                                                        }}
+                                                        className="ml-0.5 hover:bg-white/20 rounded-full p-0.5 cursor-pointer"
+                                                        title={`Remove ${trimmed}`}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">Select a label from dropdown above or click quick tags below.</p>
+                                )}
+
+                                {/* Quick Suggestions */}
+                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                    <span className="text-[10px] text-muted-foreground mr-0.5">Quick Add:</span>
+                                    {availableLabels.slice(0, 6).map((sug) => {
+                                        const currentTags = label.split(',').map((s) => s.trim().toLowerCase());
+                                        const isSelected = currentTags.includes(sug.toLowerCase());
+                                        return (
+                                            <button
+                                                key={sug}
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = label.split(',').map((s) => s.trim()).filter(Boolean);
+                                                    if (isSelected) {
+                                                        setLabel(current.filter((s) => s.toLowerCase() !== sug.toLowerCase()).join(', '));
+                                                    } else {
+                                                        setLabel([...current, sug].join(', '));
+                                                    }
+                                                }}
+                                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
+                                                    isSelected
+                                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                                        : 'bg-muted/60 border-border hover:bg-muted text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                {isSelected ? '✓ ' : '+ '}{sug}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-2 pt-1">
+                                <input
+                                    type="checkbox"
+                                    id="optin"
+                                    checked={optIn}
+                                    onChange={(e) => setOptIn(e.target.checked)}
+                                    className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
+                                />
+                                <label htmlFor="optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
+                                    <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
+                                </label>
                             </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">Email (optional)</label>
-                            <input
-                                type="email"
-                                placeholder="e.g. rahul@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
-                            />
-                        </div>
-
-                        <div className="flex items-start gap-2 pt-1">
-                            <input
-                                type="checkbox"
-                                id="optin"
-                                checked={optIn}
-                                onChange={(e) => setOptIn(e.target.checked)}
-                                className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
-                            />
-                            <label htmlFor="optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
-                                <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
-                            </label>
-                        </div>
-
-                        <DialogFooter className="pt-3">
+                        <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center gap-2.5">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isAdding}
                                 onClick={() => setIsAddOpen(false)}
+                                className="h-8 text-xs px-3"
                             >
                                 Cancel
                             </Button>
@@ -613,7 +966,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 type="submit"
                                 size="sm"
                                 disabled={isAdding}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[125px]"
+                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[125px]"
                             >
                                 {isAdding ? (
                                     <>
@@ -631,18 +984,18 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
 
             {/* Modal 2: Import CSV Dialog */}
             <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <FileSpreadsheet className="size-4 text-emerald-600" />
-                            Import Contacts from CSV
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-[425px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+                            <FileSpreadsheet className="size-4 text-emerald-600 shrink-0" />
+                            <span>Import Contacts from CSV</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Upload a spreadsheet or CSV file with customer names and WhatsApp numbers.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-2">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-0">
                         <label className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-sidebar-border p-6 text-center hover:bg-muted/20 transition-colors cursor-pointer">
                             <Upload className="size-8 text-muted-foreground mb-2" />
                             <p className="text-xs font-semibold text-foreground">
@@ -664,13 +1017,14 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                         </div>
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center">
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             disabled={isUploading}
                             onClick={() => setIsImportOpen(false)}
+                            className="h-8 text-xs px-4"
                         >
                             Close
                         </Button>
@@ -679,100 +1033,208 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
             </Dialog>
             {/* Modal 3: Edit Contact Dialog */}
             <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <Pencil className="size-4 text-emerald-600" />
-                            Edit Contact Details
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-[425px] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2 leading-snug">
+                            <Pencil className="size-4 text-emerald-600 shrink-0" />
+                            <span className="truncate">Edit Contact Details</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Update contact name, WhatsApp phone number, and lead pipeline stage.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleUpdateContact} className="space-y-3.5 py-2">
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">Full Name *</label>
-                            <input
-                                type="text"
-                                required
-                                placeholder="e.g. Rahul Patel"
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">WhatsApp Number *</label>
-                            <input
-                                type="text"
-                                required
-                                placeholder="e.g. 9825012345 or +919825012345"
-                                value={editPhone}
-                                onChange={(e) => setEditPhone(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                            <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
+                    <form onSubmit={handleUpdateContact} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 min-h-0">
                             <div className="space-y-1">
-                                <label className="text-xs font-semibold">City (optional)</label>
+                                <label className="text-xs font-semibold">Full Name *</label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Ahmedabad"
-                                    value={editCity}
-                                    onChange={(e) => setEditCity(e.target.value)}
+                                    required
+                                    placeholder="e.g. Rahul Patel"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">WhatsApp Number *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g. 9825012345 or +919825012345"
+                                    value={editPhone}
+                                    onChange={(e) => setEditPhone(e.target.value)}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <p className="text-[10px] text-muted-foreground">Automatically formatted with India +91 code</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">City (optional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Ahmedabad"
+                                        value={editCity}
+                                        onChange={(e) => setEditCity(e.target.value)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-semibold">Lead Stage</label>
+                                    <select
+                                        value={editStage}
+                                        onChange={(e) => setEditStage(e.target.value as any)}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    >
+                                        <option value="New">New</option>
+                                        <option value="Contacted">Contacted</option>
+                                        <option value="Interested">Interested</option>
+                                        <option value="Won">Won</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold">Email (optional)</label>
+                                <input
+                                    type="email"
+                                    placeholder="e.g. rahul@example.com"
+                                    value={editEmail}
+                                    onChange={(e) => setEditEmail(e.target.value)}
                                     className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
                                 />
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold">Lead Stage</label>
+
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold flex items-center gap-1.5">
+                                        <Tag className="size-3.5 text-indigo-600" />
+                                        <span>Label / Tags</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsManageLabelsOpen(true)}
+                                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                        <Plus className="size-3" />
+                                        Manage Labels
+                                    </button>
+                                </div>
+
+                                {/* Label Dropdown Selector */}
                                 <select
-                                    value={editStage}
-                                    onChange={(e) => setEditStage(e.target.value as any)}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
+                                    value=""
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (!val) return;
+                                        if (val === '__CREATE_NEW__') {
+                                            setIsManageLabelsOpen(true);
+                                            return;
+                                        }
+                                        const current = editLabel ? editLabel.split(',').map((s) => s.trim()).filter(Boolean) : [];
+                                        if (!current.some((c) => c.toLowerCase() === val.toLowerCase())) {
+                                            setEditLabel([...current, val].join(', '));
+                                        }
+                                    }}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                                 >
-                                    <option value="New">New</option>
-                                    <option value="Contacted">Contacted</option>
-                                    <option value="Interested">Interested</option>
-                                    <option value="Won">Won</option>
+                                    <option value="">-- Select Label / Tag --</option>
+                                    {availableLabels.map((lbl) => (
+                                        <option key={lbl} value={lbl}>
+                                            {lbl}
+                                        </option>
+                                    ))}
+                                    <option value="__CREATE_NEW__">+ Create / Manage Labels...</option>
                                 </select>
+
+                                {/* Selected Label Chips */}
+                                {editLabel ? (
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                        {editLabel.split(',').map((tag, idx) => {
+                                            const trimmed = tag.trim();
+                                            if (!trimmed) return null;
+                                            return (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-600 text-white shadow-2xs"
+                                                >
+                                                    <Tag className="size-2.5" />
+                                                    <span>{trimmed}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = editLabel.split(',').map((s) => s.trim()).filter(Boolean);
+                                                            setEditLabel(current.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()).join(', '));
+                                                        }}
+                                                        className="ml-0.5 hover:bg-white/20 rounded-full p-0.5 cursor-pointer"
+                                                        title={`Remove ${trimmed}`}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">Select a label from dropdown above or click quick tags below.</p>
+                                )}
+
+                                {/* Quick Suggestions */}
+                                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                    <span className="text-[10px] text-muted-foreground mr-0.5">Quick Add:</span>
+                                    {availableLabels.slice(0, 6).map((sug) => {
+                                        const currentTags = editLabel.split(',').map((s) => s.trim().toLowerCase());
+                                        const isSelected = currentTags.includes(sug.toLowerCase());
+                                        return (
+                                            <button
+                                                key={sug}
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = editLabel.split(',').map((s) => s.trim()).filter(Boolean);
+                                                    if (isSelected) {
+                                                        setEditLabel(current.filter((s) => s.toLowerCase() !== sug.toLowerCase()).join(', '));
+                                                    } else {
+                                                        setEditLabel([...current, sug].join(', '));
+                                                    }
+                                                }}
+                                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer ${
+                                                    isSelected
+                                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                                        : 'bg-muted/60 border-border hover:bg-muted text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                {isSelected ? '✓ ' : '+ '}{sug}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-2 pt-1">
+                                <input
+                                    type="checkbox"
+                                    id="edit-optin"
+                                    checked={editOptIn}
+                                    onChange={(e) => setEditOptIn(e.target.checked)}
+                                    className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
+                                />
+                                <label htmlFor="edit-optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
+                                    <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
+                                </label>
                             </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <label className="text-xs font-semibold">Email (optional)</label>
-                            <input
-                                type="email"
-                                placeholder="e.g. rahul@example.com"
-                                value={editEmail}
-                                onChange={(e) => setEditEmail(e.target.value)}
-                                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none"
-                            />
-                        </div>
-
-                        <div className="flex items-start gap-2 pt-1">
-                            <input
-                                type="checkbox"
-                                id="edit-optin"
-                                checked={editOptIn}
-                                onChange={(e) => setEditOptIn(e.target.checked)}
-                                className="rounded border-input text-emerald-600 focus:ring-emerald-500 size-4 mt-0.5"
-                            />
-                            <label htmlFor="edit-optin" className="text-[11px] text-muted-foreground leading-tight cursor-pointer">
-                                <strong>WhatsApp Opt-In Consent</strong>: Contact gave permission to receive WhatsApp notifications (DPDP Act compliant).
-                            </label>
-                        </div>
-
-                        <DialogFooter className="pt-3">
+                        <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center gap-2.5">
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled={isUpdating}
                                 onClick={() => setEditingContact(null)}
+                                className="h-8 text-xs px-3"
                             >
                                 Cancel
                             </Button>
@@ -780,7 +1242,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                                 type="submit"
                                 size="sm"
                                 disabled={isUpdating}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[135px]"
+                                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 min-w-[135px]"
                             >
                                 {isUpdating ? (
                                     <>
@@ -803,28 +1265,28 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                     if (!open && !isDeleting) setDeletingContact(null);
                 }}
             >
-                <DialogContent className="sm:max-w-[420px]">
-                    <DialogHeader>
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40 mb-2">
-                            <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-[420px] p-4 sm:p-6">
+                    <DialogHeader className="pr-8 text-center sm:text-center">
+                        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40 mb-2 shrink-0">
+                            <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
                         </div>
                         <DialogTitle className="text-center text-base font-bold text-foreground">
                             Delete Contact
                         </DialogTitle>
-                        <DialogDescription className="text-center text-xs text-muted-foreground pt-1">
+                        <DialogDescription className="text-center text-xs text-muted-foreground pt-1 leading-relaxed">
                             Are you sure you want to delete <span className="font-semibold text-foreground">{deletingContact?.name}</span> ({deletingContact?.phone})?
                             This contact and conversation will be permanently removed.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <DialogFooter className="flex-row gap-2 sm:justify-center pt-3">
+                    <DialogFooter className="flex flex-row gap-2 justify-center pt-3">
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             disabled={isDeleting}
                             onClick={() => setDeletingContact(null)}
-                            className="flex-1"
+                            className="flex-1 h-8 text-xs"
                         >
                             Cancel
                         </Button>
@@ -833,7 +1295,7 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                             size="sm"
                             disabled={isDeleting}
                             onClick={handleConfirmDelete}
-                            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium"
+                            className="flex-1 h-8 text-xs bg-red-600 hover:bg-red-700 text-white font-medium"
                         >
                             {isDeleting ? 'Deleting...' : 'Yes, Delete'}
                         </Button>
@@ -843,18 +1305,18 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
 
             {/* Modal 5: Contact Deduplication & Merge Dialog */}
             <Dialog open={isDeduplicateOpen} onOpenChange={setIsDeduplicateOpen}>
-                <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
-                    <DialogHeader>
-                        <DialogTitle className="text-base font-bold flex items-center gap-2">
-                            <GitMerge className="size-4 text-indigo-600" />
-                            Contact Deduplication &amp; 1-Click Merge
+                <DialogContent className="w-[calc(100vw-1.25rem)] sm:max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-4 sm:p-5 pb-3 border-b border-border/70 shrink-0 pr-12 text-left">
+                        <DialogTitle className="text-sm sm:text-base font-bold flex items-center gap-2">
+                            <GitMerge className="size-4 text-indigo-600 shrink-0" />
+                            <span>Contact Deduplication &amp; 1-Click Merge</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs">
+                        <DialogDescription className="text-xs text-muted-foreground mt-1 pr-1">
                             Scans your directory for duplicate WhatsApp phone numbers across multiple formats and merges conversations into 1 master record.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="flex-1 overflow-y-auto py-2 space-y-4">
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 min-h-0">
                         {isScanningDuplicates ? (
                             <div className="flex flex-col items-center justify-center p-10 text-muted-foreground">
                                 <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin mb-2" />
@@ -958,13 +1420,111 @@ export default function ContactsList({ initialContacts = [] }: { initialContacts
                         )}
                     </div>
 
-                    <DialogFooter className="pt-2">
+                    <DialogFooter className="p-3 sm:p-4 border-t border-border/70 bg-card shrink-0 flex flex-row justify-end items-center">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setIsDeduplicateOpen(false)}
+                            className="h-8 text-xs px-4"
                         >
                             Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 6: Manage Labels Dialog */}
+            <Dialog open={isManageLabelsOpen} onOpenChange={setIsManageLabelsOpen}>
+                <DialogContent
+                    style={{ maxWidth: '380px', width: 'calc(100vw - 2rem)', padding: 0 }}
+                    className="p-0 sm:p-0 gap-0 sm:gap-0 max-w-[380px] sm:max-w-[380px] overflow-hidden rounded-xl border border-border shadow-2xl flex flex-col bg-background"
+                >
+                    <DialogHeader className="px-4 py-3 border-b border-border/70 shrink-0 pr-10 text-left">
+                        <DialogTitle className="text-sm font-bold flex items-center gap-2 leading-none">
+                            <Tag className="size-4 text-indigo-600 shrink-0" />
+                            <span>Manage Contact Labels</span>
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground mt-1">
+                            Create and organize custom tags for your contacts.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="p-4 space-y-3.5 overflow-y-auto max-h-[60vh]">
+                        {/* Add New Label Form */}
+                        <form onSubmit={handleCreateMasterLabel} className="flex gap-2">
+                            <input
+                                type="text"
+                                required
+                                placeholder="New label name..."
+                                value={newLabelInput}
+                                onChange={(e) => setNewLabelInput(e.target.value)}
+                                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <Button
+                                type="submit"
+                                size="sm"
+                                disabled={isSavingLabel || !newLabelInput.trim()}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 h-8 shrink-0 font-medium"
+                            >
+                                {isSavingLabel ? 'Adding...' : 'Add Label'}
+                            </Button>
+                        </form>
+
+                        {/* List of existing master labels */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-0.5">
+                                <span>Available Labels</span>
+                                <span>({availableLabels.length})</span>
+                            </div>
+
+                            {availableLabels.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-4 border border-dashed border-border/70 rounded-lg">
+                                    No labels created yet.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-border/60 rounded-lg border border-border/70 bg-card overflow-hidden max-h-52 overflow-y-auto">
+                                    {availableLabels.map((lbl) => {
+                                        const count = contacts.filter((c) =>
+                                            c.label?.split(',').map((l) => l.trim().toLowerCase()).includes(lbl.toLowerCase())
+                                        ).length;
+
+                                        return (
+                                            <div
+                                                key={lbl}
+                                                className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                                    <Tag className="size-3 text-indigo-500 shrink-0" />
+                                                    <span className="font-semibold text-foreground truncate max-w-[160px]">{lbl}</span>
+                                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-muted text-muted-foreground font-normal shrink-0">
+                                                        {count} {count === 1 ? 'contact' : 'contacts'}
+                                                    </Badge>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteMasterLabel(lbl)}
+                                                    className="text-muted-foreground hover:text-red-600 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer shrink-0"
+                                                    title={`Delete label "${lbl}"`}
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <DialogFooter className="px-4 py-2.5 border-t border-border/70 bg-muted/20 shrink-0 flex flex-row justify-end items-center">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsManageLabelsOpen(false)}
+                            className="h-8 text-xs px-4 font-medium"
+                        >
+                            Done
                         </Button>
                     </DialogFooter>
                 </DialogContent>

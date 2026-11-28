@@ -38,10 +38,13 @@ class CommerceController extends Controller
             $activeChannel = $channels->firstWhere('is_default', true) ?? $channels->first();
         }
 
-        // Seed demo products if empty
-        if (CommerceProduct::where('organization_id', $orgId)->count() === 0) {
-            $this->seedInitialProducts($orgId, $activeChannel?->id);
-        }
+        // Clean up legacy demo products & orders
+        CommerceProduct::where('organization_id', $orgId)
+            ->whereIn('retailer_id', ['TSHIRT-POLO-BLK', 'WATCH-PRO-01', 'EARBUDS-ANC-02', 'BOTTLE-STEEL-1L'])
+            ->delete();
+        CommerceOrder::where('organization_id', $orgId)
+            ->where('customer_name', 'Tanvi Malaviya')
+            ->delete();
 
         $products = CommerceProduct::where('organization_id', $orgId)
             ->with('channel:id,name,phone_number')

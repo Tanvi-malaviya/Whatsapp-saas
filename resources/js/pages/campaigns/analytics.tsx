@@ -720,7 +720,7 @@ export default function CampaignAnalyticsPage({ campaign, metrics, recipients, f
 
                 <CardContent className="p-0">
                     <div className="overflow-x-auto border-t border-border">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full min-w-[650px] text-left border-collapse">
                             <thead>
                                 <tr className="bg-muted/40 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                     <th className="py-2.5 px-4">Recipient</th>

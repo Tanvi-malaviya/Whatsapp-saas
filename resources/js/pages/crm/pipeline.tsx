@@ -64,6 +64,17 @@ interface PipelineProps {
     totalPipelineValue: number;
 }
 
+const STANDARD_SOURCES = [
+    'WhatsApp Inbound',
+    'Website Inbound',
+    'WhatsApp Broadcast',
+    'Catalog Inbound',
+    'Referral',
+    'Google Ad Campaign',
+    'Cold Outreach',
+    'Meta Ads',
+];
+
 const STAGE_CONFIG: Record<string, { color: string; border: string; bg: string; badge: string }> = {
     New: {
         color: 'text-blue-500',
@@ -155,13 +166,68 @@ export default function PipelinePage({
 
     // Filter leads
     const filteredLeads = leads.filter((lead) => {
+        const term = searchTerm.toLowerCase().trim();
         const matchesSearch =
-            lead.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lead.contact_phone.includes(searchTerm) ||
-            lead.city.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesSource = selectedSource === 'all' || lead.lead_source === selectedSource;
+            !term ||
+            (lead.contact_name && lead.contact_name.toLowerCase().includes(term)) ||
+            (lead.contact_phone && lead.contact_phone.includes(term)) ||
+            (lead.city && lead.city.toLowerCase().includes(term)) ||
+            (lead.lead_source && lead.lead_source.toLowerCase().includes(term)) ||
+            (lead.email && lead.email.toLowerCase().includes(term)) ||
+            (lead.stage && lead.stage.toLowerCase().includes(term));
+
+        const matchesSource =
+            selectedSource === 'all' ||
+            (lead.lead_source && lead.lead_source.toLowerCase() === selectedSource.toLowerCase());
+
         return matchesSearch && matchesSource;
     });
+
+    const isFiltering = searchTerm.trim().length > 0 || selectedSource !== 'all';
+    const boardRef = React.useRef<HTMLDivElement>(null);
+
+    // Auto-scroll board to the very beginning whenever user searches so matching cards are immediately visible
+    React.useEffect(() => {
+        if (isFiltering && boardRef.current) {
+            boardRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+        }
+    }, [searchTerm, selectedSource, isFiltering]);
+
+    // When searching or filtering, bring stages with matching leads to the FIRST position!
+    const displayedStages = React.useMemo(() => {
+        if (!isFiltering) {
+            return stages;
+        }
+
+        const withMatches = stages
+            .filter((st) => filteredLeads.some((l) => l.stage === st))
+            .sort((a, b) => {
+                const countA = filteredLeads.filter((l) => l.stage === a).length;
+                const countB = filteredLeads.filter((l) => l.stage === b).length;
+                return countB - countA;
+            });
+
+        const withoutMatches = stages.filter(
+            (st) => !filteredLeads.some((l) => l.stage === st)
+        );
+
+        return [...withMatches, ...withoutMatches];
+    }, [stages, filteredLeads, isFiltering]);
+
+    // Sort leads inside a stage so direct matches come first at the top
+    const sortLeadsByRelevance = (leadList: Lead[]) => {
+        if (!searchTerm.trim()) return leadList;
+        const q = searchTerm.toLowerCase().trim();
+        return [...leadList].sort((a, b) => {
+            const aName = (a.contact_name || '').toLowerCase();
+            const bName = (b.contact_name || '').toLowerCase();
+            const aStarts = aName.startsWith(q) || a.contact_phone.startsWith(q);
+            const bStarts = bName.startsWith(q) || b.contact_phone.startsWith(q);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return 0;
+        });
+    };
 
     // Drag and Drop handlers
     const handleDragStart = (e: React.DragEvent, leadId: string) => {
@@ -268,10 +334,16 @@ export default function PipelinePage({
                 stage: editLead.stage,
                 deal_value: editLead.deal_value,
                 followup_date: editLead.followup_date,
+                lead_source: editLead.lead_source,
             },
             {
                 preserveScroll: true,
-                onSuccess: () => setIsEditOpen(false),
+                onSuccess: () => {
+                    setLeads((prev) =>
+                        prev.map((l) => (l.id === editLead.id ? { ...l, ...editLead } : l))
+                    );
+                    setIsEditOpen(false);
+                },
             }
         );
     };
@@ -310,7 +382,12 @@ export default function PipelinePage({
         }
     };
 
-    const sources = Array.from(new Set(leads.map((l) => l.lead_source).filter(Boolean)));
+    const sources = Array.from(
+        new Set([
+            ...STANDARD_SOURCES,
+            ...leads.map((l) => l.lead_source).filter(Boolean),
+        ])
+    );
     const wonCount = leads.filter((l) => l.stage === 'Won').length;
     const winRate = leads.length > 0 ? Math.round((wonCount / leads.length) * 100) : 0;
 
@@ -403,44 +480,82 @@ export default function PipelinePage({
                 </div>
 
                 {/* Filter & Search Bar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card border border-border/80 rounded-xl p-3 shadow-2xs">
-                    <div className="relative w-full sm:w-80">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                        <input
-                            type="text"
-                            placeholder="Search lead name, phone, city..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full h-8 pl-9 pr-3 rounded-lg border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
+                <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card border border-border/80 rounded-xl p-3 shadow-2xs">
+                        <div className="relative w-full sm:w-80">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                            <input
+                                type="text"
+                                placeholder="Search lead name, phone, city, source..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full h-8 pl-9 pr-3 rounded-lg border border-border bg-background text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <Filter className="size-3.5 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground font-medium">Source:</span>
+                            <select
+                                value={selectedSource}
+                                onChange={(e) => setSelectedSource(e.target.value)}
+                                className="h-8 px-2.5 rounded-lg border border-border bg-background text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                            >
+                                <option value="all">All Sources</option>
+                                {sources.map((s) => (
+                                    <option key={s} value={s}>
+                                        {s}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Filter className="size-3.5 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground font-medium">Source:</span>
-                        <select
-                            value={selectedSource}
-                            onChange={(e) => setSelectedSource(e.target.value)}
-                            className="h-8 px-2.5 rounded-lg border border-border bg-background text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                        >
-                            <option value="all">All Sources</option>
-                            {sources.map((s) => (
-                                <option key={s} value={s}>
-                                    {s}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    {isFiltering && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-primary/10 border border-primary/20 text-xs">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-primary flex items-center gap-1.5">
+                                    <Sparkles className="size-3.5 text-primary" />
+                                    Found {filteredLeads.length} {filteredLeads.length === 1 ? 'matching lead' : 'matching leads'}
+                                </span>
+                                {searchTerm && (
+                                    <span className="text-muted-foreground">
+                                        matching &ldquo;<span className="font-semibold text-foreground">{searchTerm}</span>&rdquo;
+                                    </span>
+                                )}
+                                {selectedSource !== 'all' && (
+                                    <Badge variant="outline" className="text-[10px] h-5 bg-background border-primary/30 text-primary">
+                                        Source: {selectedSource}
+                                    </Badge>
+                                )}
+                                <span className="text-[11px] text-muted-foreground italic">
+                                    (Matching stages moved to the first position)
+                                </span>
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setSearchTerm('');
+                                    setSelectedSource('all');
+                                }}
+                                className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground hover:bg-background/60"
+                            >
+                                Clear Filter
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Kanban Board Container (Horizontal Scroll) */}
-                <div className="overflow-x-auto pb-4 pt-1 [scrollbar-width:thin]">
+                <div ref={boardRef} className="overflow-x-auto pb-4 pt-1 [scrollbar-width:thin]">
                     <div className="flex items-start gap-3.5 min-w-[1400px]">
-                        {stages.map((stage) => {
+                        {displayedStages.map((stage) => {
                             const config = STAGE_CONFIG[stage] || STAGE_CONFIG.New;
-                            const stageLeads = filteredLeads.filter((l) => l.stage === stage);
+                            const stageLeads = sortLeadsByRelevance(filteredLeads.filter((l) => l.stage === stage));
                             const stageSum = stageLeads.reduce((acc, curr) => acc + (curr.deal_value || 0), 0);
                             const isOver = dragOverStage === stage;
+                            const hasMatches = isFiltering && stageLeads.length > 0;
 
                             return (
                                 <div
@@ -449,11 +564,15 @@ export default function PipelinePage({
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, stage)}
                                     className={`flex flex-col flex-1 min-w-[280px] max-w-[320px] rounded-xl border ${
-                                        isOver ? 'border-primary ring-2 ring-primary/30 bg-primary/5' : config.border
+                                        isOver
+                                            ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
+                                            : hasMatches
+                                            ? 'border-primary/80 ring-2 ring-primary/25 shadow-md bg-card'
+                                            : config.border
                                     } bg-card/60 backdrop-blur-xs transition-all duration-200 shadow-2xs`}
                                 >
                                     {/* Column Header */}
-                                    <div className="p-3 border-b border-border/60 bg-muted/30 rounded-t-xl">
+                                    <div className={`p-3 border-b border-border/60 ${hasMatches ? 'bg-primary/10' : 'bg-muted/30'} rounded-t-xl transition-colors`}>
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <span className={`size-2.5 rounded-full ${config.bg} ring-2 ring-current ${config.color}`} />
@@ -461,7 +580,10 @@ export default function PipelinePage({
                                                     {stage}
                                                 </h3>
                                             </div>
-                                            <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0.5">
+                                            <Badge
+                                                variant={hasMatches ? 'default' : 'secondary'}
+                                                className={`text-[10px] font-bold px-1.5 py-0.5 ${hasMatches ? 'bg-primary text-primary-foreground' : ''}`}
+                                            >
                                                 {stageLeads.length}
                                             </Badge>
                                         </div>
@@ -498,7 +620,11 @@ export default function PipelinePage({
                                                             setEditLead(lead);
                                                             setIsEditOpen(true);
                                                         }}
-                                                        className="group relative rounded-xl border border-border bg-card p-3 shadow-2xs hover:shadow-md hover:border-primary/50 cursor-pointer active:cursor-grabbing transition-all duration-200 select-none"
+                                                        className={`group relative rounded-xl border ${
+                                                            isFiltering
+                                                                ? 'border-primary/60 ring-1 ring-primary/30 bg-primary/[0.03] shadow-sm'
+                                                                : 'border-border bg-card shadow-2xs'
+                                                        } p-3 hover:shadow-md hover:border-primary/60 cursor-pointer active:cursor-grabbing transition-all duration-200 select-none`}
                                                     >
                                                         {/* Top Row: Name, Phone & Menu */}
                                                         <div className="flex items-start justify-between gap-2">
@@ -802,6 +928,23 @@ export default function PipelinePage({
                                         }
                                         className="mt-1 w-full h-8 px-2.5 rounded-lg border border-border bg-background text-xs focus:ring-1 focus:ring-primary focus:outline-none"
                                     />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-semibold text-foreground">Lead Source</label>
+                                    <select
+                                        value={editLead.lead_source || 'WhatsApp Inbound'}
+                                        onChange={(e) =>
+                                            setEditLead({ ...editLead, lead_source: e.target.value })
+                                        }
+                                        className="mt-1 w-full h-8 px-2.5 rounded-lg border border-border bg-background text-xs focus:ring-1 focus:ring-primary focus:outline-none"
+                                    >
+                                        {sources.map((src) => (
+                                            <option key={src} value={src}>
+                                                {src}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <DialogFooter className="pt-3 flex flex-row items-center justify-between gap-2">

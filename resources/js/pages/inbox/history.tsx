@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
     Archive,
@@ -9,12 +9,12 @@ import {
     Clock,
     User,
     MessageSquare,
-    Filter,
     ChevronRight,
     ArrowUpRight,
     ExternalLink,
     RefreshCw,
     FileSpreadsheet,
+    X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,7 +34,7 @@ type HistorySession = {
     phone: string;
     channel: string;
     agent: string;
-    status: 'Resolved' | 'Auto-Closed' | 'Archived';
+    status: 'Resolved' | 'Auto-Closed' | 'Archived' | 'Active' | string;
     messagesCount: number;
     duration: string;
     closedAt: string;
@@ -48,56 +48,40 @@ interface ChatHistoryProps {
 
 export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) {
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ALL');
     const [selectedSession, setSelectedSession] = useState<HistorySession | null>(null);
 
-    const defaultMockSessions: HistorySession[] = [
-        {
-            id: '1',
-            contactName: 'Bhavesh Sathwara',
-            phone: '+91 79978 81665',
-            channel: 'DukanHisab WhatsApp',
-            agent: 'Support Agent',
-            status: 'Resolved',
-            messagesCount: 14,
-            duration: '18m',
-            closedAt: 'Today, 10:45 AM',
-            summary: 'Assisted customer with Meta Webhook URL configuration and WhatsApp verify token test.',
-            transcript: [
-                { sender: 'contact', text: 'Hello, need help connecting our business number.', time: '10:27 AM' },
-                { sender: 'bot', text: 'Welcome to Sathwara InfoTech! Connecting you with our technical lead.', time: '10:27 AM' },
-                { sender: 'agent', text: 'Hi Bhavesh, I am here to help. Your webhook is verified on dukanhisab.in.', time: '10:29 AM' },
-                { sender: 'contact', text: 'Great, test message received on WhatsApp!', time: '10:42 AM' },
-                { sender: 'agent', text: 'Glad to assist! Closing ticket.', time: '10:45 AM' },
-            ],
-        },
-        {
-            id: '2',
-            contactName: 'Rahul Patel',
-            phone: '+91 98250 12345',
-            channel: 'DukanHisab WhatsApp',
-            agent: 'Tanvi Malaviya',
-            status: 'Resolved',
-            messagesCount: 8,
-            duration: '12m',
-            closedAt: 'Yesterday, 4:15 PM',
-            summary: 'Shared Full Stack Laravel Course syllabus PDF and batch timing details.',
-            transcript: [
-                { sender: 'contact', text: 'Course fees and duration please?', time: '4:03 PM' },
-                { sender: 'agent', text: 'Sent syllabus PDF. Classes are Mon-Fri 10am-12pm.', time: '4:08 PM' },
-                { sender: 'contact', text: 'Thank you, registering today.', time: '4:14 PM' },
-            ],
-        },
-    ];
+    const [sessions, setSessions] = useState<HistorySession[]>(initialSessions || []);
 
-    const [sessions, setSessions] = useState<HistorySession[]>(
-        initialSessions && initialSessions.length > 0 ? initialSessions : defaultMockSessions
-    );
+    const filteredSessions = useMemo(() => {
+        if (!searchQuery.trim()) return sessions;
+        const q = searchQuery.toLowerCase().trim();
+        return sessions.filter((s) => {
+            return (
+                (s.contactName || '').toLowerCase().includes(q) ||
+                (s.phone || '').includes(q) ||
+                (s.channel || '').toLowerCase().includes(q) ||
+                (s.agent || '').toLowerCase().includes(q) ||
+                (s.summary || '').toLowerCase().includes(q)
+            );
+        });
+    }, [sessions, searchQuery]);
+
+    const sortedFilteredSessions = useMemo(() => {
+        if (!searchQuery.trim()) return filteredSessions;
+        const q = searchQuery.toLowerCase().trim();
+        return [...filteredSessions].sort((a, b) => {
+            const aStarts = (a.contactName || '').toLowerCase().startsWith(q) || (a.phone || '').startsWith(q);
+            const bStarts = (b.contactName || '').toLowerCase().startsWith(q) || (b.phone || '').startsWith(q);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return 0;
+        });
+    }, [filteredSessions, searchQuery]);
 
     const handleExportCSV = () => {
         const rows = [
             ['Contact Name', 'Phone', 'Channel', 'Agent', 'Duration', 'Messages Count', 'Status', 'Closed At', 'Summary'],
-            ...filteredSessions.map((s) => [
+            ...sortedFilteredSessions.map((s) => [
                 `"${s.contactName.replace(/"/g, '""')}"`,
                 `"${s.phone}"`,
                 `"${s.channel}"`,
@@ -119,15 +103,6 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
         document.body.removeChild(link);
     };
 
-    const filteredSessions = sessions.filter(s => {
-        if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            return s.contactName.toLowerCase().includes(q) || s.phone.includes(q) || s.summary.toLowerCase().includes(q);
-        }
-        return true;
-    });
-
     return (
         <>
             <Head title="Chat History & Archive - Sathwara InfoTech" />
@@ -136,7 +111,7 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                 {/* Compact Action Toolbar */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border/60 pb-3.5">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                        <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30">
+                        <Badge variant="outline" className="text-xs bg-[#47b672]/10 text-[#28804c] dark:text-[#52c480] border-[#47b672]/30 font-semibold">
                             {sessions.length} Live Sessions
                         </Badge>
                         <p className="text-xs text-muted-foreground">
@@ -167,106 +142,163 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                     </div>
                 </div>
 
-                {/* Filter and Search Bar */}
+                {/* Search Bar & Records Count */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {['ALL', 'Resolved', 'Auto-Closed', 'Archived'].map((status) => (
-                            <Button
-                                key={status}
-                                size="sm"
-                                variant={statusFilter === status ? 'default' : 'outline'}
-                                onClick={() => setStatusFilter(status)}
-                                className={`text-xs h-8 ${
-                                    statusFilter === status
-                                        ? 'bg-[#47b672] hover:bg-[#3ca062] text-white'
-                                        : 'text-muted-foreground'
-                                }`}
-                            >
-                                {status === 'ALL' ? 'All Sessions' : status}
-                            </Button>
-                        ))}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground">
+                            Conversation History
+                        </span>
+                        <Badge variant="secondary" className="text-[11px] font-semibold px-2 py-0.5">
+                            {sortedFilteredSessions.length} {sortedFilteredSessions.length === 1 ? 'Record' : 'Records'}
+                        </Badge>
                     </div>
 
-                    <div className="relative w-full sm:w-72">
-                        <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
+                    <div className="relative w-full sm:w-80">
+                        <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground pointer-events-none" />
                         <Input
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by contact name, phone or keyword..."
-                            className="pl-8 text-xs h-8"
+                            placeholder="Search by contact, phone, or keyword..."
+                            className="pl-8 pr-8 text-xs h-9 bg-card shadow-2xs"
                         />
+                        {searchQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* Sessions Table */}
-                <Card className="border-border shadow-2xs">
+                <Card className="border-border shadow-2xs overflow-hidden">
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                                <thead className="border-b border-border bg-muted/40 font-semibold text-muted-foreground">
+                            <table className="w-full min-w-[720px] text-left text-xs">
+                                <thead className="border-b border-border bg-muted/40 font-bold uppercase text-[10px] tracking-wider text-muted-foreground">
                                     <tr>
-                                        <th className="py-2.5 px-4">Contact</th>
-                                        <th className="py-2.5 px-4">Channel</th>
-                                        <th className="py-2.5 px-4">Assigned Agent</th>
-                                        <th className="py-2.5 px-4">Summary</th>
-                                        <th className="py-2.5 px-4">Duration</th>
-                                        <th className="py-2.5 px-4">Status</th>
-                                        <th className="py-2.5 px-4 text-right">Transcript</th>
+                                        <th className="py-3 px-4">Contact</th>
+                                        <th className="py-3 px-4">Channel</th>
+                                        <th className="py-3 px-4">Assigned Agent</th>
+                                        <th className="py-3 px-4">Summary</th>
+                                        <th className="py-3 px-4">Duration</th>
+                                        <th className="py-3 px-4">Status</th>
+                                        <th className="py-3 px-4 text-right">Transcript</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
-                                    {filteredSessions.map((session) => (
-                                        <tr key={session.id} className="hover:bg-muted/30">
-                                            <td className="py-3 px-4">
-                                                <div className="font-semibold text-foreground">
-                                                    {session.contactName}
+                                    {sortedFilteredSessions.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                                                <div className="flex flex-col items-center justify-center gap-2">
+                                                    <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                                                        <MessageSquare className="size-5" />
+                                                    </div>
+                                                    <p className="text-xs font-semibold text-foreground">
+                                                        {searchQuery ? 'No matching conversations found' : 'No conversation history found'}
+                                                    </p>
+                                                    {searchQuery && (
+                                                        <Button
+                                                            variant="link"
+                                                            size="sm"
+                                                            onClick={() => setSearchQuery('')}
+                                                            className="text-xs text-[#28804c] h-auto p-0"
+                                                        >
+                                                            Clear search query
+                                                        </Button>
+                                                    )}
                                                 </div>
-                                                <div className="text-[11px] text-muted-foreground font-mono">
-                                                    {session.phone}
-                                                </div>
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <span className="rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                                    {session.channel}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-foreground flex items-center gap-1.5 pt-4">
-                                                <User className="size-3 text-muted-foreground" />
-                                                {session.agent}
-                                            </td>
-                                            <td className="py-3 px-4 max-w-xs">
-                                                <p className="text-muted-foreground line-clamp-1 text-[11px]">
-                                                    {session.summary}
-                                                </p>
-                                                <span className="text-[10px] text-muted-foreground/70">{session.closedAt}</span>
-                                            </td>
-                                            <td className="py-3 px-4 text-muted-foreground text-[11px] font-mono">
-                                                {session.duration} ({session.messagesCount} msgs)
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                <Badge variant="outline" className={`text-[10px] ${
-                                                    session.status === 'Resolved'
-                                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                                                        : session.status === 'Auto-Closed'
-                                                        ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                                                        : 'bg-muted text-muted-foreground border-border'
-                                                }`}>
-                                                    {session.status}
-                                                </Badge>
-                                            </td>
-                                            <td className="py-3 px-4 text-right">
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-7 text-xs text-[#28804c] dark:text-[#52c480] hover:underline"
-                                                    onClick={() => setSelectedSession(session)}
-                                                >
-                                                    View Chat
-                                                    <ChevronRight className="size-3.5 ml-1" />
-                                                </Button>
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        sortedFilteredSessions.map((session) => (
+                                            <tr key={session.id} className="hover:bg-muted/30 transition-colors">
+                                                {/* Contact */}
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <div className="font-semibold text-xs text-foreground">
+                                                        {session.contactName}
+                                                    </div>
+                                                    <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                                                        {session.phone}
+                                                    </div>
+                                                </td>
+
+                                                {/* Channel */}
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-1 text-[11px] font-semibold">
+                                                        <MessageSquare className="size-3 text-emerald-600 shrink-0" />
+                                                        <span className="truncate max-w-[140px]">{session.channel}</span>
+                                                    </span>
+                                                </td>
+
+                                                {/* Assigned Agent */}
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <div className="inline-flex items-center gap-1.5 text-xs text-foreground font-medium">
+                                                        <div className="size-6 rounded-full bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+                                                            <User className="size-3" />
+                                                        </div>
+                                                        <span>{session.agent}</span>
+                                                    </div>
+                                                </td>
+
+                                                {/* Summary */}
+                                                <td className="py-3.5 px-4 max-w-[200px] lg:max-w-xs">
+                                                    <p className="text-xs text-foreground truncate leading-snug font-normal">
+                                                        {session.summary}
+                                                    </p>
+                                                    <span className="inline-block text-[10px] text-muted-foreground mt-0.5">
+                                                        {session.closedAt}
+                                                    </span>
+                                                </td>
+
+                                                {/* Duration */}
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <div className="text-xs font-semibold text-foreground font-mono">
+                                                        {session.duration}
+                                                    </div>
+                                                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                                                        {session.messagesCount} {session.messagesCount === 1 ? 'msg' : 'msgs'}
+                                                    </div>
+                                                </td>
+
+                                                {/* Status */}
+                                                <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                                        session.status === 'Resolved'
+                                                            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                                                            : session.status === 'Active'
+                                                            ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                                            : 'bg-muted text-muted-foreground border border-border'
+                                                    }`}>
+                                                        <span className={`size-1.5 rounded-full shrink-0 ${
+                                                            session.status === 'Resolved'
+                                                                ? 'bg-emerald-500'
+                                                                : session.status === 'Active'
+                                                                ? 'bg-blue-500 animate-pulse'
+                                                                : 'bg-muted-foreground'
+                                                        }`} />
+                                                        {session.status}
+                                                    </span>
+                                                </td>
+
+                                                {/* Transcript Action */}
+                                                <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-8 text-xs font-semibold border-border hover:bg-[#47b672]/10 hover:text-[#28804c] hover:border-[#47b672]/30 shadow-2xs gap-1"
+                                                        onClick={() => setSelectedSession(session)}
+                                                    >
+                                                        View Chat
+                                                        <ChevronRight className="size-3.5" />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -277,14 +309,20 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
             {/* Transcript Modal */}
             {selectedSession && (
                 <Dialog open={!!selectedSession} onOpenChange={() => setSelectedSession(null)}>
-                    <DialogContent className="sm:max-w-md">
+                    <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg p-5 overflow-hidden">
                         <DialogHeader>
                             <DialogTitle className="text-sm font-semibold flex items-center justify-between">
                                 <span className="flex items-center gap-2">
                                     <MessageSquare className="size-4 text-[#47b672]" />
                                     {selectedSession.contactName}
                                 </span>
-                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                <Badge variant="outline" className={`text-[10px] ${
+                                    selectedSession.status === 'Resolved'
+                                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                                        : selectedSession.status === 'Active'
+                                        ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                        : 'bg-muted text-muted-foreground border-border'
+                                }`}>
                                     {selectedSession.status}
                                 </Badge>
                             </DialogTitle>
@@ -294,14 +332,14 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                         </DialogHeader>
 
                         {/* WhatsApp Chat Bubbles */}
-                        <div className="bg-[#efeae2] dark:bg-[#0c1317] p-3 rounded-lg space-y-2 max-h-80 overflow-y-auto">
+                        <div className="bg-[#efeae2] dark:bg-[#0c1317] p-3 rounded-lg space-y-2.5 max-h-[360px] overflow-y-auto overflow-x-hidden">
                             {selectedSession.transcript.map((msg, idx) => (
                                 <div
                                     key={idx}
                                     className={`flex ${msg.sender === 'contact' ? 'justify-start' : 'justify-end'}`}
                                 >
                                     <div
-                                        className={`max-w-[85%] rounded-lg p-2.5 text-xs shadow-2xs whitespace-pre-wrap ${
+                                        className={`max-w-[85%] rounded-lg p-2.5 text-xs shadow-2xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] ${
                                             msg.sender === 'contact'
                                                 ? 'bg-white text-gray-900 dark:bg-[#202c33] dark:text-gray-100 rounded-tl-none border border-black/5'
                                                 : msg.sender === 'bot'
@@ -309,7 +347,7 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                                                 : 'bg-[#d9fdd3] text-gray-900 dark:bg-[#005c4b] dark:text-gray-100 rounded-tr-none'
                                         }`}
                                     >
-                                        <p>{msg.text}</p>
+                                        <p className="break-words [overflow-wrap:anywhere] [word-break:break-word]">{msg.text}</p>
                                         <span className="block text-[9px] text-right text-muted-foreground mt-1">
                                             {msg.time}
                                         </span>
@@ -318,8 +356,10 @@ export default function ChatHistory({ initialSessions = [] }: ChatHistoryProps) 
                             ))}
                         </div>
 
-                        <div className="pt-2 flex justify-between items-center text-xs">
-                            <span className="text-muted-foreground text-[11px]">{selectedSession.summary}</span>
+                        <div className="pt-2 flex justify-between items-center text-xs border-t border-border/50">
+                            <span className="text-muted-foreground text-[11px] font-medium">
+                                {selectedSession.transcript.length} {selectedSession.transcript.length === 1 ? 'message' : 'messages'} recorded
+                            </span>
                             <Button size="sm" variant="outline" onClick={() => setSelectedSession(null)} className="text-xs h-8">
                                 Close
                             </Button>

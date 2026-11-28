@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import {
     LayoutGrid,
@@ -56,9 +56,16 @@ import { NavUser } from '@/components/nav-user';
 export function AppSidebar() {
     const { url } = usePage();
     const { auth, tenant, inboxUnreadCount } = usePage().props as any;
-    const { state } = useSidebar();
+    const { state, isMobile, setOpenMobile } = useSidebar();
     const isCollapsed = state === 'collapsed';
     const currentOrg = tenant?.current;
+
+    // Automatically close mobile sidebar upon navigation
+    useEffect(() => {
+        if (isMobile) {
+            setOpenMobile(false);
+        }
+    }, [url, isMobile, setOpenMobile]);
 
     // Expand Automation submenu automatically when inside bot/flows/agent
     const isInsideAutomation =
@@ -87,7 +94,16 @@ export function AppSidebar() {
     const inactiveClass = 'text-foreground/80 hover:bg-muted/70 hover:text-foreground';
 
     return (
-        <Sidebar collapsible="icon" variant="inset" className="border-r border-border bg-card">
+        <Sidebar
+            collapsible="icon"
+            variant="inset"
+            className="border-r border-border bg-card"
+            onClick={(e) => {
+                if (isMobile && (e.target as HTMLElement).closest('a')) {
+                    setOpenMobile(false);
+                }
+            }}
+        >
             {/* 1. Workspace Profile Header */}
             <SidebarHeader className="border-b border-border/70 p-2 group-data-[collapsible=icon]:p-1.5 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
                 <WorkspaceSwitcher />

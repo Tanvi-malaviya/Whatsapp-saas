@@ -248,7 +248,7 @@ export default function TeamManagementPage({
                             </div>
 
                             <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-left">
+                                <table className="w-full min-w-[650px] text-xs text-left">
                                     <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] font-bold tracking-wider border-b border-border/60">
                                         <tr>
                                             <th className="px-4 py-3">Member</th>
@@ -428,7 +428,7 @@ export default function TeamManagementPage({
                             </div>
 
                             <div className="overflow-x-auto">
-                                <table className="w-full text-xs text-left border-collapse">
+                                <table className="w-full min-w-[700px] text-xs text-left border-collapse">
                                     <thead>
                                         <tr className="bg-muted/50 border-b border-border/70 text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
                                             <th className="px-4 py-3 min-w-[200px]">Module / Category</th>

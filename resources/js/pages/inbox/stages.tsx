@@ -45,32 +45,7 @@ interface ChatStagesProps {
 }
 
 export default function ChatStages({ initialLeads = [] }: ChatStagesProps) {
-    const defaultMockLeads: LeadCard[] = [
-        {
-            id: '1',
-            contactName: 'Bhavesh Sathwara',
-            phone: '+91 79978 81665',
-            dealValue: 14999,
-            interest: 'WhatsApp SaaS Annual License',
-            stage: 'Qualified',
-            daysInStage: 2,
-            lastActive: '10m ago',
-        },
-        {
-            id: '2',
-            contactName: 'Rahul Patel',
-            phone: '+91 98250 12345',
-            dealValue: 4999,
-            interest: 'Full Stack Laravel Course',
-            stage: 'New',
-            daysInStage: 1,
-            lastActive: '1h ago',
-        },
-    ];
-
-    const [leads, setLeads] = useState<LeadCard[]>(
-        initialLeads && initialLeads.length > 0 ? initialLeads : defaultMockLeads
-    );
+    const [leads, setLeads] = useState<LeadCard[]>(initialLeads || []);
 
     const moveStage = async (leadId: string, direction: 'next' | 'prev') => {
         const lead = leads.find((l) => l.id === leadId);

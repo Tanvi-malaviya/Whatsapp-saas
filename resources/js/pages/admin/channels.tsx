@@ -133,7 +133,7 @@ export default function AdminChannels({ channels = [] }: Props) {
                 {/* Channels Table */}
                 <Card className="border-border/70 shadow-2xs overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
+                        <table className="w-full min-w-[700px] text-left text-sm">
                             <thead className="bg-muted/40 border-b border-border text-[11px] uppercase font-semibold text-muted-foreground">
                                 <tr>
                                     <th className="py-2 px-3">WhatsApp Phone Number</th>

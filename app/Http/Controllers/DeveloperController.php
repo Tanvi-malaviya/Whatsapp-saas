@@ -38,15 +38,10 @@ class DeveloperController extends Controller
     {
         $org = $this->resolveOrg($request);
 
-        // Ensure at least one active API key exists so user can test immediately
+        // Load only explicitly generated API keys for this workspace
         $existingKeys = ApiKey::where('organization_id', $org->id)
             ->orderByDesc('created_at')
             ->get();
-
-        if ($existingKeys->isEmpty()) {
-            $newKey = ApiKey::generateFor($org, $request->user(), 'Primary Production Key');
-            $existingKeys = collect([$newKey]);
-        }
 
         $apiKeys = $existingKeys->map(fn (ApiKey $k) => [
             'id' => $k->id,

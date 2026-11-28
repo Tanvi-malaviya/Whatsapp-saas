@@ -43,7 +43,7 @@ class BillingController extends Controller
 
         return Inertia::render('subscription/index', [
             'currentPlan' => $org->subscription_plan ?: 'annual',
-            'subscriptionStatus' => $org->status === 'active' && ! $org->isSubscriptionActive() ? 'expired' : $org->status,
+            'subscriptionStatus' => $org->subscriptionStatus(),
             'subscriptionExpiresAt' => $org->subscription_expires_at?->toIso8601String(),
             'daysUntilExpiry' => $org->daysUntilExpiry(),
             'plans' => $plans,
