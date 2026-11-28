@@ -7,7 +7,6 @@ import {
     LoginThemeToggle,
 } from '@/components/auth/login-elements';
 import { PanelLoginForm } from '@/components/auth/panel-login-form';
-import { PanelLoginLinks } from '@/components/panel-login-links';
 
 export default function AgentLogin({ status }: { status?: string }) {
     return (
@@ -96,7 +95,6 @@ export default function AgentLogin({ status }: { status?: string }) {
                             Need partner access? Contact your platform
                             administrator for onboarding.
                         </p>
-                        <PanelLoginLinks panel="agent" />
                     </section>
                 </main>
                 <div className="mx-auto w-full max-w-6xl">

@@ -7,7 +7,6 @@ import {
     LoginThemeToggle,
 } from '@/components/auth/login-elements';
 import { PanelLoginForm } from '@/components/auth/panel-login-form';
-import { PanelLoginLinks } from '@/components/panel-login-links';
 
 export default function AdminLogin({ status }: { status?: string }) {
     return (
@@ -44,7 +43,6 @@ export default function AdminLogin({ status }: { status?: string }) {
                                     administrators.
                                 </span>
                             </div>
-                            <PanelLoginLinks panel="admin" />
                         </div>
                     </div>
                 </main>
