@@ -44,6 +44,7 @@ class WhatsAppChannelController extends Controller
         return Inertia::render('whatsapp/connect', [
             'channels' => $channels, 'maxChannels' => $org->getMaxChannels(),
             'channelsCount' => $org->channels()->withoutGlobalScopes()->whereNull('deleted_at')->count(), 'canAddMore' => $org->canAddMoreChannels(),
+            'isSubscriptionActive' => $org->isSubscriptionActive(),
             'defaultWebhookUrl' => url('/webhooks/meta'), 'defaultVerifyToken' => '',
             'metaAppId' => MetaApi::setting('app_id') ?? '', 'metaConfigId' => MetaApi::setting('config_id') ?? '',
             'graphVersion' => config('release.meta.graph_version'),
@@ -57,6 +58,11 @@ class WhatsAppChannelController extends Controller
 
     public function wizard(Request $request)
     {
+        $org = $this->org();
+        if (! $org->isSubscriptionActive()) {
+            return redirect()->route('subscription.index')->with('warning', 'Please purchase a subscription plan before connecting your WhatsApp number.');
+        }
+
         return Inertia::render('whatsapp/connect-wizard', [
             'existingChannel' => null, 'defaultWebhookUrl' => url('/webhooks/meta'), 'defaultVerifyToken' => '',
             'metaAppId' => MetaApi::setting('app_id') ?? '', 'metaConfigId' => MetaApi::setting('config_id') ?? '',
@@ -66,6 +72,7 @@ class WhatsAppChannelController extends Controller
 
     public function beginSignup(Request $request)
     {
+        abort_unless($this->org()->isSubscriptionActive(), 403, 'Active subscription required. Please purchase a subscription plan before connecting WhatsApp.');
         abort_unless($this->org()->canAddMoreChannels(), 422, 'Number allowance reached. Contact your administrator.');
         $app = MetaApi::setting('app_id') ?: '1079349601748656';
         $config = MetaApi::setting('config_id') ?: '1835889181059188';
@@ -219,6 +226,7 @@ class WhatsAppChannelController extends Controller
 
     public function store(Request $request)
     {
+        abort_unless($this->org()->isSubscriptionActive(), 403, 'Active subscription required. Please purchase a subscription plan before connecting WhatsApp.');
         $channel = $this->save($request);
 
         return $request->expectsJson() ? response()->json(['success' => true, 'message' => 'WhatsApp number saved.', 'channel' => $channel]) : redirect('/whatsapp/connect')->with('success', 'WhatsApp number saved.');

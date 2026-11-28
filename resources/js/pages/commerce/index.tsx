@@ -1220,7 +1220,7 @@ export default function CommerceIndex({
                                     <p className="text-[11px] text-muted-foreground">
                                         Paste this URL once in <em>Meta Commerce Manager &gt; Data sources &gt; Add items &gt; Data feed &gt; Scheduled feed</em>. Meta will automatically fetch all products you add to this panel!
                                     </p>
-                                    <div className="flex items-center gap-2 pt-1 min-w-0">
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 min-w-0">
                                         <Input
                                             readOnly
                                             value={typeof window !== 'undefined' ? `${window.location.origin}/commerce/catalog-feed.csv${selectedSenderChannel ? `?channel_id=${selectedSenderChannel}` : ''}` : '/commerce/catalog-feed.csv'}
@@ -1237,10 +1237,10 @@ export default function CommerceIndex({
                                                     alert('Copied Feed URL to clipboard!');
                                                 }
                                             }}
-                                            className="h-8 px-2.5 text-xs shrink-0 gap-1 cursor-pointer"
+                                            className="h-8 px-3 text-xs shrink-0 gap-1 cursor-pointer justify-center"
                                         >
                                             <Copy className="size-3" />
-                                            Copy
+                                            <span>Copy Feed URL</span>
                                         </Button>
                                     </div>
                                 </div>

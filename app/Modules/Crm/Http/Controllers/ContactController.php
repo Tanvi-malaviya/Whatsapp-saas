@@ -14,9 +14,12 @@ use Inertia\Inertia;
 
 class ContactController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $org = TenantContext::organization();
+        $org = TenantContext::organization()
+            ?? $request->user()?->currentOrganization
+            ?? $request->user()?->organizations()->first();
+
         $defaultLabels = ['VIP', 'Wholesale', 'Retail', 'New Lead', 'Follow-up', 'Urgent', 'High Value', 'Support'];
         $savedLabels = $org?->metadata['contact_labels'] ?? $defaultLabels;
 
@@ -46,12 +49,15 @@ class ContactController extends Controller
 
     public function saveLabel(Request $request)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:50',
-        ]);
+        $newLabel = trim($request->input('name') ?? '');
+        if (!$newLabel) {
+            return back();
+        }
 
-        $newLabel = trim($data['name']);
-        $org = TenantContext::organization();
+        $org = TenantContext::organization()
+            ?? $request->user()?->currentOrganization
+            ?? $request->user()?->organizations()->first();
+
         if ($org) {
             $meta = $org->metadata ?? [];
             $labels = $meta['contact_labels'] ?? ['VIP', 'Wholesale', 'Retail', 'New Lead', 'Follow-up', 'Urgent', 'High Value', 'Support'];
@@ -67,20 +73,39 @@ class ContactController extends Controller
 
     public function deleteLabel(Request $request)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:50',
-        ]);
+        $toDelete = trim($request->input('name') ?? '');
+        if (!$toDelete) {
+            return back();
+        }
 
-        $toDelete = trim($data['name']);
-        $org = TenantContext::organization();
+        $org = TenantContext::organization()
+            ?? $request->user()?->currentOrganization
+            ?? $request->user()?->organizations()->first();
+
         if ($org) {
+            // 1. Remove from organization metadata saved labels
             $meta = $org->metadata ?? [];
             $labels = $meta['contact_labels'] ?? ['VIP', 'Wholesale', 'Retail', 'New Lead', 'Follow-up', 'Urgent', 'High Value', 'Support'];
             $meta['contact_labels'] = array_values(array_filter($labels, fn ($l) => strcasecmp($l, $toDelete) !== 0));
             $org->update(['metadata' => $meta]);
+
+            // 2. Remove this label from all contacts that currently have it attached
+            $contactsWithLabel = Contact::where('organization_id', $org->id)
+                ->whereNotNull('label')
+                ->where('label', '!=', '')
+                ->get();
+
+            foreach ($contactsWithLabel as $contact) {
+                $tags = array_map('trim', explode(',', $contact->label));
+                $remaining = array_values(array_filter($tags, fn ($t) => strcasecmp($t, $toDelete) !== 0));
+                $newLabelValue = count($remaining) > 0 ? implode(', ', $remaining) : null;
+                if ($newLabelValue !== $contact->label) {
+                    $contact->update(['label' => $newLabelValue]);
+                }
+            }
         }
 
-        return back()->with('success', "Label \"{$toDelete}\" removed from master list.");
+        return back()->with('success', "Label \"{$toDelete}\" deleted successfully.");
     }
     private function data(Request $request): array
     {

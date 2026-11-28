@@ -106,6 +106,7 @@ export default function ContactsList({
             { name: trimmed },
             {
                 preserveScroll: true,
+                preserveState: true,
                 onSuccess: () => {
                     setIsSavingLabel(false);
                     setNewLabelInput('');
@@ -117,12 +118,37 @@ export default function ContactsList({
     };
 
     const handleDeleteMasterLabel = (labelName: string) => {
+        // 1. Remove from masterLabels state
         setMasterLabels((prev) => prev.filter((l) => l.toLowerCase() !== labelName.toLowerCase()));
-        router.delete('/contacts/labels', {
-            data: { name: labelName },
-            preserveScroll: true,
-            onSuccess: () => showToast(`Label "${labelName}" removed!`),
-        });
+
+        // 2. Remove this label from all contacts in local React state so availableLabels updates instantly
+        setContacts((prev) =>
+            prev.map((c) => {
+                if (!c.label) return c;
+                const remaining = c.label
+                    .split(',')
+                    .map((l) => l.trim())
+                    .filter((l) => l.toLowerCase() !== labelName.toLowerCase());
+                return { ...c, label: remaining.join(', ') };
+            })
+        );
+
+        // 3. Reset filter if currently filtering by this deleted label
+        if (selectedLabel.toLowerCase() === labelName.toLowerCase()) {
+            setSelectedLabel('ALL');
+        }
+
+        // 4. Send POST request to backend to persist deletion in organization metadata & contacts
+        router.post(
+            '/contacts/labels/delete',
+            { name: labelName },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => showToast(`Label "${labelName}" deleted!`),
+                onError: (err) => console.error('Failed to delete label', err),
+            }
+        );
     };
 
     // Delete Confirmation Modal State
@@ -405,13 +431,12 @@ export default function ContactsList({
         });
     };
 
-    // Collect unique labels from all contacts
+    // Collect unique labels from all contacts & master labels
     const availableLabels = Array.from(
-        new Set(
-            contacts
-                .flatMap((c) => (c.label ? c.label.split(',').map((l) => l.trim()) : []))
-                .filter(Boolean)
-        )
+        new Set([
+            ...masterLabels,
+            ...contacts.flatMap((c) => (c.label ? c.label.split(',').map((l) => l.trim()) : [])),
+        ].filter(Boolean))
     ).sort();
 
     const filtered = contacts.filter((c) => {
@@ -433,6 +458,19 @@ export default function ContactsList({
         return matchesSearch && matchesLabel;
     });
 
+    // When searching, sort matching contacts so exact/direct matches come first at the very top
+    const sortedFiltered = React.useMemo(() => {
+        if (!searchTerm.trim()) return filtered;
+        const q = searchTerm.toLowerCase().trim();
+        return [...filtered].sort((a, b) => {
+            const aStarts = (a.name || '').toLowerCase().startsWith(q) || (a.phone || '').startsWith(q);
+            const bStarts = (b.name || '').toLowerCase().startsWith(q) || (b.phone || '').startsWith(q);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return 0;
+        });
+    }, [filtered, searchTerm]);
+
     return (
         <>
             <Head title="Contacts & CRM Directory" />
@@ -450,6 +488,15 @@ export default function ContactsList({
                                 <Check className="size-4" /> {toastMessage}
                             </span>
                         )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 h-9 text-xs border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                            onClick={() => setIsManageLabelsOpen(true)}
+                        >
+                            <Tag className="size-3.5" />
+                            Manage Labels
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
@@ -503,6 +550,15 @@ export default function ContactsList({
                             <Filter className="size-3 text-indigo-500" />
                             Filter by Label:
                         </span>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsManageLabelsOpen(true)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 border border-dashed border-indigo-500/40 cursor-pointer transition-colors"
+                        >
+                            <Plus className="size-3" />
+                            Add Label
+                        </button>
 
                         <button
                             type="button"
@@ -601,7 +657,7 @@ export default function ContactsList({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-sidebar-border/40">
-                                    {filtered.map((contact) => (
+                                    {sortedFiltered.map((contact) => (
                                         <tr key={contact.id} className="hover:bg-muted/20 transition-colors">
                                             <td className="p-3.5 font-semibold text-foreground">
                                                 {contact.name}
@@ -780,20 +836,80 @@ export default function ContactsList({
                                 <div className="flex items-center justify-between">
                                     <label className="text-xs font-semibold flex items-center gap-1.5">
                                         <Tag className="size-3.5 text-indigo-600" />
-                                        <span>Label / Tags (optional)</span>
+                                        <span>Label / Tags</span>
                                     </label>
-                                    <span className="text-[10px] text-muted-foreground">comma separated</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsManageLabelsOpen(true)}
+                                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                        <Plus className="size-3" />
+                                        Manage Labels
+                                    </button>
                                 </div>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. VIP, Wholesale, Lead"
-                                    value={label}
-                                    onChange={(e) => setLabel(e.target.value)}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
+
+                                {/* Label Dropdown Selector */}
+                                <select
+                                    value=""
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (!val) return;
+                                        if (val === '__CREATE_NEW__') {
+                                            setIsManageLabelsOpen(true);
+                                            return;
+                                        }
+                                        const current = label ? label.split(',').map((s) => s.trim()).filter(Boolean) : [];
+                                        if (!current.some((c) => c.toLowerCase() === val.toLowerCase())) {
+                                            setLabel([...current, val].join(', '));
+                                        }
+                                    }}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                                >
+                                    <option value="">-- Select Label / Tag --</option>
+                                    {availableLabels.map((lbl) => (
+                                        <option key={lbl} value={lbl}>
+                                            {lbl}
+                                        </option>
+                                    ))}
+                                    <option value="__CREATE_NEW__">+ Create / Manage Labels...</option>
+                                </select>
+
+                                {/* Selected Label Chips */}
+                                {label ? (
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                        {label.split(',').map((tag, idx) => {
+                                            const trimmed = tag.trim();
+                                            if (!trimmed) return null;
+                                            return (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-600 text-white shadow-2xs"
+                                                >
+                                                    <Tag className="size-2.5" />
+                                                    <span>{trimmed}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = label.split(',').map((s) => s.trim()).filter(Boolean);
+                                                            setLabel(current.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()).join(', '));
+                                                        }}
+                                                        className="ml-0.5 hover:bg-white/20 rounded-full p-0.5 cursor-pointer"
+                                                        title={`Remove ${trimmed}`}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">Select a label from dropdown above or click quick tags below.</p>
+                                )}
+
+                                {/* Quick Suggestions */}
                                 <div className="flex flex-wrap items-center gap-1 pt-0.5">
                                     <span className="text-[10px] text-muted-foreground mr-0.5">Quick Add:</span>
-                                    {SUGGESTED_LABELS.map((sug) => {
+                                    {availableLabels.slice(0, 6).map((sug) => {
                                         const currentTags = label.split(',').map((s) => s.trim().toLowerCase());
                                         const isSelected = currentTags.includes(sug.toLowerCase());
                                         return (
@@ -996,20 +1112,80 @@ export default function ContactsList({
                                 <div className="flex items-center justify-between">
                                     <label className="text-xs font-semibold flex items-center gap-1.5">
                                         <Tag className="size-3.5 text-indigo-600" />
-                                        <span>Label / Tags (optional)</span>
+                                        <span>Label / Tags</span>
                                     </label>
-                                    <span className="text-[10px] text-muted-foreground">comma separated</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsManageLabelsOpen(true)}
+                                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                                    >
+                                        <Plus className="size-3" />
+                                        Manage Labels
+                                    </button>
                                 </div>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. VIP, Wholesale, Lead"
-                                    value={editLabel}
-                                    onChange={(e) => setEditLabel(e.target.value)}
-                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
+
+                                {/* Label Dropdown Selector */}
+                                <select
+                                    value=""
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (!val) return;
+                                        if (val === '__CREATE_NEW__') {
+                                            setIsManageLabelsOpen(true);
+                                            return;
+                                        }
+                                        const current = editLabel ? editLabel.split(',').map((s) => s.trim()).filter(Boolean) : [];
+                                        if (!current.some((c) => c.toLowerCase() === val.toLowerCase())) {
+                                            setEditLabel([...current, val].join(', '));
+                                        }
+                                    }}
+                                    className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                                >
+                                    <option value="">-- Select Label / Tag --</option>
+                                    {availableLabels.map((lbl) => (
+                                        <option key={lbl} value={lbl}>
+                                            {lbl}
+                                        </option>
+                                    ))}
+                                    <option value="__CREATE_NEW__">+ Create / Manage Labels...</option>
+                                </select>
+
+                                {/* Selected Label Chips */}
+                                {editLabel ? (
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                        {editLabel.split(',').map((tag, idx) => {
+                                            const trimmed = tag.trim();
+                                            if (!trimmed) return null;
+                                            return (
+                                                <span
+                                                    key={idx}
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-600 text-white shadow-2xs"
+                                                >
+                                                    <Tag className="size-2.5" />
+                                                    <span>{trimmed}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const current = editLabel.split(',').map((s) => s.trim()).filter(Boolean);
+                                                            setEditLabel(current.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()).join(', '));
+                                                        }}
+                                                        className="ml-0.5 hover:bg-white/20 rounded-full p-0.5 cursor-pointer"
+                                                        title={`Remove ${trimmed}`}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground">Select a label from dropdown above or click quick tags below.</p>
+                                )}
+
+                                {/* Quick Suggestions */}
                                 <div className="flex flex-wrap items-center gap-1 pt-0.5">
                                     <span className="text-[10px] text-muted-foreground mr-0.5">Quick Add:</span>
-                                    {SUGGESTED_LABELS.map((sug) => {
+                                    {availableLabels.slice(0, 6).map((sug) => {
                                         const currentTags = editLabel.split(',').map((s) => s.trim().toLowerCase());
                                         const isSelected = currentTags.includes(sug.toLowerCase());
                                         return (
@@ -1252,6 +1428,103 @@ export default function ContactsList({
                             className="h-8 text-xs px-4"
                         >
                             Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal 6: Manage Labels Dialog */}
+            <Dialog open={isManageLabelsOpen} onOpenChange={setIsManageLabelsOpen}>
+                <DialogContent
+                    style={{ maxWidth: '380px', width: 'calc(100vw - 2rem)', padding: 0 }}
+                    className="p-0 sm:p-0 gap-0 sm:gap-0 max-w-[380px] sm:max-w-[380px] overflow-hidden rounded-xl border border-border shadow-2xl flex flex-col bg-background"
+                >
+                    <DialogHeader className="px-4 py-3 border-b border-border/70 shrink-0 pr-10 text-left">
+                        <DialogTitle className="text-sm font-bold flex items-center gap-2 leading-none">
+                            <Tag className="size-4 text-indigo-600 shrink-0" />
+                            <span>Manage Contact Labels</span>
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-muted-foreground mt-1">
+                            Create and organize custom tags for your contacts.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="p-4 space-y-3.5 overflow-y-auto max-h-[60vh]">
+                        {/* Add New Label Form */}
+                        <form onSubmit={handleCreateMasterLabel} className="flex gap-2">
+                            <input
+                                type="text"
+                                required
+                                placeholder="New label name..."
+                                value={newLabelInput}
+                                onChange={(e) => setNewLabelInput(e.target.value)}
+                                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <Button
+                                type="submit"
+                                size="sm"
+                                disabled={isSavingLabel || !newLabelInput.trim()}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 h-8 shrink-0 font-medium"
+                            >
+                                {isSavingLabel ? 'Adding...' : 'Add Label'}
+                            </Button>
+                        </form>
+
+                        {/* List of existing master labels */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-0.5">
+                                <span>Available Labels</span>
+                                <span>({availableLabels.length})</span>
+                            </div>
+
+                            {availableLabels.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-4 border border-dashed border-border/70 rounded-lg">
+                                    No labels created yet.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-border/60 rounded-lg border border-border/70 bg-card overflow-hidden max-h-52 overflow-y-auto">
+                                    {availableLabels.map((lbl) => {
+                                        const count = contacts.filter((c) =>
+                                            c.label?.split(',').map((l) => l.trim().toLowerCase()).includes(lbl.toLowerCase())
+                                        ).length;
+
+                                        return (
+                                            <div
+                                                key={lbl}
+                                                className="flex items-center justify-between px-3 py-2 text-xs hover:bg-muted/30 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                                    <Tag className="size-3 text-indigo-500 shrink-0" />
+                                                    <span className="font-semibold text-foreground truncate max-w-[160px]">{lbl}</span>
+                                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-muted text-muted-foreground font-normal shrink-0">
+                                                        {count} {count === 1 ? 'contact' : 'contacts'}
+                                                    </Badge>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDeleteMasterLabel(lbl)}
+                                                    className="text-muted-foreground hover:text-red-600 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer shrink-0"
+                                                    title={`Delete label "${lbl}"`}
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <DialogFooter className="px-4 py-2.5 border-t border-border/70 bg-muted/20 shrink-0 flex flex-row justify-end items-center">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsManageLabelsOpen(false)}
+                            className="h-8 text-xs px-4 font-medium"
+                        >
+                            Done
                         </Button>
                     </DialogFooter>
                 </DialogContent>

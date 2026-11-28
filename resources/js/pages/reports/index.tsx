@@ -258,7 +258,7 @@ export default function ReportsIndex({
                 {/* 3. Compact Visual Charts Grid (7-Day Cost Trend + Spend Breakdown) */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch">
                     {/* Left: 7-Day Meta Cost Trend Stacked Bar Chart (8 Cols) */}
-                    <Card className="lg:col-span-8 border-border/70 bg-card p-3 rounded-lg shadow-none flex flex-col justify-between">
+                    <Card className="lg:col-span-8 border-border/70 bg-card p-3 rounded-lg shadow-none flex flex-col justify-between overflow-hidden">
                         <div>
                             <div className="flex items-center justify-between border-b border-border/50 pb-2">
                                 <div className="flex items-center gap-2">
@@ -282,24 +282,24 @@ export default function ReportsIndex({
                                 </div>
                             </div>
 
-                            {/* Graphical Bars (Compact Height: h-28) */}
-                            <div className="pt-3 pb-1 overflow-x-auto">
-                                <div className="grid grid-cols-7 gap-1.5 sm:gap-4 items-end h-28 border-b border-border/50 pb-1.5 min-w-[300px]">
+                            {/* Graphical Bars (Properly sized with zero scrollbar) */}
+                            <div className="pt-4 pb-1 overflow-hidden">
+                                <div className="grid grid-cols-7 gap-1.5 sm:gap-4 items-end h-32 border-b border-border/50 pb-1.5">
                                     {dailyTrends.map((d, i) => {
                                         const dayTotal = d.marketingCost + d.utilityCost;
                                         const marketingHeightPct = Math.round((d.marketingCost / maxDailyCost) * 100);
                                         const utilityHeightPct = Math.round((d.utilityCost / maxDailyCost) * 100);
 
                                         return (
-                                            <div key={i} className="flex flex-col items-center gap-1.5 h-full justify-end group">
+                                            <div key={i} className="relative flex flex-col items-center justify-end h-full group">
                                                 {/* Tooltip on Hover */}
-                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-900 text-white text-[9px] font-semibold py-0.5 px-1.5 rounded shadow text-center pointer-events-none whitespace-nowrap z-10">
+                                                <div className="absolute -top-7 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-neutral-900 text-white text-[9px] font-semibold py-0.5 px-1.5 rounded shadow text-center pointer-events-none whitespace-nowrap z-20">
                                                     <div>₹{dayTotal.toFixed(2)}</div>
                                                     <div className="text-neutral-400 font-normal">{d.sent} msgs</div>
                                                 </div>
 
                                                 {/* Bar Stack */}
-                                                <div className="w-full max-w-[24px] sm:max-w-[28px] flex flex-col justify-end rounded-t-sm overflow-hidden bg-muted/40 h-20">
+                                                <div className="w-full max-w-[24px] sm:max-w-[28px] flex flex-col justify-end rounded-t-sm overflow-hidden bg-muted/40 h-20 shrink-0">
                                                     {/* Utility portion (Top) */}
                                                     {d.utilityCost > 0 && (
                                                         <div
@@ -320,7 +320,7 @@ export default function ReportsIndex({
                                                 </div>
 
                                                 {/* Day Label */}
-                                                <div className="text-center leading-tight">
+                                                <div className="text-center leading-tight mt-1.5 shrink-0">
                                                     <div className="text-[11px] font-bold text-foreground">{d.day}</div>
                                                     <div className="text-[9px] text-muted-foreground">{d.date}</div>
                                                 </div>

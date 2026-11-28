@@ -1127,18 +1127,32 @@ export default function CampaignsList({
                                 {broadcastResult.message}
                             </div>}
 
-                            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                                <div className="min-w-0 space-y-1">
-                                    <Label htmlFor="broadcast-campaign-name" className="text-xs font-semibold">Campaign Name</Label>
-                                    <Input id="broadcast-campaign-name" value={campaignName} onChange={event => setCampaignName(event.target.value)} placeholder="e.g. Festival Offer" className="text-xs" required />
-                                </div>
+                            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
                                 <div className="min-w-0 space-y-1">
                                     <Label htmlFor="broadcast-template" className="text-xs font-semibold">Select Meta Template</Label>
-                                    <select id="broadcast-template" value={selectedTemplate?.id || ''} onChange={event => handleSelectTemplateInModal(event.target.value)} className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-xs font-medium">
-                                        {templates.map(template => <option key={template.id} value={template.id}>
-                                            {template.name} ({template.language}) · {templateMediaTypes[templateMediaFormat(template)] ? `${templateMediaFormat(template).toLowerCase()} attachment` : 'Text only'}{templateHasVariables(template) ? ' · Dynamic values' : ''}
-                                        </option>)}
+                                    <select
+                                        id="broadcast-template"
+                                        value={selectedTemplate?.id || ''}
+                                        onChange={event => handleSelectTemplateInModal(event.target.value)}
+                                        className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-xs font-medium"
+                                    >
+                                        {templates.map(template => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name} ({template.language}) · {templateMediaTypes[templateMediaFormat(template)] ? `${templateMediaFormat(template).toLowerCase()} attachment` : 'Text only'}{templateHasVariables(template) ? ' · Dynamic values' : ''}
+                                            </option>
+                                        ))}
                                     </select>
+                                </div>
+                                <div className="min-w-0 space-y-1">
+                                    <Label htmlFor="broadcast-campaign-name" className="text-xs font-semibold">Campaign Name</Label>
+                                    <Input
+                                        id="broadcast-campaign-name"
+                                        value={campaignName}
+                                        onChange={event => setCampaignName(event.target.value)}
+                                        placeholder="e.g. Festival Offer"
+                                        className="text-xs"
+                                        required
+                                    />
                                 </div>
                             </div>
 

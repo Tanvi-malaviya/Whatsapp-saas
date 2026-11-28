@@ -121,7 +121,20 @@ class Organization extends Model
             return $this->subscription_expires_at->isFuture();
         }
 
-        return true;
+        return false;
+    }
+
+    public function subscriptionStatus(): string
+    {
+        if (! $this->subscription_expires_at) {
+            return 'pending';
+        }
+
+        if ($this->subscription_expires_at->isPast()) {
+            return 'expired';
+        }
+
+        return $this->status === 'active' ? 'active' : $this->status;
     }
 
     public function daysUntilExpiry(): ?int

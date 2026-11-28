@@ -1378,7 +1378,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                 {(messages[selectedThread.id] || []).map((msg) => (
                                     <div
                                         key={msg.id}
-                                        className={`flex flex-col max-w-[95%] sm:max-w-[85%] md:max-w-[70%] ${msg.sender === 'agent'
+                                        className={`flex flex-col max-w-[92%] sm:max-w-[85%] md:max-w-[70%] min-w-0 ${msg.sender === 'agent'
                                                 ? 'ml-auto items-end'
                                                 : msg.sender === 'bot'
                                                     ? 'mr-auto items-start'
@@ -1386,7 +1386,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             }`}
                                     >
                                         <div
-                                            className={`rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 text-xs shadow-xs leading-relaxed max-w-full break-words ${msg.sender === 'agent'
+                                            className={`rounded-2xl px-3 py-2 sm:px-4 sm:py-2.5 text-xs shadow-xs leading-relaxed max-w-full min-w-0 break-words [overflow-wrap:anywhere] [word-break:break-word] ${msg.sender === 'agent'
                                                     ? 'bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef] rounded-tr-xs'
                                                     : msg.sender === 'bot'
                                                         ? 'bg-card text-foreground border border-purple-500/30 rounded-tl-xs'
@@ -1501,7 +1501,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                     };
 
                                                     return (
-                                                        <div className="space-y-2 min-w-0 w-full max-w-[340px] sm:max-w-[420px] pt-0.5">
+                                                        <div className="space-y-2 min-w-0 w-full max-w-full sm:max-w-[420px] pt-0.5 break-words [overflow-wrap:anywhere] [word-break:break-word]">
                                                             {/* Official WhatsApp Template Badge Header */}
                                                             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-black/10 dark:border-white/10 text-[10px]">
                                                                 <div className="flex items-center gap-1.5 font-bold text-[#1e6e3c] dark:text-[#52c480]">
@@ -1537,7 +1537,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                                             )}
 
                                                             {/* Rendered Template Body (Hindi / Gujarati / English) */}
-                                                            <div className="text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef] select-text">
+                                                            <div className="text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap text-[#111b21] dark:text-[#e9edef] select-text break-words [overflow-wrap:anywhere] [word-break:break-word]">
                                                                 {renderFormattedText(parsedTemplate.body)}
                                                             </div>
 
@@ -1883,8 +1883,8 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
 
                                 {/* 24h Window Closed Warning Banner */}
                                 {selectedThread.windowRemaining === 'Closed' && (
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 sm:px-3 sm:py-1.5 mb-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
-                                        <span className="flex items-start sm:items-center gap-1.5 font-medium leading-tight">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 mb-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300">
+                                        <span className="flex items-start sm:items-center gap-1.5 font-medium leading-tight min-w-0">
                                             <AlertCircle className="size-3.5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
                                             <span>24h customer window is closed. Custom text messages cannot be sent. Re-open chat with an approved Meta Template.</span>
                                         </span>
@@ -1894,7 +1894,7 @@ export default function TeamInbox({ initialThreads = [], channels = [], metaTemp
                                             onClick={() => {
                                                 setShowDirectTemplateModal(true);
                                             }}
-                                            className="h-6.5 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-2.5 shrink-0 font-semibold self-end sm:self-auto cursor-pointer"
+                                            className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 px-3 shrink-0 font-semibold w-full sm:w-auto cursor-pointer justify-center"
                                         >
                                             <Sparkles className="size-3" />
                                             <span>Send Template</span>

@@ -40,7 +40,7 @@ export function WhatsAppStatusPill({
                 >
                     <span className="size-2 rounded-full bg-amber-500"></span>
                     <span className="hidden font-medium sm:inline">WhatsApp Disconnected</span>
-                    <span className="font-medium sm:hidden">Offline</span>
+                    <span className="hidden min-[380px]:inline sm:hidden font-medium">Offline</span>
                 </Link>
             </div>
         );
@@ -60,7 +60,7 @@ export function WhatsAppStatusPill({
                     <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
                 </span>
                 <span className="hidden font-medium sm:inline">WhatsApp Connected</span>
-                <span className="font-medium sm:hidden">Connected</span>
+                <span className="hidden min-[380px]:inline sm:hidden font-medium">Connected</span>
                 {phoneNumber && <span className="hidden opacity-80 xl:inline">({phoneNumber})</span>}
             </Link>
         );
@@ -79,7 +79,7 @@ export function WhatsAppStatusPill({
                         <span className="relative inline-flex size-2 rounded-full bg-emerald-500"></span>
                     </span>
                     <span className="font-semibold hidden sm:inline">{totalCount} Numbers Active</span>
-                    <span className="font-semibold sm:hidden">{totalCount} Active</span>
+                    <span className="font-semibold hidden min-[380px]:inline sm:hidden">{totalCount} Active</span>
                     {phoneNumber && (
                         <span className="opacity-75 hidden md:inline">
                             (Default: {phoneNumber})

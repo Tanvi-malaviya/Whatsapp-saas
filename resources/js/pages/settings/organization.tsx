@@ -285,48 +285,6 @@ export default function OrganizationSettings({
                         </Button>
                     </CardContent>
                 </Card>
-                <Card className="min-w-0">
-                    <CardHeader>
-                        <div className="flex items-center gap-2">
-                            <Users className="size-5 text-primary" />
-                            <CardTitle>Team members</CardTitle>
-                        </div>
-                        <CardDescription>
-                            People with access to this workspace.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="divide-y divide-border">
-                            {members.map((member) => (
-                                <div
-                                    key={member.id}
-                                    className="flex min-w-0 flex-wrap items-start justify-between gap-2 py-3"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium">
-                                            {member.name}
-                                        </p>
-                                        <p className="mt-1 text-sm text-muted-foreground">
-                                            {member.email}
-                                        </p>
-                                    </div>
-                                    <Badge variant="secondary">
-                                        {member.pivot?.role}
-                                    </Badge>
-                                </div>
-                            ))}
-                        </div>
-                        <Button
-                            asChild
-                            variant="outline"
-                            className="h-11 w-full sm:w-auto"
-                        >
-                            <Link href="/management/team">
-                                Manage team and permissions
-                            </Link>
-                        </Button>
-                    </CardContent>
-                </Card>
             </div>
         </>
     );

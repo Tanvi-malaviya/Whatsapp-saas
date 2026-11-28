@@ -74,6 +74,10 @@ export default function SystemLogsPage({
     const [selectedAudit, setSelectedAudit] = useState<AuditLogItem | null>(null);
     const [isAuditOpen, setIsAuditOpen] = useState(false);
 
+    // Clear Webhooks Confirmation State
+    const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
+
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
         setCopied(true);
@@ -88,9 +92,20 @@ export default function SystemLogsPage({
         router.post('/insights/system-logs/simulate-webhook', {}, { preserveScroll: true });
     };
 
-    const handleClearLogs = () => {
-        if (!confirm('Are you sure you want to clear all webhook inbox logs?')) return;
-        router.post('/insights/system-logs/clear', {}, { preserveScroll: true });
+    const handleConfirmClear = () => {
+        setIsClearing(true);
+        router.post(
+            '/insights/system-logs/clear',
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setIsClearing(false);
+                    setIsClearConfirmOpen(false);
+                },
+                onError: () => setIsClearing(false),
+            }
+        );
     };
 
     return (
@@ -123,7 +138,7 @@ export default function SystemLogsPage({
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={handleClearLogs}
+                                onClick={() => setIsClearConfirmOpen(true)}
                                 className="h-9 px-3 text-xs font-semibold gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10 border-border"
                             >
                                 <Trash2 className="size-3.5" />
@@ -166,10 +181,6 @@ export default function SystemLogsPage({
                                             {st}
                                         </button>
                                     ))}
-                                </div>
-
-                                <div className="text-[11px] text-muted-foreground font-medium">
-                                    Showing latest 50 webhook events
                                 </div>
                             </div>
 
@@ -436,6 +447,45 @@ export default function SystemLogsPage({
                         <DialogFooter className="pt-2">
                             <Button size="sm" onClick={() => setIsAuditOpen(false)}>
                                 Close
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Dialog: Clear Webhooks Confirmation */}
+                <Dialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
+                    <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-[400px] p-5">
+                        <DialogHeader className="flex flex-col items-center text-center">
+                            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-rose-500/10 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 mb-2 shrink-0">
+                                <Trash2 className="size-6" />
+                            </div>
+                            <DialogTitle className="text-center text-base font-bold text-foreground">
+                                Clear Webhook Logs?
+                            </DialogTitle>
+                            <DialogDescription className="text-center text-xs text-muted-foreground pt-1 leading-relaxed">
+                                Are you sure you want to delete all webhook inbox logs? This will permanently remove all captured payloads for this workspace.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <DialogFooter className="flex flex-row gap-2 justify-center pt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isClearing}
+                                onClick={() => setIsClearConfirmOpen(false)}
+                                className="flex-1 h-8 text-xs font-medium"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={isClearing}
+                                onClick={handleConfirmClear}
+                                className="flex-1 h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white font-medium"
+                            >
+                                {isClearing ? 'Clearing...' : 'Yes, Clear All'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

@@ -357,74 +357,84 @@ print(response.json())`,
                                 </Button>
                             </form>
 
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {keys.map((k) => {
-                                    const revealed = !!revealedKeyIds[k.id];
-                                    const displayKey = revealed && k.secret_key ? k.secret_key : k.key_prefix + '••••••••••••••••••••';
-                                    return (
-                                        <div
-                                            key={k.id}
-                                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs"
-                                        >
-                                            <div className="min-w-0 space-y-0.5">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold text-foreground">{k.name}</span>
-                                                    {k.last_used_at && (
-                                                        <span className="text-[10px] text-muted-foreground">Used {k.last_used_at}</span>
+                            {keys.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-border/80 bg-muted/10 p-6 text-center text-xs space-y-1.5">
+                                    <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 mb-2">
+                                        <Key className="size-5" />
+                                    </div>
+                                    <p className="font-semibold text-foreground">No API Keys Generated</p>
+                                    <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                                        You haven't generated any API keys yet. Enter a name above and click "Generate Key" to create your secure secret key.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    {keys.map((k) => {
+                                        const revealed = !!revealedKeyIds[k.id];
+                                        const displayKey = revealed && k.secret_key ? k.secret_key : k.key_prefix + '••••••••••••••••••••';
+                                        return (
+                                            <div
+                                                key={k.id}
+                                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs"
+                                            >
+                                                <div className="min-w-0 space-y-0.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-semibold text-foreground">{k.name}</span>
+                                                        {k.last_used_at && (
+                                                            <span className="text-[10px] text-muted-foreground">Used {k.last_used_at}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="font-mono text-[11px] text-muted-foreground truncate">
+                                                        {displayKey}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {k.secret_key && (
+                                                        <>
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                className="size-7"
+                                                                onClick={() =>
+                                                                    setRevealedKeyIds((prev) => ({ ...prev, [k.id]: !prev[k.id] }))
+                                                                }
+                                                                title={revealed ? 'Hide Key' : 'Reveal Key'}
+                                                            >
+                                                                {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="h-7 text-[11px] gap-1"
+                                                                onClick={() => copyToClipboard(k.secret_key!, k.id)}
+                                                            >
+                                                                {copiedField === k.id ? (
+                                                                    <Check className="size-3 text-emerald-600" />
+                                                                ) : (
+                                                                    <Copy className="size-3" />
+                                                                )}
+                                                                {copiedField === k.id ? 'Copied' : 'Copy'}
+                                                            </Button>
+                                                        </>
                                                     )}
-                                                </div>
-                                                <div className="font-mono text-[11px] text-muted-foreground truncate">
-                                                    {displayKey}
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-1 shrink-0">
-                                                {k.secret_key && (
-                                                    <>
-                                                        <Button
-                                                            type="button"
-                                                            size="icon"
-                                                            variant="ghost"
-                                                            className="size-7"
-                                                            onClick={() =>
-                                                                setRevealedKeyIds((prev) => ({ ...prev, [k.id]: !prev[k.id] }))
-                                                            }
-                                                            title={revealed ? 'Hide Key' : 'Reveal Key'}
-                                                        >
-                                                            {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="h-7 text-[11px] gap-1"
-                                                            onClick={() => copyToClipboard(k.secret_key!, k.id)}
-                                                        >
-                                                            {copiedField === k.id ? (
-                                                                <Check className="size-3 text-emerald-600" />
-                                                            ) : (
-                                                                <Copy className="size-3" />
-                                                            )}
-                                                            {copiedField === k.id ? 'Copied' : 'Copy'}
-                                                        </Button>
-                                                    </>
-                                                )}
-                                                {keys.length > 1 && (
                                                     <Button
                                                         type="button"
                                                         size="icon"
                                                         variant="ghost"
-                                                        className="size-7 text-destructive hover:bg-destructive/10"
+                                                        className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                         onClick={() => handleRevokeKey(k.id)}
-                                                        title="Revoke Key"
+                                                        title="Revoke / Delete Key"
                                                     >
                                                         <Trash2 className="size-3.5" />
                                                     </Button>
-                                                )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
